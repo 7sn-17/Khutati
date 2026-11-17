@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../design/tokens.dart';
 
 /// Typography entry points.
 ///
 /// The prototype pairs IBM Plex Sans Arabic for body copy with Reem Kufi for
-/// headings and every numeral. Both families are bundled under
-/// `google_fonts/`, so `google_fonts` resolves them from the asset bundle and
-/// never needs the network on first launch.
+/// headings and every numeral. Both families are declared in `pubspec.yaml`
+/// under `flutter: fonts:`, so Flutter registers them before the first frame
+/// and `fontFamily` resolves synchronously — offline, with no runtime font
+/// fetching and no flash of the platform default.
 abstract final class KhutatiFonts {
   static TextStyle body({
     double size = KTypography.bodySize,
@@ -16,7 +16,8 @@ abstract final class KhutatiFonts {
     Color? color,
     double height = KTypography.bodyHeight,
   }) {
-    return GoogleFonts.ibmPlexSansArabic(
+    return TextStyle(
+      fontFamily: KTypography.bodyFamily,
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -30,7 +31,8 @@ abstract final class KhutatiFonts {
     Color? color,
     double height = 1.3,
   }) {
-    return GoogleFonts.reemKufi(
+    return TextStyle(
+      fontFamily: KTypography.displayFamily,
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -43,7 +45,8 @@ abstract final class KhutatiFonts {
     double size = KTypography.statNumSize,
     Color? color,
   }) {
-    return GoogleFonts.reemKufi(
+    return TextStyle(
+      fontFamily: KTypography.displayFamily,
       fontSize: size,
       fontWeight: FontWeight.w700,
       color: color,

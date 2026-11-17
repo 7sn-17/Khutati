@@ -32,7 +32,6 @@ dependencies:
   flutter_svg: ^2.0.17
 
   # Typography & formatting
-  google_fonts: ^6.2.1
   intl: ^0.19.0
 
   # Platform services (Phase 4-5)
@@ -58,6 +57,19 @@ flutter:
   assets:
     # Plan template. The only source of plan content in the app (PRD section 3.1).
     - khutati_plan_data.json
-    # Bundled Google Fonts so the first launch renders Arabic offline.
-    # Filenames must match google_fonts' family-variant API naming.
-    - google_fonts/
+
+  # Declared fonts are registered before the first frame, so the Arabic faces
+  # never fall back to the platform default (and never touch the network).
+  fonts:
+    - family: IBM Plex Sans Arabic
+      fonts:
+        - asset: google_fonts/IBMPlexSansArabic-Regular.ttf
+          weight: 400
+        - asset: google_fonts/IBMPlexSansArabic-Medium.ttf
+          weight: 500
+    - family: Reem Kufi
+      fonts:
+        - asset: google_fonts/ReemKufi-Medium.ttf
+          weight: 500
+        - asset: google_fonts/ReemKufi-Bold.ttf
+          weight: 700

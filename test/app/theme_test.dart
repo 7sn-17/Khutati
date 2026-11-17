@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:khutati/app/theme/khutati_theme.dart';
 import 'package:khutati/core/design/tokens.dart';
 
 /// Guards theme parity with the HTML prototype.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
 
   group('dark theme', () {
     final ThemeData theme = KhutatiTheme.dark;
@@ -45,6 +43,14 @@ void main() {
       for (final TextStyle? style in styles) {
         expect(style?.fontFamily, isNotNull);
       }
+      // The families must be the ones declared in pubspec.yaml, not the
+      // platform fallback that a failed runtime font load would leave behind.
+      expect(
+        theme.textTheme.displayLarge?.fontFamily,
+        KTypography.displayFamily,
+      );
+      expect(theme.textTheme.bodyMedium?.fontFamily, KTypography.bodyFamily);
+      expect(theme.textTheme.bodyLarge?.fontFamily, KTypography.bodyFamily);
       // Headings and body must not collapse onto the same family.
       expect(
         theme.textTheme.displayLarge?.fontFamily,

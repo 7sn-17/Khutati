@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:khutati/app/theme/khutati_theme.dart';
 import 'package:khutati/core/design/tokens.dart';
 import 'package:khutati/core/design/widgets/widgets.dart';
@@ -16,34 +15,37 @@ Widget host(Widget child) {
 }
 
 void main() {
-  setUpAll(() {
-    // Never touch the network in tests: the fonts are bundled as assets.
-    GoogleFonts.config.allowRuntimeFetching = false;
-  });
-
-  testWidgets('KCard paints the prototype hexagon texture', (WidgetTester tester) async {
+  testWidgets('KCard paints the prototype hexagon texture', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(host(const KCard(child: Text('x'))));
 
     expect(
       find.byWidgetPredicate(
-        (Widget widget) => widget is CustomPaint && widget.painter is HexagonPatternPainter,
+        (Widget widget) =>
+            widget is CustomPaint && widget.painter is HexagonPatternPainter,
       ),
       findsOneWidget,
     );
   });
 
   testWidgets('KCard can drop the texture', (WidgetTester tester) async {
-    await tester.pumpWidget(host(const KCard(showPattern: false, child: Text('x'))));
+    await tester.pumpWidget(
+      host(const KCard(showPattern: false, child: Text('x'))),
+    );
 
     expect(
       find.byWidgetPredicate(
-        (Widget widget) => widget is CustomPaint && widget.painter is HexagonPatternPainter,
+        (Widget widget) =>
+            widget is CustomPaint && widget.painter is HexagonPatternPainter,
       ),
       findsNothing,
     );
   });
 
-  testWidgets('KChip fills with --ok when selected', (WidgetTester tester) async {
+  testWidgets('KChip fills with --ok when selected', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       host(
         KChip(
@@ -56,7 +58,10 @@ void main() {
     );
 
     final AnimatedContainer container = tester.widget<AnimatedContainer>(
-      find.descendant(of: find.byType(KChip), matching: find.byType(AnimatedContainer)),
+      find.descendant(
+        of: find.byType(KChip),
+        matching: find.byType(AnimatedContainer),
+      ),
     );
     final BoxDecoration decoration = container.decoration! as BoxDecoration;
 
@@ -83,28 +88,51 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('KProgressBar fills the requested fraction', (WidgetTester tester) async {
-    await tester.pumpWidget(host(const SizedBox(width: 200, child: KProgressBar(value: 0.38))));
+  testWidgets('KProgressBar fills the requested fraction', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const SizedBox(width: 200, child: KProgressBar(value: 0.38))),
+    );
 
     final FractionallySizedBox box = tester.widget<FractionallySizedBox>(
-      find.descendant(of: find.byType(KProgressBar), matching: find.byType(FractionallySizedBox)),
+      find.descendant(
+        of: find.byType(KProgressBar),
+        matching: find.byType(FractionallySizedBox),
+      ),
     );
     expect(box.widthFactor, 0.38);
-    expect(tester.getSize(find.byType(KProgressBar)).height, KMetrics.barHeight);
+    expect(
+      tester.getSize(find.byType(KProgressBar)).height,
+      KMetrics.barHeight,
+    );
   });
 
-  testWidgets('KProgressRing renders its numeral at the prototype size', (WidgetTester tester) async {
+  testWidgets('KProgressRing renders its numeral at the prototype size', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
-      host(const KProgressRing(progress: 0.5, numeral: '25:00', caption: 'وقت التركيز')),
+      host(
+        const KProgressRing(
+          progress: 0.5,
+          numeral: '25:00',
+          caption: 'وقت التركيز',
+        ),
+      ),
     );
 
     expect(find.text('25:00'), findsOneWidget);
     expect(find.text('وقت التركيز'), findsOneWidget);
     expect(tester.getSize(find.byType(KProgressRing)).width, KMetrics.ringSize);
-    expect(tester.getSize(find.byType(KProgressRing)).height, KMetrics.ringSize);
+    expect(
+      tester.getSize(find.byType(KProgressRing)).height,
+      KMetrics.ringSize,
+    );
   });
 
-  testWidgets('KEcgLine keeps the prototype height and animates', (WidgetTester tester) async {
+  testWidgets('KEcgLine keeps the prototype height and animates', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(host(const KEcgLine(progress: 0.62)));
 
     expect(tester.getSize(find.byType(KEcgLine)).height, KMetrics.ecgHeight);
@@ -114,14 +142,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('KTag pins its label to the dark background colour', (WidgetTester tester) async {
-    await tester.pumpWidget(host(const KTag(label: 'الفيزياء', color: Color(0xFF5DD6C0))));
+  testWidgets('KTag pins its label to the dark background colour', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      host(const KTag(label: 'الفيزياء', color: Color(0xFF5DD6C0))),
+    );
 
     final Text label = tester.widget<Text>(find.text('الفيزياء'));
     expect(label.style?.color, KColors.dark.bg);
   });
 
-  testWidgets('showKToast displays a message and removes itself', (WidgetTester tester) async {
+  testWidgets('showKToast displays a message and removes itself', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       host(
         Builder(
