@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:ui' show Color;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/time/local_day_clock.dart';
 import '../../../data/database/app_database.dart';
 import '../../../data/providers.dart';
+import '../../../data/repositories/plan_progress_repository.dart';
 import '../../../data/repositories/template_repository.dart';
+import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
@@ -15,6 +19,8 @@ import '../../../domain/plan/plan_task.dart';
 /// screen never invents numbers or sample tasks.
 class TodayData {
   const TodayData({
+    required this.now,
+    required this.window,
     required this.dayNumber,
     required this.date,
     required this.day,
@@ -28,8 +34,14 @@ class TodayData {
     required this.subjectNames,
     required this.subjectAccents,
     required this.daysRemaining,
-    required this.hasStarted,
   });
+
+  /// Device-local time used for this build, so the greeting and quote rotate
+  /// with the same date as the plan day.
+  final DateTime now;
+
+  /// Whether the local date is before, inside or after the plan window.
+  final PlanWindow window;
 
   final int dayNumber;
   final DateTime date;
@@ -51,10 +63,11 @@ class TodayData {
   final Map<String, String> subjectNames;
   final Map<String, Color> subjectAccents;
   final int daysRemaining;
-  final bool hasStarted;
 
   bool get isRest => day.type == 'rest';
   bool get isDone => !isRest && progress.isComplete;
+  bool get hasStarted => window != PlanWindow.beforeStart;
+  bool get hasEnded => window == PlanWindow.afterEnd;
 
   /// The first task that still has work, in plan order.
   PlanTask? get nextTask {
@@ -65,100 +78,206 @@ class TodayData {
   }
 }
 
-/// Today's plan day plus live progress. Rebuilt when user state changes.
+/// Emits the device-local time whenever its calendar date changes. Today
+/// rebuilds once at local midnight (or after a timezone jump), not on every
+/// clock tick.
+final StreamProvider<DateTime> todayClockProvider = StreamProvider<DateTime>((
+  Ref ref,
+) {
+  return LocalDayClock().watch();
+});
+
+/// Today's plan day plus live progress.
 ///
-/// The date is captured when the provider is built; a new day is picked up on
-/// the next app start or pull-to-refresh, which is enough for a study app.
-final FutureProvider<TodayData?> todayDataProvider = FutureProvider<TodayData?>(
-  (Ref ref) async {
-    final PlanCalendar? calendar = await ref.watch(planCalendarProvider.future);
-    if (calendar == null) return null;
+/// The plan day comes from one rule, [PlanCalendar.resolveToday], against the
+/// device-local date from [todayClockProvider]. Progress comes from a live DB
+/// stream, so a step/task write updates every derived number without a manual
+/// provider invalidation.
+final StreamProvider<TodayData?>
+todayDataProvider = StreamProvider<TodayData?>((Ref ref) {
+  final Future<PlanCalendar?> calendar = ref.watch(planCalendarProvider.future);
+  final Future<DateTime> now = ref.watch(todayClockProvider.future);
+  final TemplateRepository template = ref.watch(templateRepositoryProvider);
+  final UserStateRepository userState = ref.watch(userStateRepositoryProvider);
+  final PlanProgressRepository progress = ref.watch(
+    planProgressRepositoryProvider,
+  );
+  final AppDatabase db = ref.watch(appDatabaseProvider);
 
-    final DateTime now = DateTime.now();
-    final int dayNumber = calendar.currentDayNumber(now);
-    final TemplateRepository template = ref.watch(templateRepositoryProvider);
-    final DayBundle? bundle = await template.dayBundle(dayNumber);
-    if (bundle == null) return null;
+  return _watchToday(
+    calendar: calendar,
+    now: now,
+    template: template,
+    userState: userState,
+    progress: progress,
+    stateChanges: _watchUserState(db),
+  );
+});
 
-    final Set<String> completedStepIds = await ref
-        .watch(userStateRepositoryProvider)
-        .completedStepIdsForDay(bundle.day.id);
-    final List<SubjectRow> subjects = await template.allSubjects();
-    final Map<String, String> subjectNames = <String, String>{
-      for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
-    };
-    final Map<String, Color> subjectAccents = <String, Color>{
-      for (final SubjectRow subject in subjects)
-        subject.id: _hexColor(subject.accentHex),
-    };
+Stream<TodayData?> _watchToday({
+  required Future<PlanCalendar?> calendar,
+  required Future<DateTime> now,
+  required TemplateRepository template,
+  required UserStateRepository userState,
+  required PlanProgressRepository progress,
+  required Stream<void> stateChanges,
+}) async* {
+  final PlanCalendar? activeCalendar = await calendar;
+  if (activeCalendar == null) {
+    yield null;
+    return;
+  }
 
-    final Map<int, PlanProgress> progressByDay = await ref
-        .watch(planProgressRepositoryProvider)
-        .progressByDay();
-    final PlanProgress progress =
-        progressByDay[dayNumber] ?? PlanProgress.empty;
+  final DateTime current = await now;
+  yield await _buildToday(
+    activeCalendar,
+    current,
+    template,
+    userState,
+    progress,
+  );
 
-    final ({int tasks, int minutes}) overdue = await ref
-        .watch(planProgressRepositoryProvider)
-        .overdueBefore(dayNumber);
-
-    final List<PlanTask> tasks = <PlanTask>[
-      for (final TaskWithSteps item in bundle.tasks)
-        PlanTask(
-          id: item.task.id,
-          dayNumber: dayNumber,
-          subjectKey: item.task.subjectId,
-          subjectName: subjectNames[item.task.subjectId],
-          title: item.task.title,
-          groupTitle: item.task.groupTitle,
-          type: PlanTaskType.parse(item.task.type),
-          suggestedStart: item.task.suggestedStart,
-          suggestedEnd: item.task.suggestedEnd,
-          steps: <PlanStep>[
-            for (final StepRow step in item.steps)
-              PlanStep(
-                id: step.id,
-                kind: step.kind,
-                minutes: step.minutes,
-                order: step.sortOrder,
-                completed: completedStepIds.contains(step.id),
-                suggestedStart: step.suggestedStart,
-                suggestedEnd: step.suggestedEnd,
-              ),
-          ],
-        ),
-    ];
-
-    final List<DayRow> allDays = await template.allDays();
-    final Map<int, DayRow> dayByNumber = <int, DayRow>{
-      for (final DayRow day in allDays) day.dayNumber: day,
-    };
-
-    return TodayData(
-      dayNumber: dayNumber,
-      date: calendar.dateOfDay(dayNumber),
-      day: bundle.day,
-      tasks: tasks,
-      breaks: bundle.breaks,
-      progress: progress,
-      overdueTasks: overdue.tasks,
-      overdueMinutes: overdue.minutes,
-      streak: _streak(
-        dayNumber: dayNumber,
-        dayByNumber: dayByNumber,
-        progressByDay: progressByDay,
-        today: progress,
-      ),
-      points: _points(tasks),
-      subjectNames: subjectNames,
-      subjectAccents: subjectAccents,
-      daysRemaining: calendar.daysAfterToday(now),
-      hasStarted: calendar.hasStarted(now),
+  await for (final _ in stateChanges) {
+    yield await _buildToday(
+      activeCalendar,
+      current,
+      template,
+      userState,
+      progress,
     );
-  },
-);
+  }
+}
 
-/// Writes step state and refreshes the read model.
+/// Watches every user table Today reads. Drift emits an initial value for each
+/// query, which is skipped because [_watchToday] has already built that state.
+Stream<void> _watchUserState(AppDatabase db) {
+  final List<StreamSubscription<dynamic>> subscriptions =
+      <StreamSubscription<dynamic>>[];
+  late final StreamController<void> controller;
+
+  controller = StreamController<void>(
+    onListen: () {
+      subscriptions.add(
+        db
+            .select(db.userStepStates)
+            .watch()
+            .skip(1)
+            .listen((_) => controller.add(null)),
+      );
+      subscriptions.add(
+        db
+            .select(db.userTaskStates)
+            .watch()
+            .skip(1)
+            .listen((_) => controller.add(null)),
+      );
+    },
+    onCancel: () async {
+      for (final StreamSubscription<dynamic> subscription in subscriptions) {
+        await subscription.cancel();
+      }
+      subscriptions.clear();
+    },
+  );
+
+  return controller.stream;
+}
+
+Future<TodayData?> _buildToday(
+  PlanCalendar calendar,
+  DateTime now,
+  TemplateRepository template,
+  UserStateRepository userState,
+  PlanProgressRepository progressRepository,
+) async {
+  final ResolvedPlanDay resolved = calendar.resolveToday(now);
+  final int dayNumber = resolved.dayNumber;
+  final DayBundle? bundle = await template.dayBundle(dayNumber);
+  if (bundle == null) return null;
+
+  final Set<String> completedStepIds = await userState.completedStepIdsForDay(
+    bundle.day.id,
+  );
+  final Map<String, String> taskStatuses = await userState.taskStatusesForDay(
+    bundle.day.id,
+  );
+  final List<SubjectRow> subjects = await template.allSubjects();
+  final Map<String, String> subjectNames = <String, String>{
+    for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
+  };
+  final Map<String, Color> subjectAccents = <String, Color>{
+    for (final SubjectRow subject in subjects)
+      subject.id: _hexColor(subject.accentHex),
+  };
+
+  final Map<int, PlanProgress> progressByDay = await progressRepository
+      .progressByDay();
+  final PlanProgress progress = progressByDay[dayNumber] ?? PlanProgress.empty;
+
+  final ({int tasks, int minutes}) overdue = await progressRepository
+      .overdueBefore(dayNumber);
+
+  final List<PlanTask> tasks = <PlanTask>[
+    for (final TaskWithSteps item in bundle.tasks)
+      PlanTask(
+        id: item.task.id,
+        dayNumber: dayNumber,
+        subjectKey: item.task.subjectId,
+        subjectName: subjectNames[item.task.subjectId],
+        title: item.task.title,
+        groupTitle: item.task.groupTitle,
+        type: PlanTaskType.parse(item.task.type),
+        suggestedStart: item.task.suggestedStart,
+        suggestedEnd: item.task.suggestedEnd,
+        status:
+            PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
+            PlanTaskStatus.notStarted,
+        steps: <PlanStep>[
+          for (final StepRow step in item.steps)
+            PlanStep(
+              id: step.id,
+              kind: step.kind,
+              minutes: step.minutes,
+              order: step.sortOrder,
+              completed: completedStepIds.contains(step.id),
+              suggestedStart: step.suggestedStart,
+              suggestedEnd: step.suggestedEnd,
+            ),
+        ],
+      ),
+  ];
+
+  final List<DayRow> allDays = await template.allDays();
+  final Map<int, DayRow> dayByNumber = <int, DayRow>{
+    for (final DayRow day in allDays) day.dayNumber: day,
+  };
+
+  return TodayData(
+    now: now,
+    window: resolved.window,
+    dayNumber: dayNumber,
+    date: resolved.date,
+    day: bundle.day,
+    tasks: tasks,
+    breaks: bundle.breaks,
+    progress: progress,
+    overdueTasks: overdue.tasks,
+    overdueMinutes: overdue.minutes,
+    streak: _streak(
+      dayNumber: dayNumber,
+      dayByNumber: dayByNumber,
+      progressByDay: progressByDay,
+      today: progress,
+    ),
+    points: _points(tasks),
+    subjectNames: subjectNames,
+    subjectAccents: subjectAccents,
+    daysRemaining: calendar.daysAfterToday(now),
+  );
+}
+
+/// Writes step state; the live DB stream rebuilds Today without a manual
+/// invalidation.
 class TodayActions {
   TodayActions(this._ref);
 
@@ -168,7 +287,6 @@ class TodayActions {
     await _ref
         .read(userStateRepositoryProvider)
         .setStepCompleted(stepId, completed);
-    _ref.invalidate(todayDataProvider);
   }
 }
 

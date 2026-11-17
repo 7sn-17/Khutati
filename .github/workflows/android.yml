@@ -155,11 +155,17 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${KEYSTORE_BASE64:-}" ]; then
-            echo "::warning::No keystore secret configured; the release APKs will be debug-signed."
-            exit 0
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || \
+             [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "::error::Release signing secrets are missing; refusing to publish a debug-signed APK."
+            exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/khutati-release.jks
+          # Fail before the long Gradle build if the secret cannot be opened.
+          keytool -list \
+            -keystore android/app/khutati-release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" > /dev/null
           {
             echo "storeFile=khutati-release.jks"
             echo "storePassword=${KEYSTORE_PASSWORD}"
@@ -183,6 +189,49 @@ jobs:
           set -euo pipefail
           cp -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             build/app/outputs/flutter-apk/Khutati.apk
+
+      # The APK that ships must be signed by the secret-backed release key, not
+      # by the runner's auto-generated debug key. `apksigner` verifies the
+      # signature schemes; the fingerprint comparison proves exactly which
+      # keystore signed it without printing any secret.
+      - name: Verify release signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/Khutati.apk
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          test -x "$APKSIGNER" || { echo "::error::apksigner not found"; exit 1; }
+
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/apk-signature.txt
+
+          DN="$(sed -n 's/^Signer #1 certificate DN: //p' build/apk-signature.txt | head -n 1)"
+          APK_FP="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/apk-signature.txt | head -n 1 | tr -d ':' | tr 'A-F' 'a-f')"
+          EXPECTED_FP="$(keytool -list -v \
+            -keystore android/app/khutati-release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 \
+            | tr -d ':' | tr 'A-F' 'a-f')"
+
+          if [ -z "$APK_FP" ] || [ "$APK_FP" != "$EXPECTED_FP" ]; then
+            echo "::error::APK certificate does not match the release keystore secret."
+            exit 1
+          fi
+          if printf '%s' "$DN" | grep -qi 'CN=Android Debug'; then
+            echo "::error::Refusing to publish a debug-signed APK."
+            exit 1
+          fi
+
+          {
+            echo "### Release signature"
+            echo ""
+            echo "- Subject: \`$DN\`"
+            echo "- Certificate SHA-256: \`$APK_FP\`"
+            echo "- Verified by: $(basename "$APKSIGNER")"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # The shipped APK must stay small enough for a normal app. R8, obfuscation
       # and single-ABI builds keep it near 20 MiB; this guard stops a dependency
@@ -240,6 +289,7 @@ jobs:
           path: |
             build/app/outputs/flutter-apk/Khutati.apk
             build/app/outputs/flutter-apk/update.json
+            build/apk-signature.txt
             build/symbols
           retention-days: 30
           if-no-files-found: error

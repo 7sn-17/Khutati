@@ -1,11 +1,9 @@
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../core/app_assets.dart';
 import '../data/database/app_database.dart';
 import '../data/database/database_provider.dart';
 import '../data/import/plan_importer.dart';
-
-/// The bundled dataset is the only source of plan content (PRD section 3.1).
-const String kPlanAsset = 'khutati_plan_data.json';
 
 /// Opens the database and guarantees the 68-day template is present.
 ///

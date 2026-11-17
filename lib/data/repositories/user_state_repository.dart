@@ -11,7 +11,9 @@ class UserStateRepository {
 
   Future<void> setStepCompleted(String stepId, bool completed, {DateTime? at}) {
     final DateTime now = at ?? DateTime.now();
-    return _db.into(_db.userStepStates).insertOnConflictUpdate(
+    return _db
+        .into(_db.userStepStates)
+        .insertOnConflictUpdate(
           UserStepStatesCompanion.insert(
             stepId: stepId,
             completed: Value<bool>(completed),
@@ -21,23 +23,48 @@ class UserStateRepository {
   }
 
   Future<Set<String>> completedStepIdsForDay(String dayId) async {
-    final query = _db.select(_db.userStepStates).join(<Join<HasResultSet, dynamic>>[
-      innerJoin(_db.steps, _db.steps.id.equalsExp(_db.userStepStates.stepId)),
-      innerJoin(_db.tasks, _db.tasks.id.equalsExp(_db.steps.taskId)),
-    ]);
+    final query = _db.select(_db.userStepStates).join(
+      <Join<HasResultSet, dynamic>>[
+        innerJoin(_db.steps, _db.steps.id.equalsExp(_db.userStepStates.stepId)),
+        innerJoin(_db.tasks, _db.tasks.id.equalsExp(_db.steps.taskId)),
+      ],
+    );
     query.where(
       _db.tasks.dayId.equals(dayId) & _db.userStepStates.completed.equals(true),
     );
 
     final List<TypedResult> rows = await query.get();
     return <String>{
-      for (final TypedResult row in rows) row.readTable(_db.userStepStates).stepId,
+      for (final TypedResult row in rows)
+        row.readTable(_db.userStepStates).stepId,
+    };
+  }
+
+  /// Explicit task statuses for one day, keyed by task id. Today maps these to
+  /// the domain status so a task completed as a whole is not reopened just
+  /// because its individual step rows are still unchecked.
+  Future<Map<String, String>> taskStatusesForDay(String dayId) async {
+    final query = _db.select(_db.userTaskStates).join(
+      <Join<HasResultSet, dynamic>>[
+        innerJoin(_db.tasks, _db.tasks.id.equalsExp(_db.userTaskStates.taskId)),
+      ],
+    );
+    query.where(_db.tasks.dayId.equals(dayId));
+
+    final List<TypedResult> rows = await query.get();
+    return <String, String>{
+      for (final TypedResult row in rows)
+        row.readTable(_db.userTaskStates).taskId: row
+            .readTable(_db.userTaskStates)
+            .status,
     };
   }
 
   Future<void> setTaskStatus(String taskId, String status, {DateTime? at}) {
     final DateTime now = at ?? DateTime.now();
-    return _db.into(_db.userTaskStates).insertOnConflictUpdate(
+    return _db
+        .into(_db.userTaskStates)
+        .insertOnConflictUpdate(
           UserTaskStatesCompanion.insert(
             taskId: taskId,
             status: Value<String>(status),
@@ -48,7 +75,9 @@ class UserStateRepository {
   }
 
   Future<void> addNote(String taskId, String body) {
-    return _db.into(_db.notes).insert(
+    return _db
+        .into(_db.notes)
+        .insert(
           NotesCompanion.insert(
             taskId: taskId,
             body: body,
@@ -63,11 +92,18 @@ class UserStateRepository {
 
   Future<void> setReviewFlag(String taskId, bool flagged) async {
     if (!flagged) {
-      await (_db.delete(_db.reviewFlags)..where((t) => t.taskId.equals(taskId))).go();
+      await (_db.delete(
+        _db.reviewFlags,
+      )..where((t) => t.taskId.equals(taskId))).go();
       return;
     }
-    await _db.into(_db.reviewFlags).insertOnConflictUpdate(
-          ReviewFlagsCompanion.insert(taskId: taskId, flaggedAt: DateTime.now()),
+    await _db
+        .into(_db.reviewFlags)
+        .insertOnConflictUpdate(
+          ReviewFlagsCompanion.insert(
+            taskId: taskId,
+            flaggedAt: DateTime.now(),
+          ),
         );
   }
 }

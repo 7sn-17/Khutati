@@ -89,8 +89,12 @@ same signing certificate. Configure the four `ANDROID_KEYSTORE_*` /
 keystore backed up outside the repository. Losing it means every user has to
 uninstall the app once before installing a later build.
 
-Without the secrets CI still builds, but Flutter falls back to a machine-local
-debug key. That APK is fine for testing and not suitable for the update channel.
+CI now **requires** those secrets: the release job fails rather than publishing
+a debug-signed APK, validates the keystore with `keytool`, and verifies the
+built APK's SHA-256 certificate fingerprint against the keystore before the
+release is written. See [`release-signing.md`](release-signing.md). Local
+release builds still fall back to debug signing when `android/key.properties`
+is absent.
 
 ## Version discipline
 
@@ -101,4 +105,5 @@ compares the installed build number with the manifest.
 Bump both the marketing version and the build number before publishing a new
 release (`flutter build` uses `version:` as `versionName+versionCode`). Merely
 pushing another commit does not create a newer update, because the build number
-stays the same.
+stays the same. An installed build whose `versionCode` equals the manifest's is
+reported as up to date; raising it is what makes "check now" offer the APK.

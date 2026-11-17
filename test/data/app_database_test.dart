@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:khutati/data/database/app_database.dart';
@@ -18,7 +20,9 @@ void main() {
   tearDown(() => db.close());
 
   Future<void> seedDay() async {
-    await db.into(db.plans).insert(
+    await db
+        .into(db.plans)
+        .insert(
           PlansCompanion.insert(
             id: 'plan-1',
             name: 'خطة إنهاء المنهاج',
@@ -29,7 +33,9 @@ void main() {
             totalPlannedMinutes: 28809,
           ),
         );
-    await db.into(db.subjects).insert(
+    await db
+        .into(db.subjects)
+        .insert(
           SubjectsCompanion.insert(
             id: 'subj-chem',
             key: 'chem',
@@ -39,7 +45,9 @@ void main() {
             sortOrder: 1,
           ),
         );
-    await db.into(db.days).insert(
+    await db
+        .into(db.days)
+        .insert(
           DaysCompanion.insert(
             id: 'd001',
             dayNumber: 1,
@@ -50,7 +58,9 @@ void main() {
             statedStudyMinutes: const Value<int>(550),
           ),
         );
-    await db.into(db.tasks).insert(
+    await db
+        .into(db.tasks)
+        .insert(
           TasksCompanion.insert(
             id: 'd001-chem-01',
             dayId: 'd001',
@@ -62,7 +72,9 @@ void main() {
             studyMinutes: const Value<int>(12),
           ),
         );
-    await db.into(db.steps).insert(
+    await db
+        .into(db.steps)
+        .insert(
           StepsCompanion.insert(
             id: 'd001-chem-01-01',
             taskId: 'd001-chem-01',
@@ -71,7 +83,9 @@ void main() {
             sortOrder: 1,
           ),
         );
-    await db.into(db.steps).insert(
+    await db
+        .into(db.steps)
+        .insert(
           StepsCompanion.insert(
             id: 'd001-chem-01-02',
             taskId: 'd001-chem-01',
@@ -80,7 +94,9 @@ void main() {
             sortOrder: 2,
           ),
         );
-    await db.into(db.breaks).insert(
+    await db
+        .into(db.breaks)
+        .insert(
           BreaksCompanion.insert(
             id: 'd001-b1',
             dayId: 'd001',
@@ -107,14 +123,18 @@ void main() {
     expect(bundle, isNotNull);
     expect(bundle!.day.dayNumber, 1);
     expect(bundle.tasks, hasLength(1));
-    expect(bundle.tasks.single.steps.map((StepRow s) => s.kind), <String>['attend', 'study']);
+    expect(bundle.tasks.single.steps.map((StepRow s) => s.kind), <String>[
+      'attend',
+      'study',
+    ]);
     expect(bundle.plannedMinutes, 35);
     expect(bundle.breaks.single.minutes, 16);
   });
 
   test('planned totals add up per bucket', () async {
     await seedDay();
-    final ({int attendance, int study, int questions}) totals = await template.plannedTotals();
+    final ({int attendance, int study, int questions}) totals = await template
+        .plannedTotals();
     expect(totals.attendance, 23);
     expect(totals.study, 12);
     expect(totals.questions, 0);
@@ -134,19 +154,56 @@ void main() {
     expect(done, <String>{'d001-chem-01-01'});
   });
 
+  test('task statuses are read per day from user state', () async {
+    await seedDay();
+    await userState.setTaskStatus('d001-chem-01', 'completed');
+
+    final Map<String, String> statuses = await userState.taskStatusesForDay(
+      'd001',
+    );
+    expect(statuses, <String, String>{'d001-chem-01': 'completed'});
+  });
+
+  test('step state writes are observable without polling', () async {
+    await seedDay();
+
+    final List<List<UserStepStateRow>> emissions = <List<UserStepStateRow>>[];
+    final StreamSubscription<List<UserStepStateRow>> subscription = db
+        .select(db.userStepStates)
+        .watch()
+        .listen(emissions.add);
+
+    await pumpEventQueue();
+    await userState.setStepCompleted('d001-chem-01-01', true);
+    await pumpEventQueue();
+    await subscription.cancel();
+
+    expect(
+      emissions.any(
+        (List<UserStepStateRow> rows) =>
+            rows.isNotEmpty && rows.single.completed,
+      ),
+      isTrue,
+    );
+  });
+
   test('uncompleting a step clears its completion time', () async {
     await seedDay();
     await userState.setStepCompleted('d001-chem-01-01', true);
     await userState.setStepCompleted('d001-chem-01-01', false);
 
-    final UserStepStateRow state = await db.select(db.userStepStates).getSingle();
+    final UserStepStateRow state = await db
+        .select(db.userStepStates)
+        .getSingle();
     expect(state.completed, isFalse);
     expect(state.completedAt, isNull);
   });
 
   test('foreign keys are enforced', () async {
     await expectLater(
-      db.into(db.tasks).insert(
+      db
+          .into(db.tasks)
+          .insert(
             TasksCompanion.insert(
               id: 'orphan',
               dayId: 'missing-day',

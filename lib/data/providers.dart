@@ -1,6 +1,9 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/app_assets.dart';
 import '../domain/plan/plan_calendar.dart';
+import '../domain/plan/plan_dataset.dart';
 import 'database/app_database.dart';
 import 'database/database_provider.dart';
 import 'repositories/plan_progress_repository.dart';
@@ -34,10 +37,22 @@ final FutureProvider<PlanRow?> activePlanProvider = FutureProvider<PlanRow?>((
   return ref.watch(templateRepositoryProvider).activePlan();
 });
 
-/// Date mapping derived from the plan row, never hard-coded in a screen.
+/// Date mapping derived from the bundled dataset, never hard-coded in a screen.
+///
+/// The plan row is only used as the "is imported" check. Its `start_date` is a
+/// SQLite instant, so reading it after a timezone change can land on the
+/// previous/next local day. The dataset's date text is timezone-free, which is
+/// what keeps Day 1 fixed at 19 November.
 final FutureProvider<PlanCalendar?> planCalendarProvider =
     FutureProvider<PlanCalendar?>((Ref ref) async {
       final PlanRow? plan = await ref.watch(activePlanProvider.future);
       if (plan == null) return null;
-      return PlanCalendar(startDate: plan.startDate, totalDays: plan.totalDays);
+
+      final PlanDataset dataset = PlanDataset.parse(
+        await rootBundle.loadString(kPlanAsset),
+      );
+      return PlanCalendar(
+        startDate: dataset.meta.startDate,
+        totalDays: dataset.meta.totalDays,
+      );
     });

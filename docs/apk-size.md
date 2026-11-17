@@ -62,7 +62,8 @@ fluctuation. Tighten them when a dependency intentionally grows the app.
 
 ## Signing caveat
 
-Without the four `ANDROID_KEYSTORE_*` / `ANDROID_KEY_*` secrets the release APK
-is debug-signed (CI prints a warning). That does not change its size, but
-Android will not install it over an APK signed with a different key. See
-[`updates.md`](updates.md#release-signing).
+CI requires the four `ANDROID_KEYSTORE_*` / `ANDROID_KEY_*` secrets and fails
+rather than publishing a debug-signed APK. It also verifies the APK certificate
+against the keystore before release. That does not change the size, but Android
+will not install it over an APK signed with a different key. See
+[`release-signing.md`](release-signing.md).

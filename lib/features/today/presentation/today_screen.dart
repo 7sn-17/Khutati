@@ -44,7 +44,7 @@ class _TodayBody extends ConsumerWidget {
     final KhutatiPalette palette = context.palette;
     final KhutatiFormat format = KhutatiFormat(l10n);
 
-    final int hour = DateTime.now().hour;
+    final int hour = data.now.hour;
     final String greeting = hour < 12
         ? l10n.todayGreetingMorning
         : hour < 18
@@ -140,7 +140,7 @@ class _TodayBody extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _Quote(text: _quoteOfDay(l10n)),
+          _Quote(text: _quoteOfDay(l10n, data.now)),
           _Hero(data: data, format: format),
           if (data.overdueTasks > 0)
             _OverdueAlert(
@@ -216,7 +216,7 @@ class _TodayBody extends ConsumerWidget {
     return '$clock $part';
   }
 
-  String _quoteOfDay(AppLocalizations l10n) {
+  String _quoteOfDay(AppLocalizations l10n, DateTime now) {
     // The prototype rotates six quotes by weekday; % 6 keeps the same order.
     final List<String> quotes = <String>[
       l10n.todayQuote1,
@@ -226,7 +226,7 @@ class _TodayBody extends ConsumerWidget {
       l10n.todayQuote5,
       l10n.todayQuote6,
     ];
-    return quotes[DateTime.now().weekday % quotes.length];
+    return quotes[now.weekday % quotes.length];
   }
 }
 
