@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/l10n/app_strings.dart';
+import '../core/settings/theme_mode_controller.dart';
 import 'router.dart';
 import 'theme/khutati_theme.dart';
 
@@ -15,6 +16,7 @@ class KhutatiApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final GoRouter router = ref.watch(routerProvider);
+    final ThemeMode themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
       title: AppStrings.appName,
@@ -22,7 +24,7 @@ class KhutatiApp extends ConsumerWidget {
       routerConfig: router,
       theme: KhutatiTheme.light,
       darkTheme: KhutatiTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       locale: const Locale('ar'),
       supportedLocales: const <Locale>[Locale('ar')],
       localizationsDelegates: const <LocalizationsDelegate<Object>>[

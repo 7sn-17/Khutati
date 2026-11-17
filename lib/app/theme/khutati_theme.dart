@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/design/tokens.dart';
 import '../../core/typography/khutati_fonts.dart';
@@ -12,7 +13,14 @@ abstract final class KhutatiTheme {
   static final ThemeData dark = _build(KColors.dark, Brightness.dark);
   static final ThemeData light = _build(KColors.light, Brightness.light);
 
+  /// Exposes the palette for widgets that need a token colour directly.
+  static KhutatiPalette paletteOf(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark ? KColors.dark : KColors.light;
+  }
+
   static ThemeData _build(KhutatiPalette palette, Brightness brightness) {
+    final bool isDark = brightness == Brightness.dark;
+
     final ColorScheme scheme = ColorScheme(
       brightness: brightness,
       primary: palette.red,
@@ -43,9 +51,10 @@ abstract final class KhutatiTheme {
       titleLarge: KhutatiFonts.display(
         size: KTypography.heroTitleSize,
         color: palette.tx,
+        height: KTypography.heroTitleHeight,
       ),
       titleMedium: KhutatiFonts.body(
-        size: 15,
+        size: KTypography.quoteSize,
         weight: FontWeight.w500,
         color: palette.tx,
       ),
@@ -81,6 +90,20 @@ abstract final class KhutatiTheme {
       visualDensity: VisualDensity.standard,
       // 48dp minimum tap target (PRD section 8, accessibility).
       materialTapTargetSize: MaterialTapTargetSize.padded,
+      dividerTheme: DividerThemeData(color: palette.line, thickness: 1, space: 1),
+      appBarTheme: AppBarTheme(
+        backgroundColor: palette.bg,
+        foregroundColor: palette.tx,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: palette.bg,
+          systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        ),
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{
           TargetPlatform.android: ZoomPageTransitionsBuilder(),

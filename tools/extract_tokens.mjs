@@ -183,6 +183,10 @@ const typography = {
   h2Top: box('h2', 'margin')[0],
   h2Bottom: box('h2', 'margin')[2],
   heroTitleSize: px('.hero h3', 'font-size'),
+  heroTitleHeight: Number(decl('.hero h3', 'line-height')),
+  chipSize: px('.chip', 'font-size'),
+  chipHeight: Number(decl('.chip', 'line-height')),
+  quoteSize: px('.quote', 'font-size'),
   ringNumeralSize: 58,
   ringCaptionSize: 16,
   navLabelSize: 12,
@@ -240,6 +244,27 @@ const metrics = {
   gridGap: 8,
   sectionGap: 12,
   cardGap: 10,
+  // Component paddings, read straight from the prototype rules.
+  tagPaddingX: box('.tag', 'padding')[1],
+  tagPaddingY: box('.tag', 'padding')[0],
+  heroPadding: box('.hero', 'padding')[0],
+  statPaddingX: box('.stat', 'padding')[1],
+  statPaddingY: box('.stat', 'padding')[0],
+  timelinePaddingX: box('.pd summary', 'padding')[1],
+  timelinePaddingY: box('.pd summary', 'padding')[0],
+  chipPaddingX: box('.chip', 'padding')[1],
+  chipPaddingY: box('.chip', 'padding')[0],
+  quoteRadius: px('.quote', 'border-radius'),
+  quotePaddingX: box('.quote', 'padding')[1],
+  quotePaddingY: box('.quote', 'padding')[0],
+  levelPadding: box('.lv', 'padding')[0],
+  navMaxWidth: px('nav', 'max-width'),
+  weekChartHeight: px('.wc', 'height'),
+  // Ring circumference, taken from the prototype's SVG stroke-dasharray.
+  ringCircumference: Number(
+    html.match(/id="rv"[\s\S]*?stroke-dasharray="([\d.]+)"/)?.[1] ??
+      fail('ring stroke-dasharray not found in prototype'),
+  ),
 };
 
 /* ---------- motion ---------- */
@@ -341,6 +366,10 @@ abstract final class KTypography {
   static const double h1Height = ${typography.h1Height.toFixed(1)};
   static const double h2Size = ${typography.h2Size.toFixed(1)};
   static const double heroTitleSize = ${typography.heroTitleSize.toFixed(1)};
+  static const double heroTitleHeight = ${typography.heroTitleHeight.toFixed(1)};
+  static const double chipSize = ${typography.chipSize.toFixed(1)};
+  static const double chipHeight = ${typography.chipHeight.toFixed(1)};
+  static const double quoteSize = ${typography.quoteSize.toFixed(1)};
   static const double ringNumeralSize = ${typography.ringNumeralSize.toFixed(1)};
   static const double statNumSize = ${typography.statNumSize.toFixed(1)};
   static const double timelineNumSize = ${typography.timelineNumSize.toFixed(1)};

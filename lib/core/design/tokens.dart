@@ -90,6 +90,10 @@ abstract final class KTypography {
   static const double h1Height = 1.1;
   static const double h2Size = 20.0;
   static const double heroTitleSize = 24.0;
+  static const double heroTitleHeight = 1.3;
+  static const double chipSize = 13.0;
+  static const double chipHeight = 1.4;
+  static const double quoteSize = 15.0;
   static const double ringNumeralSize = 58.0;
   static const double statNumSize = 24.0;
   static const double timelineNumSize = 26.0;
@@ -143,6 +147,22 @@ abstract final class KMetrics {
   static const double gridGap = 8.0;
   static const double sectionGap = 12.0;
   static const double cardGap = 10.0;
+  static const double tagPaddingX = 10.0;
+  static const double tagPaddingY = 1.0;
+  static const double heroPadding = 16.0;
+  static const double statPaddingX = 14.0;
+  static const double statPaddingY = 12.0;
+  static const double timelinePaddingX = 14.0;
+  static const double timelinePaddingY = 12.0;
+  static const double chipPaddingX = 10.0;
+  static const double chipPaddingY = 8.0;
+  static const double quoteRadius = 14.0;
+  static const double quotePaddingX = 14.0;
+  static const double quotePaddingY = 12.0;
+  static const double levelPadding = 16.0;
+  static const double navMaxWidth = 408.0;
+  static const double weekChartHeight = 110.0;
+  static const double ringCircumference = 653.0;
   static const double appMaxWidth = 440.0;
 }
 
