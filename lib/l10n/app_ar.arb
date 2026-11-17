@@ -140,5 +140,12 @@
   "updateHint": "يتحقق التطبيق تلقائياً عند التشغيل، ثم يعمل بالكامل دون إنترنت.",
   "updateSourceSupabase": "من خادم خطتي",
   "updateSourceGithub": "من GitHub",
-  "updateLaunchFailed": "تعذّر فتح رابط التحميل."
+  "updateLaunchFailed": "تعذّر فتح رابط التحميل.",
+  "updateDialogEyebrow": "إصدار جديد من خطتي",
+  "updateDialogTitle": "تحديث جديد جاهز",
+  "updateWhatsNew": "ما الجديد",
+  "updateNoNotes": "تحسينات في الأداء والاستقرار، مع تجربة أسهل في استخدام خطتك.",
+  "updateLater": "لاحقاً",
+  "updateSkipVersion": "تخطّي هذا الإصدار",
+  "updateView": "عرض التحديث"
 }

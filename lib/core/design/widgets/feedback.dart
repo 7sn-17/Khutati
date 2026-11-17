@@ -5,13 +5,22 @@ import 'package:flutter/material.dart';
 import '../palette.dart';
 import '../tokens.dart';
 
-/// `#toast` — inverted pill, 8/18 padding, 1.8s on screen.
-void showKToast(BuildContext context, String message) {
+enum KToastKind { success, error, info }
+
+/// A top-anchored confirmation card. It uses the app's own surface, accent and
+type tokens rather than the Material SnackBar, so feedback reads as part of
+/// the product in both light and dark themes.
+void showKToast(
+  BuildContext context,
+  String message, {
+  KToastKind kind = KToastKind.success,
+}) {
   final OverlayState overlay = Overlay.of(context);
   late OverlayEntry entry;
   entry = OverlayEntry(
     builder: (BuildContext context) => _KToastOverlay(
       message: message,
+      kind: kind,
       onDismissed: () {
         if (entry.mounted) entry.remove();
       },
@@ -21,31 +30,40 @@ void showKToast(BuildContext context, String message) {
 }
 
 class _KToastOverlay extends StatefulWidget {
-  const _KToastOverlay({required this.message, required this.onDismissed});
+  const _KToastOverlay({
+    required this.message,
+    required this.kind,
+    required this.onDismissed,
+  });
 
   final String message;
+  final KToastKind kind;
   final VoidCallback onDismissed;
 
   @override
   State<_KToastOverlay> createState() => _KToastOverlayState();
 }
 
-class _KToastOverlayState extends State<_KToastOverlay> with SingleTickerProviderStateMixin {
+class _KToastOverlayState extends State<_KToastOverlay>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: Duration(milliseconds: KMotion.toastMs),
   );
-  late final Animation<double> _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-  late final Animation<Offset> _slide = Tween<Offset>(
-    begin: const Offset(0, 10),
-    end: Offset.zero,
-  ).animate(_fade);
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide =
+      Tween<Offset>(begin: const Offset(0, -0.35), end: Offset.zero).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+      );
 
   @override
   void initState() {
     super.initState();
     _controller.forward();
-    Future<void>.delayed(const Duration(milliseconds: 1800), () async {
+    Future<void>.delayed(const Duration(milliseconds: 2800), () async {
       if (!mounted) return;
       await _controller.reverse();
       widget.onDismissed();
@@ -61,31 +79,68 @@ class _KToastOverlayState extends State<_KToastOverlay> with SingleTickerProvide
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final (Color accent, IconData icon) = switch (widget.kind) {
+      KToastKind.success => (palette.ok, Icons.check_rounded),
+      KToastKind.error => (palette.redtx, Icons.error_outline_rounded),
+      KToastKind.info => (palette.gold, Icons.info_outline_rounded),
+    };
 
     return Positioned(
-      left: 0,
-      right: 0,
-      bottom: KMetrics.toastBottom + MediaQuery.of(context).padding.bottom,
+      top: MediaQuery.of(context).padding.top + 10,
+      left: KMetrics.appPaddingX,
+      right: KMetrics.appPaddingX,
       child: IgnorePointer(
         child: FadeTransition(
           opacity: _fade,
           child: SlideTransition(
             position: _slide,
             child: Center(
-              child: Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                decoration: BoxDecoration(
-                  color: palette.tx,
-                  borderRadius: BorderRadius.circular(KMetrics.toastRadius),
-                ),
-                child: Text(
-                  widget.message,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.bodySize,
-                    fontWeight: FontWeight.w500,
-                    color: palette.bg,
+              child: Semantics(
+                liveRegion: true,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.card,
+                    borderRadius: BorderRadius.circular(KMetrics.cardRadius),
+                    border: Border.all(color: accent.withValues(alpha: 0.55)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: palette.bg.withValues(alpha: 0.28),
+                        blurRadius: 22,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, size: 19, color: accent),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          widget.message,
+                          textAlign: TextAlign.start,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.muteSize,
+                            fontWeight: FontWeight.w500,
+                            color: palette.tx,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

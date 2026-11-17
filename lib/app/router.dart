@@ -11,10 +11,15 @@ import '../features/today/presentation/today_screen.dart';
 import 'router_transitions.dart';
 import 'shell/app_shell.dart';
 
+/// Root navigator, also used by app-level surfaces such as the update dialog
+/// that live above the routed screen tree.
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Application routes. The five sections live in a stateful shell so each tab
 /// keeps its own stack, matching the prototype's persistent bottom navigation.
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/today',
     routes: <RouteBase>[
       StatefulShellRoute.indexedStack(
@@ -22,15 +27,15 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
           BuildContext context,
           GoRouterState state,
           StatefulNavigationShell navigationShell,
-        ) =>
-            AppShell(navigationShell: navigationShell),
+        ) => AppShell(navigationShell: navigationShell),
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
                 path: '/today',
                 name: 'today',
-                builder: (BuildContext context, GoRouterState state) => const TodayScreen(),
+                builder: (BuildContext context, GoRouterState state) =>
+                    const TodayScreen(),
               ),
             ],
           ),
@@ -39,7 +44,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: '/plan',
                 name: 'plan',
-                builder: (BuildContext context, GoRouterState state) => const PlanScreen(),
+                builder: (BuildContext context, GoRouterState state) =>
+                    const PlanScreen(),
               ),
             ],
           ),
@@ -48,7 +54,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: '/focus',
                 name: 'focus',
-                builder: (BuildContext context, GoRouterState state) => const FocusScreen(),
+                builder: (BuildContext context, GoRouterState state) =>
+                    const FocusScreen(),
               ),
             ],
           ),
@@ -57,7 +64,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: '/achievements',
                 name: 'achievements',
-                builder: (BuildContext context, GoRouterState state) => const AchievementsScreen(),
+                builder: (BuildContext context, GoRouterState state) =>
+                    const AchievementsScreen(),
               ),
             ],
           ),
@@ -66,7 +74,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: '/settings',
                 name: 'settings',
-                builder: (BuildContext context, GoRouterState state) => const SettingsScreen(),
+                builder: (BuildContext context, GoRouterState state) =>
+                    const SettingsScreen(),
               ),
             ],
           ),

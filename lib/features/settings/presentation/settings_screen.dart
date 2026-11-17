@@ -13,6 +13,7 @@ import '../../../core/settings/theme_mode_controller.dart';
 import '../../../l10n/l10n.dart';
 import '../../updates/application/update_controller.dart';
 import '../../updates/domain/app_release.dart';
+import '../../updates/presentation/update_dialog.dart';
 
 /// Settings — the fifth tab (PRD 5.11).
 ///
@@ -203,7 +204,11 @@ class _UpdatePanel extends ConsumerWidget {
         if (state.isChecking)
           _StatusLine(text: l10n.updateChecking, spinner: true)
         else if (state.hasUpdate && manifest != null)
-          _AvailableUpdate(manifest: manifest, source: state.source)
+          _StatusLine(
+            icon: Icons.system_update_alt_rounded,
+            text: l10n.updateAvailable(manifest.versionName),
+            color: palette.gold,
+          )
         else if (state.status == UpdateStatus.failed)
           _StatusLine(
             icon: Icons.cloud_off_outlined,
@@ -222,6 +227,20 @@ class _UpdatePanel extends ConsumerWidget {
             text: l10n.updateHint,
             color: palette.mute,
           ),
+        if (state.hasUpdate && manifest != null) ...<Widget>[
+          const SizedBox(height: 10),
+          KButton(
+            label: l10n.updateView,
+            expand: true,
+            onPressed: () => unawaited(
+              showUpdateDialog(
+                context,
+                manifest: manifest,
+                source: state.source,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 10),
         KButton(
           label: l10n.updateCheck,
@@ -289,133 +308,6 @@ class _StatusLine extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _AvailableUpdate extends ConsumerWidget {
-  const _AvailableUpdate({required this.manifest, this.source});
-
-  final UpdateManifest manifest;
-  final UpdateSource? source;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = context.l10n;
-    final KhutatiPalette palette = context.palette;
-    final String? notes = manifest.notes?.trim();
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: palette.card2,
-        borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
-        border: Border.all(color: palette.gold.withValues(alpha: 0.55)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Icon(Icons.system_update_alt, size: 18, color: palette.gold),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  l10n.updateAvailable(manifest.versionName),
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.quoteSize,
-                    fontWeight: FontWeight.w500,
-                    color: palette.tx,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (source != null) ...<Widget>[
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: palette.card,
-                borderRadius: BorderRadius.circular(KMetrics.pillRadius),
-                border: Border.all(color: palette.line),
-              ),
-              child: Text(
-                source == UpdateSource.supabase
-                    ? l10n.updateSourceSupabase
-                    : l10n.updateSourceGithub,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: KTypography.tagSize,
-                  color: palette.mute,
-                ),
-              ),
-            ),
-          ],
-          if (notes != null && notes.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 10),
-            Text(
-              l10n.updateNotes,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.smallSize,
-                fontWeight: FontWeight.w500,
-                color: palette.tx,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              notes,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.smallSize,
-                color: palette.mute,
-                height: 1.5,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: KButton(
-                  label: l10n.updateNow,
-                  expand: true,
-                  onPressed: () => unawaited(_open(context, ref)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: KButton(
-                  label: l10n.updateSkip,
-                  variant: KButtonVariant.secondary,
-                  expand: true,
-                  onPressed: () => unawaited(
-                    ref.read(updateControllerProvider.notifier).skip(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _open(BuildContext context, WidgetRef ref) async {
-    final bool opened = await ref
-        .read(updateControllerProvider.notifier)
-        .openDownload(manifest);
-    if (!context.mounted) return;
-    if (!opened) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.updateLaunchFailed)));
-    }
   }
 }
 

@@ -19,10 +19,14 @@ and the plan keeps working offline.
 
 ## Client behaviour
 
-- `UpdateBootstrap` runs a silent check after the first frame and on resume.
+- `UpdateBootstrap` runs a silent check after the first frame and whenever the
+  app returns to the foreground.
 - Checks are throttled to once every 6 hours (`update_last_check_ms`); a failed
   check retries after 15 minutes (`update_last_attempt_ms`) so offline launches
-  do not hammer the network.
+  do not hammer the network. While either window is active no request is made.
+- When a newer release is found, the shared branded dialog opens over the app.
+  It shows the version, its Arabic "what's new" notes and the update/later/skip
+  actions. Settings offers the same dialog through "عرض التحديث".
 - A skipped version is stored in `update_skipped_version_code`; "check now" in
   Settings bypasses the skip and the throttle.
 - Versions compare semantically first, then by Android `versionCode`, so a
@@ -64,13 +68,17 @@ The anon key is public by design; never use the service-role key here.
 
 ## GitHub fallback
 
+Release notes are authored in Arabic in `release_notes/ar.txt`. CI rejects a
+missing or non-Arabic file, uses it for `update.json` and publishes the same text
+as the GitHub release body. Edit that file as part of every release.
+
 `.github/workflows/android.yml` writes `update.json` next to the APKs:
 
 ```json
 {
-  "versionName": "0.2.0",
-  "versionCode": 2,
-  "notes": "commit subject",
+  "versionName": "0.2.2",
+  "versionCode": 4,
+  "notes": "ملاحظات الإصدار العربية من release_notes/ar.txt",
   "apkUrl": "https://github.com/7sn-17/Khutati/releases/download/latest/Khutati.apk",
   "pageUrl": "https://github.com/7sn-17/Khutati/releases/tag/latest",
   "publishedAt": "2026-11-17T12:00:00Z"

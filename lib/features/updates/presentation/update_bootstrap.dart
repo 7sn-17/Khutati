@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router.dart';
 import '../application/update_controller.dart';
+import 'update_dialog.dart';
 
 /// Runs a silent, throttled update check after the first frame and whenever the
-/// app returns to the foreground. It never blocks the widget tree and never
-/// shows a dialog on its own.
+/// app returns to the foreground. It never blocks the widget tree; when the
+/// check finds a newer release it presents the branded update dialog.
 class UpdateBootstrap extends ConsumerStatefulWidget {
   const UpdateBootstrap({required this.child, super.key});
 
@@ -19,6 +21,9 @@ class UpdateBootstrap extends ConsumerStatefulWidget {
 
 class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
     with WidgetsBindingObserver {
+  bool _dialogOpen = false;
+  int? _presentedVersionCode;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +48,42 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
     }
   }
 
+  Future<void> _present(UpdateState state) async {
+    // A release is presented once per availability transition. The controller
+    // still owns the throttle, so a resume inside the window does not refetch.
+    if (_dialogOpen ||
+        state.manifest == null ||
+        _presentedVersionCode == state.manifest!.versionCode) {
+      return;
+    }
+    _dialogOpen = true;
+    _presentedVersionCode = state.manifest!.versionCode;
+    final BuildContext? context = rootNavigatorKey.currentContext;
+    try {
+      if (context != null && context.mounted) {
+        await showUpdateDialog(
+          context,
+          manifest: state.manifest!,
+          source: state.source,
+        );
+      }
+    } finally {
+      _dialogOpen = false;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<UpdateState>(updateControllerProvider, (
+      UpdateState? previous,
+      UpdateState next,
+    ) {
+      if (next.hasUpdate) {
+        WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+          if (mounted) unawaited(_present(next));
+        });
+      }
+    });
+    return widget.child;
+  }
 }
