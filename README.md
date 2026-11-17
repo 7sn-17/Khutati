@@ -29,6 +29,7 @@ Phase 0 (foundation inputs) is complete:
 
 ```bash
 flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # Drift codegen
 flutter analyze
 flutter test
 flutter run
@@ -48,18 +49,41 @@ node tools/validate_plan_data.mjs --self-test
 lib/
   app/            app shell, router, theme
   core/
-    design/       generated tokens (do not edit)
+    design/       generated tokens (do not edit), SVG parser, widget kit
     typography/   font entry points
     l10n/         Arabic strings (ARB migration in Phase 1.6)
     utils/        formatting helpers (digits, durations, Arabic time ranges)
-  data/           Drift database and repositories (Phase 1.5)
+    settings/     persisted preferences (theme mode)
+  data/           Drift database and repositories
   domain/         plan engine, no Flutter imports (Phase 2)
-  features/       today, plan, focus, achievements, settings
+  features/       today, plan, focus, achievements, gallery (debug)
 tools/            token extraction, dataset validation
 design/           generated tokens.json
 docs/             generated data-validation report
 android/          Kotlin host, foreground service (Phase 4.1)
 ```
+
+## Design system
+
+Every primitive is a port of a prototype rule, not an interpretation:
+
+| Widget | Prototype source |
+| --- | --- |
+| `KCard` | `.hero` / `.pd` — card, hairline border, hexagon texture, optional accent |
+| `KPill` | `.pill` — 32dp pill with gold value |
+| `KTag` | `.tag` — solid subject colour, dark label |
+| `KChip` | `.chip` — 52dp step toggle, `--ok` fill when pressed |
+| `KButton` | `.btn` / `.btn2` — 44dp, red fill or hairline |
+| `KProgressBar` | `.bar` — 8dp, rounded, `--redtx` |
+| `KProgressRing` | `.ring` — 240dp, r104, 10px, round cap, -90° start |
+| `KEcgLine` | `.ecg` — the exact path, mirrored, revealed in 600ms |
+| `KBreakDivider` | `.br` — centred label between hairlines |
+| `KSectionHeader` | `h2` — 24/12 margins |
+| `KToast` / `KConfetti` | `#toast` / `.cf` — inverted pill, 26-piece burst |
+
+`/gallery` renders all of them in the live theme (opened from Today in debug
+builds). Tests diff the ECG path, ring geometry, hexagon tile and nav glyphs
+against the HTML, so the prototype stays the source of truth.
 
 ## CI and signing
 

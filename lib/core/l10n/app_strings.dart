@@ -22,6 +22,17 @@ abstract final class AppStrings {
   static const String focusPlaceholder = 'المؤقت يُبنى في المرحلة 4';
   static const String achievementsPlaceholder = 'الإنجازات تُبنى في المرحلة 6';
 
+  // Component gallery (debug only)
+  static const String galleryTitle = 'معرض المكوّنات';
+  static const String galleryOpen = 'افتح معرض المكوّنات';
+  static const String galleryTheme = 'تبديل المظهر';
+  static const String galleryToast = 'أحسنت، أكملت الخطوة';
+  static const String galleryToastAction = 'أظهر التنبيه';
+  static const String galleryConfettiAction = 'أطلق الاحتفال';
+  static const String galleryDemoTask = 'فيديو تأسيسي الذرة 1';
+  static const String galleryDemoRange = '8:00 صباحاً – 9:14 صباحاً';
+  static const String galleryFocusCaption = 'وقت التركيز';
+
   // Units
   static const String hourShort = 'س';
   static const String minuteShort = 'د';

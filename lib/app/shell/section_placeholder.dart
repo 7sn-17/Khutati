@@ -12,12 +12,14 @@ class SectionPlaceholder extends StatelessWidget {
     required this.title,
     required this.message,
     this.footer,
+    this.action,
     super.key,
   });
 
   final String title;
   final String message;
   final String? footer;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +60,10 @@ class SectionPlaceholder extends StatelessWidget {
               ],
             ),
           ),
+        ],
+        if (action != null) ...<Widget>[
+          const SizedBox(height: 16),
+          action!,
         ],
       ],
     );

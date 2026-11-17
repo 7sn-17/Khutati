@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/shell/section_placeholder.dart';
+import '../../../core/design/widgets/widgets.dart';
 import '../../../core/l10n/app_strings.dart';
 
 /// Phase 0 scaffold for the Today section (اليوم).
@@ -10,10 +13,18 @@ class TodayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SectionPlaceholder(
+    return SectionPlaceholder(
       title: AppStrings.appName,
       message: AppStrings.foundationSubtitle,
       footer: AppStrings.foundationProof,
+      // The design gallery is a development aid, never shipped navigation.
+      action: kDebugMode
+          ? KButton(
+              label: AppStrings.galleryOpen,
+              variant: KButtonVariant.secondary,
+              onPressed: () => context.push('/gallery'),
+            )
+          : null,
     );
   }
 }

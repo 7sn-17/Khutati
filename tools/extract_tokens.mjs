@@ -260,11 +260,6 @@ const metrics = {
   levelPadding: box('.lv', 'padding')[0],
   navMaxWidth: px('nav', 'max-width'),
   weekChartHeight: px('.wc', 'height'),
-  // Ring circumference, taken from the prototype's SVG stroke-dasharray.
-  ringCircumference: Number(
-    html.match(/id="rv"[\s\S]*?stroke-dasharray="([\d.]+)"/)?.[1] ??
-      fail('ring stroke-dasharray not found in prototype'),
-  ),
 };
 
 /* ---------- motion ---------- */
@@ -281,6 +276,56 @@ const motion = {
   emphasizedCurve: 'easeOutCubic',
 };
 
+/* ---------- artwork (paths and tile geometry, straight from the prototype) ---------- */
+
+const ecgViewBox = html.match(/class="ecg" viewBox="([\d.\s]+)"/);
+const ecgPath = html.match(/<path class="g" d="([^"]+)"/);
+const ringEl = html.match(/<circle class="v" id="rv"[^>]*>/);
+const hexUri = darkVars.hx ?? fail('--hx pattern variable is missing');
+
+if (!ecgViewBox || !ecgPath || !ringEl) fail('ECG or ring geometry not found in prototype');
+
+const ecgBox = ecgViewBox[1].trim().split(/\s+/).map(Number);
+const ecgW = ecgBox[2];
+const ecgH = ecgBox[3];
+const hexTile = hexUri.match(/width='(\d+)' height='(\d+)'/);
+const hexPath = hexUri.match(/(?:%3C|<)path d='([^']+)'/);
+const hexStroke = hexUri.match(/stroke='%23([0-9a-fA-F]{3,6})'/);
+const hexOpacity = hexUri.match(/stroke-opacity='([\d.]+)'/);
+const ringRadius = ringEl[0].match(/ r="([\d.]+)"/);
+const ringStrokeWidth = ringEl[0].match(/stroke-width="([\d.]+)"/);
+const ringDash = ringEl[0].match(/stroke-dasharray="([\d.]+)"/);
+
+if (!hexTile || !hexPath || !hexStroke || !hexOpacity) fail('hexagon pattern could not be parsed from --hx');
+if (!ringRadius || !ringStrokeWidth || !ringDash) fail('ring circle attributes missing');
+
+const expandHex = (h) => (h.length === 3 ? h.split('').map((c) => c + c).join('') : h).toUpperCase();
+
+const artwork = {
+  ecg: {
+    path: ecgPath[1],
+    viewWidth: ecgW,
+    viewHeight: ecgH,
+    strokeWidth: Number(decl('.ecg path', 'stroke-width')),
+    renderedHeight: px('.ecg', 'height'),
+  },
+  ring: {
+    viewSize: px('.ring', 'width'),
+    radius: Number(ringRadius[1]),
+    strokeWidth: Number(ringStrokeWidth[1]),
+    circumference: Number(ringDash[1]),
+    numeralSize: 58,
+    captionSize: 16,
+  },
+  hexPattern: {
+    path: hexPath[1],
+    tileWidth: Number(hexTile[1]),
+    tileHeight: Number(hexTile[2]),
+    stroke: `#${expandHex(hexStroke[1])}`,
+    opacity: Number(hexOpacity[1]),
+  },
+};
+
 /* ---------- write ---------- */
 
 const sourceSha = createHash('sha256').update(html).digest('hex');
@@ -295,6 +340,7 @@ const tokens = {
   typography,
   metrics,
   motion,
+  artwork,
 };
 
 function toDart() {
@@ -398,6 +444,32 @@ ${Object.entries(motion)
   .join('\n')}
   static const String standardCurve = '${motion.standardCurve}';
   static const String emphasizedCurve = '${motion.emphasizedCurve}';
+}
+
+/// Vector artwork lifted verbatim from the prototype's SVG markup.
+abstract final class KArtwork {
+  // ECG trace: same path data, same 300x40 viewBox, same 2.5 stroke.
+  static const String ecgPath =
+      '${artwork.ecg.path}';
+  static const double ecgViewWidth = ${artwork.ecg.viewWidth.toFixed(1)};
+  static const double ecgViewHeight = ${artwork.ecg.viewHeight.toFixed(1)};
+  static const double ecgStrokeWidth = ${artwork.ecg.strokeWidth.toFixed(1)};
+  static const double ecgRenderedHeight = ${artwork.ecg.renderedHeight.toFixed(1)};
+
+  // Focus ring: 240 viewBox, r=104, stroke 10, dasharray 653.
+  static const double ringViewSize = ${artwork.ring.viewSize.toFixed(1)};
+  static const double ringRadius = ${artwork.ring.radius.toFixed(1)};
+  static const double ringStrokeWidth = ${artwork.ring.strokeWidth.toFixed(1)};
+  static const double ringCircumference = ${artwork.ring.circumference.toFixed(1)};
+  static const double ringNumeralSize = ${artwork.ring.numeralSize.toFixed(1)};
+  static const double ringCaptionSize = ${artwork.ring.captionSize.toFixed(1)};
+
+  // Hexagon card texture: 56x64 tile, stroke #888 at 20% opacity.
+  static const String hexPatternPath = '${artwork.hexPattern.path}';
+  static const double hexTileWidth = ${artwork.hexPattern.tileWidth.toFixed(1)};
+  static const double hexTileHeight = ${artwork.hexPattern.tileHeight.toFixed(1)};
+  static const Color hexStroke = Color(0xFF${artwork.hexPattern.stroke.slice(1)});
+  static const double hexOpacity = ${artwork.hexPattern.opacity};
 }
 `;
 }

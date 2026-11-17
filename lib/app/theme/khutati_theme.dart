@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/design/palette.dart' as design;
 import '../../core/design/tokens.dart';
 import '../../core/typography/khutati_fonts.dart';
 
@@ -14,9 +15,7 @@ abstract final class KhutatiTheme {
   static final ThemeData light = _build(KColors.light, Brightness.light);
 
   /// Exposes the palette for widgets that need a token colour directly.
-  static KhutatiPalette paletteOf(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark ? KColors.dark : KColors.light;
-  }
+  static KhutatiPalette paletteOf(BuildContext context) => design.paletteOf(context);
 
   static ThemeData _build(KhutatiPalette palette, Brightness brightness) {
     final bool isDark = brightness == Brightness.dark;

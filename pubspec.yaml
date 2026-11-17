@@ -25,6 +25,9 @@ dependencies:
   path: ^1.9.0
   shared_preferences: ^2.3.3
 
+  # Icons
+  flutter_svg: ^2.0.17
+
   # Typography & formatting
   google_fonts: ^6.2.1
   intl: ^0.19.0

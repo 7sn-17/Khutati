@@ -162,7 +162,6 @@ abstract final class KMetrics {
   static const double levelPadding = 16.0;
   static const double navMaxWidth = 408.0;
   static const double weekChartHeight = 110.0;
-  static const double ringCircumference = 653.0;
   static const double appMaxWidth = 440.0;
 }
 
@@ -176,4 +175,30 @@ abstract final class KMotion {
   static const double pressScale = 0.97;
   static const String standardCurve = 'easeInOutCubic';
   static const String emphasizedCurve = 'easeOutCubic';
+}
+
+/// Vector artwork lifted verbatim from the prototype's SVG markup.
+abstract final class KArtwork {
+  // ECG trace: same path data, same 300x40 viewBox, same 2.5 stroke.
+  static const String ecgPath =
+      'M0 20H40l6-3 6 3H80l5 3 7-22 7 30 5-11h26l8-5 10 5h50l5 3 7-22 7 30 5-11h50H300';
+  static const double ecgViewWidth = 300.0;
+  static const double ecgViewHeight = 40.0;
+  static const double ecgStrokeWidth = 2.5;
+  static const double ecgRenderedHeight = 52.0;
+
+  // Focus ring: 240 viewBox, r=104, stroke 10, dasharray 653.
+  static const double ringViewSize = 240.0;
+  static const double ringRadius = 104.0;
+  static const double ringStrokeWidth = 10.0;
+  static const double ringCircumference = 653.0;
+  static const double ringNumeralSize = 58.0;
+  static const double ringCaptionSize = 16.0;
+
+  // Hexagon card texture: 56x64 tile, stroke #888 at 20% opacity.
+  static const String hexPatternPath = 'M28 2l24 14v32L28 62 4 48V16z';
+  static const double hexTileWidth = 56.0;
+  static const double hexTileHeight = 64.0;
+  static const Color hexStroke = Color(0xFF888888);
+  static const double hexOpacity = 0.2;
 }
