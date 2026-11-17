@@ -65,7 +65,7 @@ class UserStateRepository {
   Future<Set<String>> allCompletedStepIds() async {
     final List<UserStepStateRow> rows = await (_db.select(
       _db.userStepStates,
-    )..where((t) => t.completed.equals(true)).get();
+    )..where((t) => t.completed.equals(true))).get();
     return <String>{for (final UserStepStateRow row in rows) row.stepId};
   }
 
