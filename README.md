@@ -85,6 +85,12 @@ Every primitive is a port of a prototype rule, not an interpretation:
 builds). Tests diff the ECG path, ring geometry, hexagon tile and nav glyphs
 against the HTML, so the prototype stays the source of truth.
 
+## Localization
+
+All user-facing strings live in `lib/l10n/app_ar.arb`; `flutter gen-l10n`
+(l10n.yaml) generates the typed accessors behind `context.l10n`. Adding English
+means adding `app_en.arb` and nothing else — no widget changes.
+
 ## CI and signing
 
 `.github/workflows/android.yml` runs on every push:
@@ -92,7 +98,10 @@ against the HTML, so the prototype stays the source of truth.
 1. `node tools/extract_tokens.mjs --check` — the theme must match the prototype.
 2. `node tools/validate_plan_data.mjs` — the dataset must reconcile to 480 h 9 min.
 3. `flutter analyze` and `flutter test`.
-4. Debug APK on every push; release APK on `main` and on `v*` tags.
+4. Debug APK on every push.
+5. Release APKs built with `--split-per-abi` (arm64-v8a + armeabi-v7a), uploaded
+   as artifacts and published to GitHub Releases: versioned on `v*` tags, a
+   rolling `latest` pre-release on `main`.
 
 Release signing uses these repository secrets (all optional; without them the
 release APK is debug-signed):

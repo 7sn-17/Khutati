@@ -7,6 +7,7 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - "lib/l10n/generated/**"
   errors:
     # Arabic literals must live in the localization layer, not in widgets.
     missing_required_param: error

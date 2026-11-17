@@ -25,6 +25,9 @@ dependencies:
   path: ^1.9.0
   shared_preferences: ^2.3.3
 
+  # Motion
+  flutter_animate: ^4.5.2
+
   # Icons
   flutter_svg: ^2.0.17
 
@@ -45,6 +48,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Enables ARB generation (l10n.yaml)
+  generate: true
 
   assets:
     # Plan template. The only source of plan content in the app (PRD section 3.1).

@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
-import '../../../core/l10n/app_strings.dart';
 import '../../../core/settings/theme_mode_controller.dart';
+import '../../../l10n/l10n.dart';
 
 /// Debug-only gallery that renders every design primitive in the live theme.
 /// Reachable from Today in debug builds; not part of the shipped navigation.
@@ -14,14 +14,15 @@ class WidgetGalleryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final KhutatiPalette palette = context.palette;
+    final AppLocalizations l10n = context.l10n;
     final ThemeMode mode = ref.watch(themeModeProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppStrings.galleryTitle),
+        title: Text(l10n.galleryTitle),
         actions: <Widget>[
           IconButton(
-            tooltip: AppStrings.galleryTheme,
+            tooltip: l10n.galleryTheme,
             onPressed: () => ref.read(themeModeProvider.notifier).cycle(),
             icon: Icon(switch (mode) {
               ThemeMode.system => Icons.brightness_auto,
@@ -41,9 +42,9 @@ class WidgetGalleryScreen extends ConsumerWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const KPill(label: 'سلسلة', value: '9'),
+              KPill(label: l10n.galleryPillStreak, value: '9'),
               const SizedBox(width: 8),
-              const KPill(label: 'نقاط', value: '260'),
+              KPill(label: l10n.galleryPillPoints, value: '260'),
             ],
           ),
           const SizedBox(height: 16),
@@ -61,7 +62,7 @@ class WidgetGalleryScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  AppStrings.galleryDemoTask,
+                  l10n.galleryDemoTask,
                   style: TextStyle(
                     fontFamily: KTypography.displayFamily,
                     fontSize: KTypography.heroTitleSize,
@@ -71,7 +72,7 @@ class WidgetGalleryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  AppStrings.galleryDemoRange,
+                  l10n.galleryDemoRange,
                   style: TextStyle(
                     fontFamily: KTypography.bodyFamily,
                     fontSize: KTypography.smallSize,
@@ -85,32 +86,32 @@ class WidgetGalleryScreen extends ConsumerWidget {
           KCard(
             accentColor: KColors.subject('ch').accent,
             child: Text(
-              AppStrings.galleryDemoRange,
+              l10n.galleryDemoRange,
               style: TextStyle(fontFamily: KTypography.bodyFamily, color: palette.tx),
             ),
           ),
-          const KSectionHeader(title: 'الخط الكهربائي'),
+          KSectionHeader(title: l10n.galleryEcg),
           const KEcgLine(progress: 0.62),
-          const KSectionHeader(title: 'شريط التقدم'),
+          KSectionHeader(title: l10n.galleryBar),
           const KProgressBar(value: 0.38),
           const SizedBox(height: 12),
           const KProgressBar(value: 0.72, color: Color(0xFF6AA6FF)),
-          const KSectionHeader(title: 'حلقة التركيز'),
+          KSectionHeader(title: l10n.galleryRing),
           Center(
             child: KProgressRing(
               progress: 0.68,
               numeral: '25:00',
-              caption: AppStrings.galleryFocusCaption,
+              caption: l10n.galleryFocusCaption,
               color: KColors.subject('ph').accent,
             ),
           ),
-          const KSectionHeader(title: 'الخطوات'),
+          KSectionHeader(title: l10n.gallerySteps),
           Row(
             children: <Widget>[
               Expanded(
                 child: KChip(
-                  title: 'حضور',
-                  subtitle: AppStrings.galleryDemoRange,
+                  title: l10n.galleryAttend,
+                  subtitle: l10n.galleryDemoRange,
                   selected: false,
                   onTap: () {},
                 ),
@@ -118,8 +119,8 @@ class WidgetGalleryScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: KChip(
-                  title: 'دراسة',
-                  subtitle: AppStrings.galleryDemoRange,
+                  title: l10n.galleryStudy,
+                  subtitle: l10n.galleryDemoRange,
                   selected: true,
                   onTap: () {},
                 ),
@@ -128,36 +129,36 @@ class WidgetGalleryScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           KChip(
-            title: 'تم حل الأسئلة',
-            subtitle: AppStrings.galleryDemoRange,
+            title: l10n.gallerySolve,
+            subtitle: l10n.galleryDemoRange,
             selected: false,
             wide: true,
             onTap: () {},
           ),
-          const KSectionHeader(title: 'الأزرار'),
+          KSectionHeader(title: l10n.galleryButtons),
           Row(
             children: <Widget>[
-              KButton(label: 'ابدأ التركيز', onPressed: () {}),
+              KButton(label: l10n.galleryStart, onPressed: () {}),
               const SizedBox(width: 8),
               KButton(
-                label: 'تخطَّ',
+                label: l10n.gallerySkip,
                 variant: KButtonVariant.secondary,
                 onPressed: () {},
               ),
             ],
           ),
-          const KSectionHeader(title: 'الاستراحات'),
-          const KBreakDivider(label: 'استراحة 15 د، 9:14 – 9:30'),
-          const KSectionHeader(title: 'التنبيهات'),
+          KSectionHeader(title: l10n.galleryBreaks),
+          KBreakDivider(label: l10n.galleryBreakLabel),
+          KSectionHeader(title: l10n.galleryFeedback),
           KButton(
-            label: AppStrings.galleryToastAction,
+            label: l10n.galleryToastAction,
             variant: KButtonVariant.secondary,
-            onPressed: () => showKToast(context, AppStrings.galleryToast),
+            onPressed: () => showKToast(context, l10n.galleryToast),
           ),
           const SizedBox(height: 8),
           SizedBox(
             height: 120,
-            child: KConfetti(play: true),
+            child: const KConfetti(play: true),
           ),
         ],
       ),

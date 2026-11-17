@@ -1,33 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:khutati/core/utils/format.dart';
+import 'package:khutati/l10n/generated/app_localizations.dart';
 
 void main() {
+  final KhutatiFormat format = KhutatiFormat(AppLocalizationsAr());
+
   group('KhutatiFormat.duration', () {
     test('renders hours and minutes like the prototype', () {
-      expect(KhutatiFormat.duration(135), '2 س 15 د');
+      expect(format.duration(135), '2 س 15 د');
     });
 
     test('drops the minute suffix on whole hours', () {
-      expect(KhutatiFormat.duration(120), '2 س');
+      expect(format.duration(120), '2 س');
     });
 
     test('drops the hour suffix under one hour', () {
-      expect(KhutatiFormat.duration(45), '45 د');
-      expect(KhutatiFormat.duration(0), '0 د');
+      expect(format.duration(45), '45 د');
+      expect(format.duration(0), '0 د');
     });
   });
 
   group('KhutatiFormat.range', () {
     test('prints the day part once when both ends share it', () {
-      expect(KhutatiFormat.range('08:00', '09:14'), '8:00 صباحاً – 9:14 صباحاً');
+      expect(format.range('08:00', '09:14'), '8:00 صباحاً – 9:14 صباحاً');
     });
 
     test('repeats the day part when it changes', () {
-      expect(KhutatiFormat.range('11:50', '12:30'), '11:50 صباحاً – 12:30 ظهراً');
+      expect(format.range('11:50', '12:30'), '11:50 صباحاً – 12:30 ظهراً');
     });
 
     test('handles afternoon starts', () {
-      expect(KhutatiFormat.range('16:00', '17:30'), '4:00 عصراً – 5:30 عصراً');
+      expect(format.range('16:00', '17:30'), '4:00 عصراً – 5:30 عصراً');
     });
   });
 

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/l10n/app_strings.dart';
 import '../core/settings/theme_mode_controller.dart';
+import '../l10n/l10n.dart';
 import 'router.dart';
 import 'theme/khutati_theme.dart';
 
@@ -19,19 +18,15 @@ class KhutatiApp extends ConsumerWidget {
     final ThemeMode themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
-      title: AppStrings.appName,
+      onGenerateTitle: (BuildContext context) => context.l10n.appName,
       debugShowCheckedModeBanner: false,
       routerConfig: router,
       theme: KhutatiTheme.light,
       darkTheme: KhutatiTheme.dark,
       themeMode: themeMode,
       locale: const Locale('ar'),
-      supportedLocales: const <Locale>[Locale('ar')],
-      localizationsDelegates: const <LocalizationsDelegate<Object>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       // Force RTL even if the device locale is not Arabic: the product is
       // Arabic-first and the layout must never mirror by accident.
       builder: (BuildContext context, Widget? child) {
