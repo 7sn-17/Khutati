@@ -380,10 +380,9 @@ class PlanDay {
       headerTitle: _asStringOrNull(json['headerTitle']),
       title: _asStringOrNull(json['title']),
       note: _asStringOrNull(json['note']),
-      statedStudyMinutes: _asInt(
-        json['statedStudyMinutes'],
-        'day.statedStudyMinutes',
-      ),
+      statedStudyMinutes: json['statedStudyMinutes'] == null
+          ? 0
+          : _asInt(json['statedStudyMinutes'], 'day.statedStudyMinutes'),
       startClock: _asStringOrNull(json['start']),
       endClock: _asStringOrNull(json['end']),
       computedTotalMinutes: computed == null

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:khutati/app/theme/khutati_theme.dart';
 import 'package:khutati/core/design/tokens.dart';
 
 /// Guards theme parity with the HTML prototype.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   group('dark theme', () {
     final ThemeData theme = KhutatiTheme.dark;

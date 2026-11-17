@@ -7,8 +7,8 @@ import '../design/tokens.dart';
 ///
 /// The prototype pairs IBM Plex Sans Arabic for body copy with Reem Kufi for
 /// headings and every numeral. Both families are bundled under
-/// `assets/google_fonts/`, so `google_fonts` resolves them from the asset
-/// bundle and never needs the network on first launch.
+/// `google_fonts/`, so `google_fonts` resolves them from the asset bundle and
+/// never needs the network on first launch.
 abstract final class KhutatiFonts {
   static TextStyle body({
     double size = KTypography.bodySize,

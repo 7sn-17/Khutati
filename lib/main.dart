@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,8 @@ import 'data/database/database_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Fonts are bundled: never fall back to fonts.gstatic.com at runtime.
+  GoogleFonts.config.allowRuntimeFetching = false;
   // Arabic month names are needed before the first frame (Plan and Today both
   // print real dates).
   await initializeDateFormatting('ar');
