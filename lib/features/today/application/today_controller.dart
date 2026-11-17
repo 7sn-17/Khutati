@@ -74,7 +74,8 @@ class TodayData {
   /// The first task that still has work, in plan order.
   PlanTask? get nextTask {
     for (final PlanTask task in tasks) {
-      if (!task.isComplete) return task;
+      if (task.isComplete || task.status == PlanTaskStatus.postponed) continue;
+      return task;
     }
     return null;
   }
@@ -265,6 +266,12 @@ Future<TodayData?> _buildToday(
         status:
             PlanTaskStatus.tryParse(allTaskStatuses[item.task.id]) ??
             PlanTaskStatus.notStarted,
+        postponedToDay:
+            (PlanTaskStatus.tryParse(allTaskStatuses[item.task.id]) ??
+                        PlanTaskStatus.notStarted) ==
+                    PlanTaskStatus.postponed
+                ? (dayNumber + 1).clamp(1, allDays.length)
+                : null,
         steps: <PlanStep>[
           for (final StepRow step in item.steps)
             PlanStep(
@@ -363,8 +370,9 @@ int _streak({
 int _points(List<PlanTask> tasks) {
   int points = 0;
   for (final PlanTask task in tasks) {
+    final bool allDone = task.status == PlanTaskStatus.completed;
     for (final PlanStep step in task.steps) {
-      if (!step.completed) continue;
+      if (!(allDone || step.completed)) continue;
       points += step.isQuestions ? 20 : 10;
     }
   }

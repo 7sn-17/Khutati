@@ -131,7 +131,7 @@ class _RingPainter extends CustomPainter {
 /// The path is the prototype's own `d` attribute; [progress] (0..1) reveals it
 /// progressively, mirroring `stroke-dashoffset: 100 -> 0` over 600ms. The whole
 /// trace is mirrored horizontally, as `transform: scaleX(-1)` does in the HTML.
-class KEcgLine extends StatelessWidget {
+class KEcgLine extends StatefulWidget {
   const KEcgLine({
     required this.progress,
     this.color,
@@ -144,11 +144,30 @@ class KEcgLine extends StatelessWidget {
   final double height;
 
   @override
+  State<KEcgLine> createState() => _KEcgLineState();
+}
+
+class _KEcgLineState extends State<KEcgLine>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: progress.clamp(0.0, 1.0).toDouble()),
+      tween: Tween<double>(
+        begin: 0,
+        end: widget.progress.clamp(0.0, 1.0).toDouble(),
+      ),
       duration: Duration(milliseconds: KMotion.ecgMs),
       curve: Curves.ease,
       builder: (BuildContext context, double value, Widget? child) {
@@ -156,13 +175,19 @@ class KEcgLine extends StatelessWidget {
           flipX: true,
           child: SizedBox(
             width: double.infinity,
-            height: height,
-            child: CustomPaint(
-              painter: _EcgPainter(
-                progress: value,
-                trackColor: palette.line,
-                valueColor: color ?? palette.redtx,
-              ),
+            height: widget.height,
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (BuildContext context, Widget? child) {
+                return CustomPaint(
+                  painter: _EcgPainter(
+                    progress: value,
+                    pulse: _pulse.value,
+                    trackColor: palette.line,
+                    valueColor: widget.color ?? palette.redtx,
+                  ),
+                );
+              },
             ),
           ),
         );
@@ -174,11 +199,13 @@ class KEcgLine extends StatelessWidget {
 class _EcgPainter extends CustomPainter {
   const _EcgPainter({
     required this.progress,
+    required this.pulse,
     required this.trackColor,
     required this.valueColor,
   });
 
   final double progress;
+  final double pulse;
   final Color trackColor;
   final Color valueColor;
 
@@ -214,10 +241,45 @@ class _EcgPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round
         ..color = valueColor;
 
-      for (final PathMetric metric in _path.computeMetrics()) {
-        final double length = metric.length * progress;
-        if (length <= 0) continue;
-        canvas.drawPath(metric.extractPath(0, length), reveal);
+      double totalLength = 0;
+      final List<PathMetric> metrics = _path.computeMetrics().toList();
+      for (final PathMetric metric in metrics) {
+        totalLength += metric.length;
+      }
+      final double revealed = totalLength * progress;
+
+      double drawn = 0;
+      for (final PathMetric metric in metrics) {
+        if (drawn >= revealed) break;
+        final double take = (revealed - drawn).clamp(0.0, metric.length);
+        if (take > 0) {
+          canvas.drawPath(metric.extractPath(0, take), reveal);
+        }
+        drawn += metric.length;
+      }
+
+      // Lightweight moving pulse along the revealed portion.
+      if (revealed > 0) {
+        final double pulsePos = revealed * pulse;
+        double acc = 0;
+        for (final PathMetric metric in metrics) {
+          if (acc + metric.length < pulsePos) {
+            acc += metric.length;
+            continue;
+          }
+          final double local = (pulsePos - acc).clamp(0.0, metric.length);
+          final Paint glow = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = KArtwork.ecgStrokeWidth * 2.2
+            ..strokeCap = StrokeCap.round
+            ..color = valueColor.withValues(alpha: 0.55);
+          final double start = (local - 12).clamp(0.0, metric.length);
+          final double end = (local + 12).clamp(0.0, metric.length);
+          if (end > start) {
+            canvas.drawPath(metric.extractPath(start, end), glow);
+          }
+          break;
+        }
       }
     }
 
@@ -227,6 +289,7 @@ class _EcgPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _EcgPainter oldDelegate) {
     return oldDelegate.progress != progress ||
+        oldDelegate.pulse != pulse ||
         oldDelegate.trackColor != trackColor ||
         oldDelegate.valueColor != valueColor;
   }

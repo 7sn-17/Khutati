@@ -202,7 +202,8 @@ class PlanTask {
           0,
           (int sum, PlanStep step) {
             if (step.progress == StepProgress.notStarted) return sum;
-            if (step.progress == StepProgress.partial) {
+            if (step.progress == StepProgress.partial ||
+                step.progress == StepProgress.partialDown) {
               return sum + step.minutes ~/ 2;
             }
             return sum + step.minutes;

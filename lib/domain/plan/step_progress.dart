@@ -4,18 +4,27 @@
 enum StepProgress {
   notStarted(0),
   partial(1),
-  completed(2);
+  completed(2),
+  /// Halfway while coming back down from completed; visually identical to
+  /// [partial] but persists so the next tap goes to [notStarted].
+  partialDown(3);
 
   const StepProgress(this.code);
 
   final int code;
 
   bool get isAtLeastPartial =>
-      this == StepProgress.partial || this == StepProgress.completed;
+      this == StepProgress.partial ||
+      this == StepProgress.partialDown ||
+      this == StepProgress.completed;
 
   bool get isComplete => this == StepProgress.completed;
 
-  /// One tap forward; the final tap reaches completed.
+  /// Halfway state, whether going up or coming back down.
+  bool get isPartial =>
+      this == StepProgress.partial || this == StepProgress.partialDown;
+
+  /// Loops: 0% -> 50% -> 100% -> 50% -> 0% -> ...
   StepProgress nextWithinSession() {
     switch (this) {
       case StepProgress.notStarted:
@@ -23,7 +32,9 @@ enum StepProgress {
       case StepProgress.partial:
         return StepProgress.completed;
       case StepProgress.completed:
-        return StepProgress.completed;
+        return StepProgress.partialDown;
+      case StepProgress.partialDown:
+        return StepProgress.notStarted;
     }
   }
 

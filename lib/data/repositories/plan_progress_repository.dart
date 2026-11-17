@@ -24,7 +24,11 @@ class PlanProgressRepository {
     final _LoadedPlan plan = await _load();
     return PlanProgress.of(
       plan.tasks
-          .where((TaskRow task) => task.dayId == day.id)
+          .where(
+            (TaskRow task) =>
+                task.dayId == day.id &&
+                !plan.postponedTaskIds.contains(task.id),
+          )
           .map(plan.inputFor),
     );
   }
@@ -33,7 +37,13 @@ class PlanProgressRepository {
   /// card must agree on.
   Future<PlanProgress> overallProgress() async {
     final _LoadedPlan plan = await _load();
-    return PlanProgress.of(plan.tasks.map(plan.inputFor));
+    return PlanProgress.of(
+      plan.tasks
+          .where(
+            (TaskRow task) => !plan.postponedTaskIds.contains(task.id),
+          )
+          .map(plan.inputFor),
+    );
   }
 
   /// Progress for every plan day, keyed by 1-based day number.
@@ -51,6 +61,7 @@ class PlanProgressRepository {
         <int, List<ProgressTaskInput>>{};
 
     for (final TaskRow task in plan.tasks) {
+      if (plan.postponedTaskIds.contains(task.id)) continue;
       final int? dayNumber = numberByDayId[task.dayId];
       if (dayNumber == null) continue;
       grouped
@@ -89,6 +100,7 @@ class PlanProgressRepository {
     final _LoadedPlan plan = await _load();
     final Map<String, List<TaskRow>> grouped = <String, List<TaskRow>>{};
     for (final TaskRow task in plan.tasks) {
+      if (plan.postponedTaskIds.contains(task.id)) continue;
       grouped.putIfAbsent(task.subjectId, () => <TaskRow>[]).add(task);
     }
     return <String, PlanProgress>{
@@ -135,6 +147,11 @@ class PlanProgressRepository {
         .select(_db.userTaskStates)
         .get();
 
+    final Set<String> postponedTaskIds = <String>{
+      for (final UserTaskStateRow state in taskStates)
+        if (state.status == 'postponed') state.taskId,
+    };
+
     final Map<String, StepProgress> stepProgresses = <String, StepProgress>{};
     for (final UserStepStateRow state in stepStates) {
       final StepProgress stored = StepProgress.tryParse(state.progress);
@@ -156,6 +173,7 @@ class PlanProgressRepository {
         for (final UserTaskStateRow state in taskStates)
           if (state.status == 'completed') state.taskId,
       },
+      postponedTaskIds: postponedTaskIds,
       stepProgresses: stepProgresses,
     );
   }
@@ -167,6 +185,7 @@ class _LoadedPlan {
     required this.stepsByTask,
     required this.completedStepIds,
     required this.completedTaskIds,
+    required this.postponedTaskIds,
     required this.stepProgresses,
   });
 
@@ -174,6 +193,7 @@ class _LoadedPlan {
   final Map<String, List<StepRow>> stepsByTask;
   final Set<String> completedStepIds;
   final Set<String> completedTaskIds;
+  final Set<String> postponedTaskIds;
   final Map<String, StepProgress> stepProgresses;
 
   ProgressTaskInput inputFor(TaskRow task) {

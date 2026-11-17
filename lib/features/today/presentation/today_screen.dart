@@ -310,28 +310,42 @@ class _Quote extends StatelessWidget {
       child: Stack(
         children: <Widget>[
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: KMetrics.quotePaddingX,
-              vertical: KMetrics.quotePaddingY,
-            ),
+            padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
             decoration: BoxDecoration(
               color: palette.card2,
               borderRadius: borderRadius,
             ),
-            child: Text(
-              text,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.quoteSize,
-                color: palette.tx,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, left: 4),
+                  child: Icon(
+                    Icons.format_quote_rounded,
+                    size: 22,
+                    color: palette.gold.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: KTypography.quoteSize,
+                      height: 1.7,
+                      color: palette.tx,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           PositionedDirectional(
             start: 0,
             top: 0,
             bottom: 0,
-            child: Container(width: 3, color: palette.gold),
+            child: Container(width: 4, color: palette.gold),
           ),
         ],
       ),
@@ -652,7 +666,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                           ),
                         ),
                         child: Text(
-                          '${task.completedStepCount}/$stepCount',
+                          '${task.status == PlanTaskStatus.completed ? stepCount : task.completedStepCount}/$stepCount',
                           style: TextStyle(
                             fontFamily: KTypography.bodyFamily,
                             fontSize: KTypography.counterSize,
@@ -700,33 +714,44 @@ class StepChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = context.l10n;
-    final List<PlanStep> steps = task.stepsInOrder;
+    final List<PlanStep> steps = task.stepsInOrder;    // A task marked complete (e.g. from the Plan tab) counts all its steps as
+    // done without rewriting the user's step rows, so render them as completed
+    // here. A step that was explicitly touched keeps its own progress.
+    final bool taskCompleted =
+        task.status == PlanTaskStatus.completed;
 
     final List<Widget> chips = <Widget>[
       for (final PlanStep step in steps)
-        KChip(
-          title: step.isAttendance
-              ? l10n.galleryAttend
-              : step.isStudy
-              ? l10n.galleryStudy
-              : l10n.gallerySolve,
-          subtitle:
-              format.tryRange(step.suggestedStart, step.suggestedEnd) ??
-              format.duration(step.minutes),
-          // The bar only appears between the two taps; a completed chip is
-          // already filled, so a full bar would say nothing new.
-          fraction: step.progress == StepProgress.partial ? 0.5 : 0.0,
-          icon: step.progress == StepProgress.completed
-              ? Icons.check_rounded
-              : step.isAttendance
-              ? Icons.play_circle_outline_rounded
-              : step.isStudy
-              ? Icons.menu_book_outlined
-              : Icons.quiz_outlined,
-          selected: step.progress != StepProgress.notStarted,
-          wide: steps.length == 1,
-          onTap: () => _toggle(context, ref, step),
-        ),
+        () {
+          final StepProgress effective = taskCompleted &&
+                  step.progress == StepProgress.notStarted
+              ? StepProgress.completed
+              : step.progress;
+          return KChip(
+            title: step.isAttendance
+                ? l10n.galleryAttend
+                : step.isStudy
+                ? l10n.galleryStudy
+                : l10n.gallerySolve,
+            subtitle:
+                format.tryRange(step.suggestedStart, step.suggestedEnd) ??
+                format.duration(step.minutes),
+            fraction: effective == StepProgress.partial ||
+                    effective == StepProgress.partialDown
+                ? 0.5
+                : 0.0,
+            icon: effective == StepProgress.completed
+                ? Icons.check_rounded
+                : step.isAttendance
+                ? Icons.play_circle_outline_rounded
+                : step.isStudy
+                ? Icons.menu_book_outlined
+                : Icons.quiz_outlined,
+            selected: effective != StepProgress.notStarted,
+            wide: steps.length == 1,
+            onTap: () => _toggle(context, ref, step),
+          );
+        }(),
     ];
 
     if (chips.isEmpty) return const SizedBox.shrink();
@@ -762,7 +787,8 @@ class StepChips extends ConsumerWidget {
     await ref.read(todayActionsProvider).setStepCompleted(step.id, next);
 
     if (!context.mounted) return;
-    if (next == StepProgress.partial) {
+    if (next == StepProgress.partial ||
+        next == StepProgress.partialDown) {
       showKToast(context, l10n.todayStepPartialToast);
     } else if (next == StepProgress.completed) {
       showKToast(context, l10n.todayStepCompleteToast);

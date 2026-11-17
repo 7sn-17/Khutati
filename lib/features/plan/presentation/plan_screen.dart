@@ -1288,7 +1288,11 @@ class _TaskLine extends ConsumerWidget {
           Icon(
             icon,
             size: 15,
-            color: task.isComplete ? palette.ok : palette.mute,
+            color: task.isComplete
+                ? palette.ok
+                : task.status == PlanTaskStatus.postponed
+                ? palette.gold
+                : palette.mute,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -1318,20 +1322,7 @@ class _TaskLine extends ConsumerWidget {
                       color: palette.mute,
                     ),
                   ),
-                if (task.isComplete)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      l10n.planLineComplete,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: 9,
-                        color: palette.ok,
-                      ),
-                    ),
-                  ),
+
               ],
             ),
           ),
@@ -1367,7 +1358,11 @@ class _TaskLine extends ConsumerWidget {
             child: Icon(
               _taskStatusIcon(task),
               size: 18,
-              color: task.isComplete ? palette.ok : palette.mute,
+              color: task.isComplete
+                  ? palette.ok
+                  : task.status == PlanTaskStatus.postponed
+                  ? palette.gold
+                  : palette.mute,
             ),
           ),
         ],

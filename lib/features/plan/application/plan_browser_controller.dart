@@ -386,6 +386,12 @@ PlanDayData _dayData({
         status:
             PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
             PlanTaskStatus.notStarted,
+        postponedToDay:
+            (PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
+                        PlanTaskStatus.notStarted) ==
+                    PlanTaskStatus.postponed
+                ? day.dayNumber + 1
+                : null,
         steps: <PlanStep>[
           for (final StepRow step in item.steps)
             PlanStep(
