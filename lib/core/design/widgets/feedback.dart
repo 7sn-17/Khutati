@@ -63,7 +63,7 @@ class _KToastOverlayState extends State<_KToastOverlay>
   void initState() {
     super.initState();
     _controller.forward();
-    Future<void>.delayed(const Duration(milliseconds: 2800), () async {
+    Future<void>.delayed(const Duration(milliseconds: 1800), () async {
       if (!mounted) return;
       await _controller.reverse();
       widget.onDismissed();
