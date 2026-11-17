@@ -10,8 +10,10 @@ import 'app_database.dart';
 
 /// Opens the on-device database. The file lives in the app documents directory
 /// and never leaves the device (PRD section 9, privacy).
+AppDatabase openAppDatabase() => AppDatabase(_openConnection());
+
 final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((Ref ref) {
-  final AppDatabase database = AppDatabase(_openConnection());
+  final AppDatabase database = openAppDatabase();
   ref.onDispose(database.close);
   return database;
 });

@@ -9,15 +9,22 @@ of truth. Plan content comes only from `khutati_plan_data.json` — never from c
 
 ## Status
 
-Phase 0 (foundation inputs) is complete:
+Phase 0 and Phase 1 are complete, and Phase 2's engine is in place:
 
 - Flutter project skeleton with the PRD section 7 layering.
 - Design tokens extracted from the prototype by script into `design/tokens.json`
   and generated into `lib/core/design/tokens.dart`.
 - Arabic typography (IBM Plex Sans Arabic + Reem Kufi) bundled offline, RTL from
-  the first frame.
-- GitHub Actions pipeline that verifies tokens and data, then builds APKs.
-- Dataset validator reconciling the plan to 480 h 9 min.
+  the first frame, five-tab shell (Today, Plan, Focus, Achievements, Settings).
+- Drift schema with a strict template/user split.
+- Validated dataset imported into Drift before the first frame, idempotently
+  (`lib/data/import/plan_importer.dart`).
+- Date mapping, day status, and progress/hours engines in pure Dart
+  (`lib/domain/plan/`).
+- In-app updates: Supabase manifest first, GitHub Releases fallback, silent
+  throttled checks and a Settings panel (`docs/updates.md`).
+- GitHub Actions pipeline that verifies tokens, dataset, version sync, then
+  builds the arm64 `Khutati.apk` and publishes `update.json`.
 
 ## Requirements
 
@@ -41,7 +48,13 @@ node tools/extract_tokens.mjs --check   # CI guard: fails on drift
 # Re-validate the plan dataset against PRD section 3.1
 node tools/validate_plan_data.mjs
 node tools/validate_plan_data.mjs --self-test
+
+# The update checker reads AppInfo; keep it equal to pubspec.yaml
+node tools/check_version.mjs
 ```
+
+Update publishing, Supabase configuration and the GitHub fallback are documented
+in [`docs/updates.md`](docs/updates.md).
 
 ## Layout
 
@@ -99,9 +112,9 @@ means adding `app_en.arb` and nothing else — no widget changes.
 2. `node tools/validate_plan_data.mjs` — the dataset must reconcile to 480 h 9 min.
 3. `flutter analyze` and `flutter test`.
 4. Debug APK on every push.
-5. Release APKs built with `--split-per-abi` (arm64-v8a + armeabi-v7a), uploaded
-   as artifacts and published to GitHub Releases: versioned on `v*` tags, a
-   rolling `latest` pre-release on `main`.
+5. The arm64 `Khutati.apk` (modern phones only) built with `--split-per-abi`,
+   uploaded as an artifact and published to GitHub Releases with `update.json`:
+   versioned on `v*` tags, a rolling `latest` pre-release on `main`.
 
 Release signing uses these repository secrets (all optional; without them the
 release APK is debug-signed):

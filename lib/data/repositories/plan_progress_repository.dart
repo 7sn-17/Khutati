@@ -1,0 +1,142 @@
+import 'package:drift/drift.dart';
+
+import '../../domain/plan/plan_progress.dart';
+import '../database/app_database.dart';
+import 'template_repository.dart';
+
+/// Bridges Drift rows to the pure progress engine.
+///
+/// The engine never sees Drift; this repository is the only place where template
+/// rows and user state are joined.
+class PlanProgressRepository {
+  PlanProgressRepository(this._db, this._template);
+
+  final AppDatabase _db;
+  final TemplateRepository _template;
+
+  /// Progress for one plan day, or [PlanProgress.empty] outside the plan.
+  Future<PlanProgress> dayProgress(int dayNumber) async {
+    final DayRow? day = await _template.dayByNumber(dayNumber);
+    if (day == null) return PlanProgress.empty;
+
+    final _LoadedPlan plan = await _load();
+    return PlanProgress.of(
+      plan.tasks.where((TaskRow task) => task.dayId == day.id).map(plan.inputFor),
+    );
+  }
+
+  /// Progress across all 68 days — the number Achievements and Today's level
+  /// card must agree on.
+  Future<PlanProgress> overallProgress() async {
+    final _LoadedPlan plan = await _load();
+    return PlanProgress.of(plan.tasks.map(plan.inputFor));
+  }
+
+  /// Per-subject totals for the Achievements screen (PRD 5.7).
+  Future<Map<String, PlanProgress>> progressBySubject() async {
+    final _LoadedPlan plan = await _load();
+    final Map<String, List<TaskRow>> grouped = <String, List<TaskRow>>{};
+    for (final TaskRow task in plan.tasks) {
+      grouped.putIfAbsent(task.subjectId, () => <TaskRow>[]).add(task);
+    }
+    return <String, PlanProgress>{
+      for (final MapEntry<String, List<TaskRow>> entry in grouped.entries)
+        entry.key: PlanProgress.of(entry.value.map(plan.inputFor)),
+    };
+  }
+
+  /// Completed step ids for one task, used by the expandable task cards.
+  Future<Set<String>> completedStepsForTask(String taskId) async {
+    final List<UserStepStateRow> states = await (_db.select(_db.userStepStates)
+          ..where((UserStepStates t) => t.completed.equals(true)))
+        .get();
+    if (states.isEmpty) return <String>{};
+
+    final List<StepRow> steps = await (_db.select(_db.steps)
+          ..where((Steps t) => t.taskId.equals(taskId)))
+        .get();
+    final Set<String> stepIds = <String>{
+      for (final StepRow step in steps) step.id,
+    };
+    return <String>{
+      for (final UserStepStateRow state in states)
+        if (stepIds.contains(state.stepId)) state.stepId,
+    };
+  }
+
+  Future<_LoadedPlan> _load() async {
+    final List<TaskRow> taskRows = await _db.select(_db.tasks).get();
+    final List<StepRow> stepRows = await _db.select(_db.steps).get();
+
+    final Map<String, TaskRow> tasks = <String, TaskRow>{
+      for (final TaskRow task in taskRows) task.id: task,
+    };
+    final Map<String, List<StepRow>> steps = <String, List<StepRow>>{};
+    for (final StepRow step in stepRows) {
+      steps.putIfAbsent(step.taskId, () => <StepRow>[]).add(step);
+    }
+
+    final List<UserStepStateRow> stepStates =
+        await _db.select(_db.userStepStates).get();
+    final List<UserTaskStateRow> taskStates =
+        await _db.select(_db.userTaskStates).get();
+
+    return _LoadedPlan(
+      tasks: tasks.values.toList(growable: false),
+      stepsByTask: steps,
+      completedStepIds: <String>{
+        for (final UserStepStateRow state in stepStates)
+          if (state.completed) state.stepId,
+      },
+      completedTaskIds: <String>{
+        for (final UserTaskStateRow state in taskStates)
+          if (state.status == 'completed') state.taskId,
+      },
+    );
+  }
+}
+
+class _LoadedPlan {
+  const _LoadedPlan({
+    required this.tasks,
+    required this.stepsByTask,
+    required this.completedStepIds,
+    required this.completedTaskIds,
+  });
+
+  final List<TaskRow> tasks;
+  final Map<String, List<StepRow>> stepsByTask;
+  final Set<String> completedStepIds;
+  final Set<String> completedTaskIds;
+
+  ProgressTaskInput inputFor(TaskRow task) {
+    final List<StepRow> rows = stepsByTask[task.id] ?? const <StepRow>[];
+    final List<ProgressStepInput> steps = rows.isEmpty
+        ? <ProgressStepInput>[
+            // Defensive: an imported task always has steps, but a hand-edited
+            // database (or a future user task) may not.
+            ProgressStepInput(
+              id: '${task.id}-total',
+              kind: ProgressStepKinds.study,
+              minutes:
+                  task.attendanceMinutes + task.studyMinutes + task.questionMinutes,
+              completed: false,
+            ),
+          ]
+        : <ProgressStepInput>[
+            for (final StepRow step in rows)
+              ProgressStepInput(
+                id: step.id,
+                kind: step.kind,
+                minutes: step.minutes,
+                completed: completedStepIds.contains(step.id),
+              ),
+          ];
+
+    return ProgressTaskInput(
+      id: task.id,
+      steps: steps,
+      completed: completedTaskIds.contains(task.id),
+    );
+  }
+}

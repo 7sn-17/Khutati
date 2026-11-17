@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/app_info.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
@@ -8,6 +11,8 @@ import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart';
 import '../../../l10n/l10n.dart';
+import '../../updates/application/update_controller.dart';
+import '../../updates/domain/app_release.dart';
 
 /// Settings — the fifth tab (PRD 5.11).
 ///
@@ -15,10 +20,11 @@ import '../../../l10n/l10n.dart';
 /// preferences are live and persisted. Backup/restore and account land in
 /// Phase 5 and are shown here as disabled rows with a "coming soon" marker so
 /// the information architecture is already final.
+///
+/// Updates are live: a silent check runs at launch, and this panel is where the
+/// user can check on demand, read release notes and start the APK download.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
-
-  static const String _version = '0.1.0';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,13 +137,35 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+        KSectionHeader(title: l10n.settingsUpdates),
+        _SettingsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _ActionRow(
+                title: l10n.settingsInstalledVersion,
+                icon: Icons.phone_android,
+                trailing: Text(
+                  AppInfo.versionLabel,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.muteSize,
+                    fontWeight: FontWeight.w500,
+                    color: palette.gold,
+                  ),
+                ),
+              ),
+              const _UpdatePanel(),
+            ],
+          ),
+        ),
         KSectionHeader(title: l10n.settingsAbout),
         _SettingsCard(
           child: _ActionRow(
-            title: l10n.settingsVersion,
+            title: l10n.appName,
             icon: Icons.info_outline,
             trailing: Text(
-              _version,
+              AppInfo.versionLabel,
               style: TextStyle(
                 fontFamily: KTypography.bodyFamily,
                 fontSize: KTypography.muteSize,
@@ -148,6 +176,241 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+class _UpdatePanel extends ConsumerWidget {
+  const _UpdatePanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+    final UpdateState state = ref.watch(updateControllerProvider);
+    final UpdateManifest? manifest = state.manifest;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (state.isChecking)
+          _StatusLine(
+            text: l10n.updateChecking,
+            spinner: true,
+          )
+        else if (state.hasUpdate && manifest != null)
+          _AvailableUpdate(manifest: manifest, source: state.source)
+        else if (state.status == UpdateStatus.failed)
+          _StatusLine(
+            icon: Icons.cloud_off_outlined,
+            text: l10n.updateFailed,
+            color: palette.mute,
+          )
+        else if (state.status == UpdateStatus.upToDate)
+          _StatusLine(
+            icon: Icons.check_circle_outline,
+            text: l10n.updateUpToDate,
+            color: palette.ok,
+          )
+        else
+          _StatusLine(
+            icon: Icons.wifi_tethering,
+            text: l10n.updateHint,
+            color: palette.mute,
+          ),
+        const SizedBox(height: 10),
+        KButton(
+          label: l10n.updateCheck,
+          variant: KButtonVariant.secondary,
+          expand: true,
+          onPressed: state.isChecking
+              ? null
+              : () {
+                  unawaited(
+                    ref
+                        .read(updateControllerProvider.notifier)
+                        .check(force: true),
+                  );
+                },
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({
+    required this.text,
+    this.icon,
+    this.color,
+    this.spinner = false,
+  });
+
+  final String text;
+  final IconData? icon;
+  final Color? color;
+  final bool spinner;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: <Widget>[
+          if (spinner)
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: palette.ok,
+              ),
+            )
+          else if (icon != null)
+            Icon(icon, size: 17, color: color ?? palette.mute),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                color: color ?? palette.mute,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvailableUpdate extends ConsumerWidget {
+  const _AvailableUpdate({required this.manifest, this.source});
+
+  final UpdateManifest manifest;
+  final UpdateSource? source;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+    final String? notes = manifest.notes?.trim();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.card2,
+        borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+        border: Border.all(color: palette.gold.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.system_update_alt, size: 18, color: palette.gold),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l10n.updateAvailable(manifest.versionName),
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.quoteSize,
+                    fontWeight: FontWeight.w500,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (source != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: palette.card,
+                borderRadius: BorderRadius.circular(KMetrics.pillRadius),
+                border: Border.all(color: palette.line),
+              ),
+              child: Text(
+                source == UpdateSource.supabase
+                    ? l10n.updateSourceSupabase
+                    : l10n.updateSourceGithub,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: KTypography.tagSize,
+                  color: palette.mute,
+                ),
+              ),
+            ),
+          ],
+          if (notes != null && notes.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              l10n.updateNotes,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                fontWeight: FontWeight.w500,
+                color: palette.tx,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              notes,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                color: palette.mute,
+                height: 1.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: KButton(
+                  label: l10n.updateNow,
+                  expand: true,
+                  onPressed: () => unawaited(_open(context, ref)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: KButton(
+                  label: l10n.updateSkip,
+                  variant: KButtonVariant.secondary,
+                  expand: true,
+                  onPressed: () => unawaited(
+                    ref.read(updateControllerProvider.notifier).skip(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    final bool opened = await ref
+        .read(updateControllerProvider.notifier)
+        .openDownload(manifest);
+    if (!context.mounted) return;
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.updateLaunchFailed)),
+      );
+    }
   }
 }
 

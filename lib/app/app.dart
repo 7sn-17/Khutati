@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/settings/theme_mode_controller.dart';
+import '../features/updates/presentation/update_bootstrap.dart';
 import '../l10n/l10n.dart';
 import 'router.dart';
 import 'theme/khutati_theme.dart';
@@ -32,7 +33,9 @@ class KhutatiApp extends ConsumerWidget {
       builder: (BuildContext context, Widget? child) {
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: child ?? const SizedBox.shrink(),
+          child: UpdateBootstrap(
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

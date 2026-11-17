@@ -46,6 +46,14 @@ class TemplateRepository {
     query.orderBy([(t) => OrderingTerm.asc(t.dayNumber)]);
     return query.get();
   }
+
+  /// The single built-in plan row. `null` only before the bootstrap import.
+  Future<PlanRow?> activePlan() {
+    return (_db.select(_db.plans)
+          ..where((Plans t) => t.id.equals('medx-68')))
+        .getSingleOrNull();
+  }
+
   Future<DayRow?> dayByNumber(int dayNumber) {
     return (_db.select(_db.days)..where((t) => t.dayNumber.equals(dayNumber))).getSingleOrNull();
   }
