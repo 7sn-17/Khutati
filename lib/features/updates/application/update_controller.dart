@@ -94,8 +94,9 @@ class UpdateController extends Notifier<UpdateState> {
           .check();
       final DateTime now = DateTime.now();
       final AppVersion installed =
-          AppVersion.tryParse(AppInfo.versionName) ??
-          const AppVersion(major: 0, minor: 0, patch: 0);
+          (AppVersion.tryParse(AppInfo.versionName) ??
+                  const AppVersion(major: 0, minor: 0, patch: 0))
+              .withBuild(AppInfo.buildNumber);
 
       if (result == null || !result.manifest.isNewerThan(installed)) {
         state = UpdateState(
@@ -107,7 +108,9 @@ class UpdateController extends Notifier<UpdateState> {
         return;
       }
 
-      if (!force && state.skippedVersionCode == result.manifest.versionCode) {
+      if (!force &&
+          result.manifest.versionCode > 0 &&
+          state.skippedVersionCode == result.manifest.versionCode) {
         state = UpdateState(
           status: UpdateStatus.upToDate,
           lastChecked: now,
@@ -139,13 +142,16 @@ class UpdateController extends Notifier<UpdateState> {
   Future<void> skip() async {
     final UpdateManifest? manifest = state.manifest;
     if (manifest == null) return;
-    await ref
-        .read(sharedPreferencesProvider)
-        .setInt(skippedKey, manifest.versionCode);
+    // A release without a build number (raw GitHub fallback) cannot be skipped
+    // safely: the code would hide every later build too.
+    final int code = manifest.versionCode > 0 ? manifest.versionCode : 0;
+    if (code > 0) {
+      await ref.read(sharedPreferencesProvider).setInt(skippedKey, code);
+    }
     state = state.copyWith(
       status: UpdateStatus.upToDate,
       clearManifest: true,
-      skippedVersionCode: manifest.versionCode,
+      skippedVersionCode: code > 0 ? code : null,
       clearError: true,
     );
   }

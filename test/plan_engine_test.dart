@@ -128,5 +128,22 @@ void main() {
       ),
       isFalse,
     );
+
+    // The installed app is versionName + buildNumber, not versionName alone.
+    expect(
+      AppVersion.tryParse('0.2.0')!.withBuild(2),
+      const AppVersion(major: 0, minor: 2, patch: 0, build: 2),
+    );
+    const UpdateManifest same = UpdateManifest(
+      versionName: '0.2.0',
+      versionCode: 2,
+      apkUrl: 'https://github.com/7sn-17/Khutati/releases/download/latest/Khutati.apk',
+    );
+    expect(
+      same.isNewerThan(
+        const AppVersion(major: 0, minor: 2, patch: 0, build: 2),
+      ),
+      isFalse,
+    );
   });
 }

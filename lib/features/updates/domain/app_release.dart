@@ -46,6 +46,10 @@ class AppVersion implements Comparable<AppVersion> {
   AppVersion get withoutBuild =>
       AppVersion(major: major, minor: minor, patch: patch);
 
+  /// The same marketing version with the Android build number attached.
+  AppVersion withBuild(int build) =>
+      AppVersion(major: major, minor: minor, patch: patch, build: build);
+
   @override
   int compareTo(AppVersion other) {
     if (major != other.major) return major.compareTo(other.major);
