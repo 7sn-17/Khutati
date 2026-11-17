@@ -218,72 +218,55 @@ class _EcgPainter extends CustomPainter {
       size.width / KArtwork.ecgViewWidth,
       size.height / KArtwork.ecgViewHeight,
     );
-    final double dx = (size.width - KArtwork.ecgViewWidth * scale) / 2;
-    final double dy = (size.height - KArtwork.ecgViewHeight * scale) / 2;
+    final double tileWidth = KArtwork.ecgViewWidth * scale;
+    final double tileHeight = KArtwork.ecgViewHeight * scale;
+    final double dy = (size.height - tileHeight) / 2;
 
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(scale);
+    // Seamless horizontal scroll: tile the waveform and translate by the pulse.
+    final double offset = -pulse * tileWidth;
 
-    final Paint base = Paint()
+    final Paint trackPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = KArtwork.ecgStrokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..color = trackColor;
-    canvas.drawPath(_path, base);
 
-    if (progress > 0) {
-      final Paint reveal = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = KArtwork.ecgStrokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..color = valueColor;
+    final Paint valuePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = KArtwork.ecgStrokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = valueColor;
 
-      double totalLength = 0;
-      final List<PathMetric> metrics = _path.computeMetrics().toList();
-      for (final PathMetric metric in metrics) {
-        totalLength += metric.length;
-      }
-      final double revealed = totalLength * progress;
+    // Draw enough tiles to cover the canvas plus one extra for the scroll.
+    final int tileCount = (size.width / tileWidth).ceil() + 2;
 
-      double drawn = 0;
-      for (final PathMetric metric in metrics) {
-        if (drawn >= revealed) break;
-        final double take = (revealed - drawn).clamp(0.0, metric.length);
-        if (take > 0) {
-          canvas.drawPath(metric.extractPath(0, take), reveal);
-        }
-        drawn += metric.length;
-      }
-
-      // Lightweight moving pulse along the revealed portion.
-      if (revealed > 0) {
-        final double pulsePos = revealed * pulse;
-        double acc = 0;
-        for (final PathMetric metric in metrics) {
-          if (acc + metric.length < pulsePos) {
-            acc += metric.length;
-            continue;
-          }
-          final double local = (pulsePos - acc).clamp(0.0, metric.length);
-          final Paint glow = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = KArtwork.ecgStrokeWidth * 2.2
-            ..strokeCap = StrokeCap.round
-            ..color = valueColor.withValues(alpha: 0.55);
-          final double start = (local - 12).clamp(0.0, metric.length);
-          final double end = (local + 12).clamp(0.0, metric.length);
-          if (end > start) {
-            canvas.drawPath(metric.extractPath(start, end), glow);
-          }
-          break;
-        }
-      }
+    canvas.save();
+    canvas.translate(offset, dy);
+    canvas.scale(scale);
+    for (int i = -1; i < tileCount; i++) {
+      canvas.save();
+      canvas.translate(i * KArtwork.ecgViewWidth, 0);
+      canvas.drawPath(_path, trackPaint);
+      canvas.restore();
     }
-
     canvas.restore();
+
+    // Revealed portion (progress) scrolls with the wave, clipped to the left.
+    if (progress > 0) {
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, 0, size.width * progress, size.height));
+      canvas.translate(offset, dy);
+      canvas.scale(scale);
+      for (int i = -1; i < tileCount; i++) {
+        canvas.save();
+        canvas.translate(i * KArtwork.ecgViewWidth, 0);
+        canvas.drawPath(_path, valuePaint);
+        canvas.restore();
+      }
+      canvas.restore();
+    }
   }
 
   @override
