@@ -194,8 +194,30 @@ Future<TodayData?> _buildToday(
 ) async {
   final ResolvedPlanDay resolved = calendar.resolveToday(now);
   final int dayNumber = resolved.dayNumber;
-  final DayBundle? bundle = await template.dayBundle(dayNumber);
+  DayBundle? bundle = await template.dayBundle(dayNumber);
   if (bundle == null) return null;
+  // Defensive fallback: if the per-day join returned no tasks (for example an
+  // upgraded database where the day's tasks live under a slightly different id),
+  // rebuild the day from the global task list so Today never renders empty.
+  if (bundle.tasks.isEmpty) {
+    final List<DayRow> allDays = await template.allDays();
+    final Set<String> dayIds = <String>{
+      for (final DayRow d in allDays)
+        if (d.dayNumber == dayNumber) d.id,
+    };
+    final List<TaskWithSteps> all = await template.allTasksWithSteps();
+    final List<TaskWithSteps> forDay = <TaskWithSteps>[
+      for (final TaskWithSteps item in all)
+        if (dayIds.contains(item.task.dayId)) item,
+    ];
+    if (forDay.isNotEmpty) {
+      bundle = DayBundle(
+        day: bundle!.day,
+        tasks: forDay,
+        breaks: bundle.breaks,
+      );
+    }
+  }
 
   final Set<String> completedStepIds = await userState.completedStepIdsForDay(
     bundle.day.id,

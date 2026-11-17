@@ -149,10 +149,21 @@ class _TodayBody extends ConsumerWidget {
               minutes: data.overdueMinutes,
               format: format,
             ),
-          if (data.tasks.isNotEmpty) ...<Widget>[
-            KSectionHeader(title: l10n.todaySchedule),
+          KSectionHeader(title: l10n.todaySchedule),
+          if (data.tasks.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 12),
+              child: Text(
+                l10n.todayAllDoneBody,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: KTypography.muteSize,
+                  color: palette.mute,
+                ),
+              ),
+            )
+          else
             ..._timeline(context, l10n, format),
-          ],
           if (kDebugMode) ...<Widget>[
             const SizedBox(height: 24),
             KButton(

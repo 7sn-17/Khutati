@@ -38,7 +38,9 @@ class KhutatiHaptics {
 
   void selection() {
     if (!enabled) return;
-    HapticFeedback.selectionClick();
+    // `selectionClick` is nearly imperceptible on many devices; a light impact
+    // is what users actually feel as "vibration on touch".
+    HapticFeedback.lightImpact();
   }
 
   void light() {

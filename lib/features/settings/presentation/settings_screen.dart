@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -72,7 +73,9 @@ class SettingsScreen extends ConsumerWidget {
                 title: l10n.settingsHaptics,
                 value: hapticsEnabled,
                 onChanged: (bool value) {
-                  ref.read(hapticsProvider).selection();
+                  // Fire a tangible confirmation even when the feature is being
+                  // turned back on (the provider would otherwise stay silent).
+                  if (value) HapticFeedback.lightImpact();
                   ref.read(hapticsEnabledProvider.notifier).set(value);
                 },
               ),
@@ -285,33 +288,56 @@ class _AboutModalContent extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 12, 10),
+        // Header: official app mark + name + close. No redundant "About" title.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
           child: Row(
             children: <Widget>[
+              // Official app mark: a rounded square carrying the first letter
+              // of "خطتي" in the brand gold, matching the launcher icon.
               Container(
-                width: 40,
-                height: 40,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: palette.gold,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(
-                  Icons.school_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
+                alignment: Alignment.center,
                 child: Text(
-                  l10n.appName,
+                  'خ',
                   style: TextStyle(
                     fontFamily: KTypography.displayFamily,
-                    fontSize: KTypography.h2Size,
+                    fontSize: 28,
                     fontWeight: FontWeight.w700,
-                    color: palette.tx,
+                    color: Colors.white,
+                    height: 1,
                   ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.appName,
+                      style: TextStyle(
+                        fontFamily: KTypography.displayFamily,
+                        fontSize: KTypography.h2Size,
+                        fontWeight: FontWeight.w700,
+                        color: palette.tx,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'v${AppInfo.versionName}',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.smallSize,
+                        color: palette.mute,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               GestureDetector(
@@ -333,7 +359,7 @@ class _AboutModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Text(
             l10n.aboutAppBody,
             style: TextStyle(
@@ -345,20 +371,36 @@ class _AboutModalContent extends ConsumerWidget {
           ),
         ),
         Divider(height: 1, color: palette.line),
+        // Developer & contact section.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'المطور والتواصل',
+              style: TextStyle(
+                fontFamily: KTypography.displayFamily,
+                fontSize: KTypography.quoteSize,
+                fontWeight: FontWeight.w700,
+                color: palette.tx,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           child: Row(
             children: <Widget>[
               Container(
-                width: 20,
-                height: 20,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: palette.card2,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.person_outline,
-                  size: 12,
+                  size: 18,
                   color: palette.mute,
                 ),
               ),
@@ -368,7 +410,7 @@ class _AboutModalContent extends ConsumerWidget {
                   l10n.aboutDeveloperName,
                   style: TextStyle(
                     fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.smallSize,
+                    fontSize: KTypography.bodySize,
                     fontWeight: FontWeight.w600,
                     color: palette.tx,
                   ),
@@ -378,7 +420,21 @@ class _AboutModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'تواصل معنا / أرسل ملاحظاتك',
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                color: palette.mute,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
           child: Column(
             children: <Widget>[
               _DeveloperActionTile(
@@ -399,7 +455,6 @@ class _AboutModalContent extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
       ],
     );
   }

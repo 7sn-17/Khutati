@@ -25,6 +25,10 @@ class KhutatiApp extends ConsumerWidget {
       theme: KhutatiTheme.light,
       darkTheme: KhutatiTheme.dark,
       themeMode: themeMode,
+      // Smooth, eased transition between light and dark instead of an instant
+      // snap when the user flips the theme in Settings.
+      themeAnimationDuration: const Duration(milliseconds: 360),
+      themeAnimationCurve: Curves.easeInOutCubic,
       locale: const Locale('ar'),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
