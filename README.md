@@ -55,6 +55,9 @@ node tools/validate_plan_data.mjs --self-test
 
 # The update checker reads AppInfo; keep it equal to pubspec.yaml
 node tools/check_version.mjs
+
+# Rebuild every Android launcher slot from icon.png (legacy + adaptive)
+node tools/generate_launcher_icons.mjs
 ```
 
 طريقة نشر التحديثات وإعداد Supabase والبديل عبر GitHub موثّقة في
