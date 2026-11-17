@@ -1318,6 +1318,20 @@ class _TaskLine extends ConsumerWidget {
                       color: palette.mute,
                     ),
                   ),
+                if (task.isComplete)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      l10n.planLineComplete,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 9,
+                        color: palette.ok,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
