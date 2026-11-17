@@ -13,4 +13,10 @@
 # Supabase / GoTrue
 -keep class io.supabase.** { *; }
 
+# Flutter's embedding references Play Core deferred-component classes that this
+# side-loaded app never uses. Play Core is not a dependency, so R8 reports the
+# references as missing classes and fails the release build; they are dead code
+# here.
+-dontwarn com.google.android.play.core.**
+
 -dontwarn org.jetbrains.annotations.**

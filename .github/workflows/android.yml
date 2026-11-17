@@ -87,7 +87,28 @@ jobs:
 
       - name: Generate Drift code
         run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter build apk --debug
+      # A universal debug APK carries three debug engines (~200 MB). The app
+      # ships for 64-bit ARM only, so build exactly that; testers get a smaller
+      # download that matches the shipped ABI.
+      - run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Report and guard debug APK size
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          BYTES=$(stat -c%s "$APK")
+          MIB=$((BYTES / 1024 / 1024))
+          MAX_BYTES=$((90 * 1024 * 1024))
+          {
+            echo "### Debug APK (arm64)"
+            echo ""
+            echo "$MIB MiB ($BYTES bytes), ceiling $((MAX_BYTES / 1024 / 1024)) MiB"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Debug APK: $MIB MiB ($BYTES bytes)"
+          if [ "$BYTES" -gt "$MAX_BYTES" ]; then
+            echo "::error::Debug APK grew past $((MAX_BYTES / 1024 / 1024)) MiB; investigate before downloading it."
+            exit 1
+          fi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -162,6 +183,27 @@ jobs:
           set -euo pipefail
           cp -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             build/app/outputs/flutter-apk/Khutati.apk
+
+      # The shipped APK must stay small enough for a normal app. R8, obfuscation
+      # and single-ABI builds keep it near 20 MiB; this guard stops a dependency
+      # or an asset regression from silently publishing a huge download.
+      - name: Report and guard release APK size
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/Khutati.apk
+          BYTES=$(stat -c%s "$APK")
+          MIB=$((BYTES / 1024 / 1024))
+          MAX_BYTES=$((40 * 1024 * 1024))
+          {
+            echo "### Release APK (arm64)"
+            echo ""
+            echo "$MIB MiB ($BYTES bytes), ceiling $((MAX_BYTES / 1024 / 1024)) MiB"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Release APK: $MIB MiB ($BYTES bytes)"
+          if [ "$BYTES" -gt "$MAX_BYTES" ]; then
+            echo "::error::Release APK grew past $((MAX_BYTES / 1024 / 1024)) MiB; do not publish it."
+            exit 1
+          fi
 
       - name: Write the update manifest
         env:
