@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/plan/plan_dataset.dart';
+import '../../domain/plan/plan_task.dart';
 import '../database/app_database.dart';
 import '../database/tables.dart';
 
@@ -207,7 +208,7 @@ class PlanImporter {
             subjectId: item.subjectKey,
             chapterId: Value<String?>(chapterId),
             title: item.title,
-            type: _taskType(item),
+            type: item.taskType.wireValue,
             groupTitle: Value<String?>(item.group),
             sortOrder: taskOrder,
             suggestedStart: Value<String?>(item.startClock),
@@ -220,43 +221,18 @@ class PlanImporter {
           ),
         );
 
-        if (item.isVideo) {
-          final PlanSpan attendance = item.attendance!;
-          final PlanSpan study = item.study!;
-          steps
-            ..add(
-              StepsCompanion.insert(
-                id: '${item.id}-attend',
-                taskId: item.id,
-                kind: 'attend',
-                minutes: attendance.minutes,
-                suggestedStart: Value<String?>(attendance.start),
-                suggestedEnd: Value<String?>(attendance.end),
-                sortOrder: 1,
-              ),
-            )
-            ..add(
-              StepsCompanion.insert(
-                id: '${item.id}-study',
-                taskId: item.id,
-                kind: 'study',
-                minutes: study.minutes,
-                suggestedStart: Value<String?>(study.start),
-                suggestedEnd: Value<String?>(study.end),
-                sortOrder: 2,
-              ),
-            );
-        } else {
-          final PlanSpan questions = item.study!;
+        // Step ids, kinds and order come from the model, so the template rows
+        // and the task list can never disagree (PRD 5.4).
+        for (final PlanStep step in item.steps) {
           steps.add(
             StepsCompanion.insert(
-              id: '${item.id}-questions',
+              id: step.id,
               taskId: item.id,
-              kind: 'questions',
-              minutes: questions.minutes,
-              suggestedStart: Value<String?>(questions.start),
-              suggestedEnd: Value<String?>(questions.end),
-              sortOrder: 1,
+              kind: step.kind,
+              minutes: step.minutes,
+              suggestedStart: Value<String?>(step.suggestedStart),
+              suggestedEnd: Value<String?>(step.suggestedEnd),
+              sortOrder: step.order,
             ),
           );
         }
@@ -288,13 +264,6 @@ class PlanImporter {
       steps: steps,
       breaks: breaks,
     );
-  }
-
-  String _taskType(PlanItem item) {
-    if (item.isCourseQuestions) return 'course_questions';
-    // The dataset marks foundation videos by their group heading. Everything
-    // else is a lecture (PRD section 3, time accounting rules).
-    return item.group.contains('تأسيسي') ? 'foundation' : 'lecture';
   }
 
   static String _subjectAccent(String datasetKey) {

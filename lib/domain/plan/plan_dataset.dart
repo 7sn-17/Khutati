@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'plan_progress.dart';
+import 'plan_task.dart';
+
 /// Typed, validated view of `khutati_plan_data.json`.
 ///
 /// This layer is deliberately free of Flutter and Drift imports: the dataset is
@@ -551,6 +554,49 @@ class PlanItem {
 
   bool get isVideo => type == PlanItemTypes.video;
   bool get isCourseQuestions => type == PlanItemTypes.courseQuestions;
+
+  /// The type the importer writes. Foundation videos are marked by their group
+  /// heading in the PDF; every other video is a lecture (PRD section 3, time
+  /// accounting rules). This lives here so dataset parsing, the importer and
+  /// the task model cannot drift apart.
+  PlanTaskType get taskType {
+    if (isCourseQuestions) return PlanTaskType.courseQuestions;
+    return group.contains('تأسيسي')
+        ? PlanTaskType.foundation
+        : PlanTaskType.lecture;
+  }
+
+  /// Ordered steps shown when the task expands (PRD section 5.4): a video has
+  /// attendance then study, course questions have a single solving step.
+  List<PlanStep> get steps => <PlanStep>[
+    if (attendance != null)
+      PlanStep(
+        id: '$id-attend',
+        kind: ProgressStepKinds.attend,
+        minutes: attendance!.minutes,
+        order: 1,
+        suggestedStart: attendance!.start,
+        suggestedEnd: attendance!.end,
+      ),
+    if (isVideo)
+      PlanStep(
+        id: '$id-study',
+        kind: ProgressStepKinds.study,
+        minutes: study!.minutes,
+        order: 2,
+        suggestedStart: study!.start,
+        suggestedEnd: study!.end,
+      ),
+    if (isCourseQuestions)
+      PlanStep(
+        id: '$id-questions',
+        kind: ProgressStepKinds.questions,
+        minutes: study!.minutes,
+        order: 1,
+        suggestedStart: study!.start,
+        suggestedEnd: study!.end,
+      ),
+  ];
 
   int get attendanceMinutes => attendance?.minutes ?? 0;
 
