@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/time/local_day_clock.dart';
 import '../../../data/database/app_database.dart';
+import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/plan_progress_repository.dart';
 import '../../../data/repositories/template_repository.dart';

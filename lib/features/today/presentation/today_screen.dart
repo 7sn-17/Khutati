@@ -507,7 +507,6 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = context.l10n;
     final KhutatiPalette palette = context.palette;
     final PlanTask task = widget.task;
 
