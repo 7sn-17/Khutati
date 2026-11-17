@@ -106,6 +106,8 @@ void main() {
         ),
       ),
     );
+    // MaterialApp animates theme changes; let it reach the light palette.
+    await tester.pumpAndSettle();
 
     expect(captured.bg, KColors.light.bg);
   });
