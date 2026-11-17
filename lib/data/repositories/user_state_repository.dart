@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/plan/step_progress.dart';
 import '../database/app_database.dart';
 
 /// User-owned progress. Never touches template tables, so a reset can always
@@ -9,15 +10,20 @@ class UserStateRepository {
 
   final AppDatabase _db;
 
-  Future<void> setStepCompleted(String stepId, bool completed, {DateTime? at}) {
-    final DateTime now = at ?? DateTime.now();
-    return _db
+  Future<void> setStepCompleted(
+    String stepId,
+    StepProgress progress,
+  ) async {
+    final DateTime now = DateTime.now();
+    final bool completed = progress == StepProgress.completed;
+    await _db
         .into(_db.userStepStates)
         .insertOnConflictUpdate(
           UserStepStatesCompanion.insert(
             stepId: stepId,
             completed: Value<bool>(completed),
             completedAt: Value<DateTime?>(completed ? now : null),
+            progress: Value<int>(progress.code),
           ),
         );
   }
@@ -40,6 +46,26 @@ class UserStateRepository {
     };
   }
 
+  Future<StepProgress> stepProgress(String stepId) async {
+    final List<UserStepStateRow> rows = await (
+      _db
+          .select(_db.userStepStates)
+          ..where((t) => t.stepId.equals(stepId))
+    ).get();
+    if (rows.isEmpty) return StepProgress.notStarted;
+    return _progressOf(rows.first);
+  }
+
+  /// Rows written before the two-tap column existed only carry `completed`.
+  /// They are treated as fully done, so upgrading never downgrades progress.
+  static StepProgress _progressOf(UserStepStateRow row) {
+    final StepProgress progress = StepProgress.tryParse(row.progress);
+    if (progress == StepProgress.notStarted && row.completed) {
+      return StepProgress.completed;
+    }
+    return progress;
+  }
+
   /// Explicit task statuses for one day, keyed by task id. Today maps these to
   /// the domain status so a task completed as a whole is not reopened just
   /// because its individual step rows are still unchecked.
@@ -57,6 +83,38 @@ class UserStateRepository {
         row.readTable(_db.userTaskStates).taskId: row
             .readTable(_db.userTaskStates)
             .status,
+    };
+  }
+
+  /// Stored step states for one day, keyed by step id. Today and Plan both
+  /// read this so a two-tap partial step shows the same fraction everywhere.
+  Future<Map<String, StepProgress>> stepProgressForDay(String dayId) async {
+    final query = _db.select(_db.userStepStates).join(
+      <Join<HasResultSet, dynamic>>[
+        innerJoin(_db.steps, _db.steps.id.equalsExp(_db.userStepStates.stepId)),
+        innerJoin(_db.tasks, _db.tasks.id.equalsExp(_db.steps.taskId)),
+      ],
+    );
+    query.where(_db.tasks.dayId.equals(dayId));
+
+    final List<TypedResult> rows = await query.get();
+    return <String, StepProgress>{
+      for (final TypedResult row in rows)
+        row.readTable(_db.userStepStates).stepId: _progressOf(
+          row.readTable(_db.userStepStates),
+        ),
+    };
+  }
+
+  /// Every stored step state, for read models that render the whole plan at
+  /// once (the Plan tab).
+  Future<Map<String, StepProgress>> allStepProgresses() async {
+    final List<UserStepStateRow> rows = await _db
+        .select(_db.userStepStates)
+        .get();
+    return <String, StepProgress>{
+      for (final UserStepStateRow row in rows)
+        row.stepId: _progressOf(row),
     };
   }
 

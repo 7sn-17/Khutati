@@ -5,6 +5,7 @@
 /// roll-up from here, so "a task is complete when every step is complete" is
 /// implemented exactly once.
 import 'plan_progress.dart';
+import 'step_progress.dart';
 
 /// `tasks.type` values, mirrored from the template schema.
 enum PlanTaskType {
@@ -69,7 +70,11 @@ class PlanStep {
     this.completed = false,
     this.suggestedStart,
     this.suggestedEnd,
-  }) : assert(minutes >= 0, 'minutes cannot be negative');
+    StepProgress? progress,
+  })  : progress =
+            progress ??
+            (completed ? StepProgress.completed : StepProgress.notStarted),
+        assert(minutes >= 0, 'minutes cannot be negative');
 
   final String id;
 
@@ -85,6 +90,10 @@ class PlanStep {
   /// Whether the user checked this step (user state, never template data).
   final bool completed;
 
+  /// Two-tap state; `completed` stays true from the first tap on so every
+  /// existing reader keeps working.
+  final StepProgress progress;
+
   /// Suggested clock time (`HH:mm`) from the plan, for display only.
   final String? suggestedStart;
   final String? suggestedEnd;
@@ -93,16 +102,17 @@ class PlanStep {
   bool get isStudy => kind == ProgressStepKinds.study;
   bool get isQuestions => kind == ProgressStepKinds.questions;
 
-  PlanStep withCompleted(bool value) {
-    if (value == completed) return this;
+  PlanStep withProgress(StepProgress progress) {
+    if (progress == this.progress) return this;
     return PlanStep(
       id: id,
       kind: kind,
       minutes: minutes,
       order: order,
-      completed: value,
+      completed: progress.isAtLeastPartial,
       suggestedStart: suggestedStart,
       suggestedEnd: suggestedEnd,
+      progress: progress,
     );
   }
 }
@@ -179,16 +189,24 @@ class PlanTask {
       steps.where((PlanStep step) => step.completed).length;
 
   /// A task with no steps is never complete: completion must be observable.
+  /// A single tap (partial) is deliberately not enough.
   bool get isComplete =>
       status == PlanTaskStatus.completed ||
-      (steps.isNotEmpty && steps.every((PlanStep step) => step.completed));
+      (steps.isNotEmpty && steps.every((PlanStep step) => step.progress.isComplete));
 
-  /// Completed minutes honour an explicit completion without touching steps.
+  /// Completed minutes honour an explicit completion without touching steps,
+  /// and credit half a step's minutes while it is still partial.
   int get completedMinutes => isComplete
       ? plannedMinutes
       : steps.fold<int>(
           0,
-          (int sum, PlanStep step) => step.completed ? sum + step.minutes : sum,
+          (int sum, PlanStep step) {
+            if (step.progress == StepProgress.notStarted) return sum;
+            if (step.progress == StepProgress.partial) {
+              return sum + step.minutes ~/ 2;
+            }
+            return sum + step.minutes;
+          },
         );
 
   int get remainingMinutes {
@@ -215,7 +233,7 @@ class PlanTask {
   }
 
   /// Returns the same instance when the id is unknown or nothing changed.
-  PlanTask withStepCompletion(String stepId, bool completed) {
+  PlanTask withStepProgress(String stepId, StepProgress progress) {
     bool changed = false;
     final List<PlanStep> updated = <PlanStep>[];
     for (final PlanStep step in steps) {
@@ -223,8 +241,8 @@ class PlanTask {
         updated.add(step);
         continue;
       }
-      updated.add(step.withCompleted(completed));
-      changed = changed || step.completed != completed;
+      updated.add(step.withProgress(progress));
+      changed = changed || step.progress != progress;
     }
     if (!changed) return this;
     return _copy(steps: updated);
@@ -246,6 +264,14 @@ class PlanTask {
     );
   }
 
+  /// Boolean convenience for tests and legacy callers; the UI writes
+  /// [StepProgress] through [withStepProgress] so a first tap stays partial.
+  PlanTask withStepCompletion(String stepId, bool completed) =>
+      withStepProgress(
+        stepId,
+        completed ? StepProgress.completed : StepProgress.notStarted,
+      );
+
   PlanTask toggleExpanded() => _copy(expanded: !expanded);
 
   /// Feeds the hours engine without inventing a second set of bucket rules.
@@ -259,6 +285,7 @@ class PlanTask {
           kind: step.kind,
           minutes: step.minutes,
           completed: step.completed,
+          progress: step.progress,
         ),
     ],
   );

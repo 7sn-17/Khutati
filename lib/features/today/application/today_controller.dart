@@ -13,6 +13,7 @@ import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/step_progress.dart';
 
 /// Read model for Today (PRD 5.2, prototype v0).
 ///
@@ -199,6 +200,8 @@ Future<TodayData?> _buildToday(
   final Set<String> completedStepIds = await userState.completedStepIdsForDay(
     bundle.day.id,
   );
+  final Map<String, StepProgress> stepProgresses = await userState
+      .stepProgressForDay(bundle.day.id);
   final Map<String, String> taskStatuses = await userState.taskStatusesForDay(
     bundle.day.id,
   );
@@ -243,6 +246,11 @@ Future<TodayData?> _buildToday(
               completed: completedStepIds.contains(step.id),
               suggestedStart: step.suggestedStart,
               suggestedEnd: step.suggestedEnd,
+              progress:
+                  stepProgresses[step.id] ??
+                  (completedStepIds.contains(step.id)
+                      ? StepProgress.completed
+                      : StepProgress.notStarted),
             ),
         ],
       ),
@@ -284,10 +292,12 @@ class TodayActions {
 
   final Ref _ref;
 
-  Future<void> setStepCompleted(String stepId, bool completed) async {
+  /// Applies the two-tap progression for one step. Today runs the tap logic
+  /// locally; the Plan tab calls this with the state returned from the chip.
+  Future<void> setStepCompleted(String stepId, StepProgress progress) async {
     await _ref
         .read(userStateRepositoryProvider)
-        .setStepCompleted(stepId, completed);
+        .setStepCompleted(stepId, progress);
   }
 }
 

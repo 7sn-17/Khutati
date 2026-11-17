@@ -37,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -52,6 +52,13 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('CREATE INDEX IF NOT EXISTS idx_breaks_day ON breaks(day_id)');
           await customStatement('CREATE INDEX IF NOT EXISTS idx_sessions_started ON focus_sessions(started_at)');
           await customStatement('CREATE INDEX IF NOT EXISTS idx_overrides_target ON user_overrides(target_type, target_id)');
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          // v2 adds the two-tap step state. Existing rows keep `completed`
+          // and are read as fully done until the user taps again.
+          if (from < 2) {
+            await m.addColumn(userStepStates, userStepStates.progress);
+          }
         },
         beforeOpen: (details) async {
           // Referential integrity is required for the template/user split to

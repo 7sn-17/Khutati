@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../domain/plan/plan_progress.dart';
+import '../../domain/plan/step_progress.dart';
 import '../database/app_database.dart';
 import '../database/tables.dart';
 import 'template_repository.dart';
@@ -134,6 +135,16 @@ class PlanProgressRepository {
         .select(_db.userTaskStates)
         .get();
 
+    final Map<String, StepProgress> stepProgresses = <String, StepProgress>{};
+    for (final UserStepStateRow state in stepStates) {
+      final StepProgress stored = StepProgress.tryParse(state.progress);
+      // Legacy rows only have `completed`; keep them fully done.
+      stepProgresses[state.stepId] =
+          stored == StepProgress.notStarted && state.completed
+          ? StepProgress.completed
+          : stored;
+    }
+
     return _LoadedPlan(
       tasks: tasks.values.toList(growable: false),
       stepsByTask: steps,
@@ -145,6 +156,7 @@ class PlanProgressRepository {
         for (final UserTaskStateRow state in taskStates)
           if (state.status == 'completed') state.taskId,
       },
+      stepProgresses: stepProgresses,
     );
   }
 }
@@ -155,12 +167,14 @@ class _LoadedPlan {
     required this.stepsByTask,
     required this.completedStepIds,
     required this.completedTaskIds,
+    required this.stepProgresses,
   });
 
   final List<TaskRow> tasks;
   final Map<String, List<StepRow>> stepsByTask;
   final Set<String> completedStepIds;
   final Set<String> completedTaskIds;
+  final Map<String, StepProgress> stepProgresses;
 
   ProgressTaskInput inputFor(TaskRow task) {
     final List<StepRow> rows = stepsByTask[task.id] ?? const <StepRow>[];
@@ -185,6 +199,8 @@ class _LoadedPlan {
                 kind: step.kind,
                 minutes: step.minutes,
                 completed: completedStepIds.contains(step.id),
+                progress:
+                    stepProgresses[step.id] ?? StepProgress.notStarted,
               ),
           ];
 

@@ -1,3 +1,5 @@
+import 'step_progress.dart';
+
 /// Progress and hours engine (PRD section 5.7).
 ///
 /// Pure Dart on purpose: the same numbers drive the Today ring, the Plan
@@ -16,16 +18,27 @@ class ProgressStepInput {
     required this.kind,
     required this.minutes,
     required this.completed,
+    this.progress = StepProgress.notStarted,
   });
 
   final String id;
   final String kind;
   final int minutes;
   final bool completed;
+  final StepProgress progress;
 
   bool get isAttendance => kind == ProgressStepKinds.attend;
   bool get isStudy => kind == ProgressStepKinds.study;
   bool get isQuestions => kind == ProgressStepKinds.questions;
+
+  /// [progress] wins; a bare `completed: true` still counts as fully done so
+  /// callers that only know the boolean keep their old numbers.
+  StepProgress get effectiveProgress =>
+      progress != StepProgress.notStarted
+          ? progress
+          : completed
+          ? StepProgress.completed
+          : StepProgress.notStarted;
 }
 
 class ProgressTaskInput {
@@ -49,7 +62,10 @@ class ProgressTaskInput {
 
   bool get isComplete =>
       completed ||
-      (steps.isNotEmpty && steps.every((ProgressStepInput s) => s.completed));
+      (steps.isNotEmpty &&
+          steps.every(
+            (ProgressStepInput s) => s.effectiveProgress.isComplete,
+          ));
 }
 
 /// Immutable snapshot of progress for a day, a subject or the whole plan.
@@ -61,6 +77,7 @@ class PlanProgress {
     required this.completedTasks,
     required this.plannedSteps,
     required this.completedSteps,
+    required this.partialSteps,
     required this.plannedMinutesByKind,
     required this.completedMinutesByKind,
   });
@@ -72,6 +89,7 @@ class PlanProgress {
     completedTasks: 0,
     plannedSteps: 0,
     completedSteps: 0,
+    partialSteps: 0,
     plannedMinutesByKind: <String, int>{},
     completedMinutesByKind: <String, int>{},
   );
@@ -83,6 +101,7 @@ class PlanProgress {
     int completedTasks = 0;
     int plannedSteps = 0;
     int completedSteps = 0;
+    int partialSteps = 0;
     final Map<String, int> plannedByKind = <String, int>{};
     final Map<String, int> completedByKind = <String, int>{};
 
@@ -100,14 +119,31 @@ class PlanProgress {
           ifAbsent: () => step.minutes,
         );
 
-        if (done || step.completed) {
-          completedSteps += 1;
-          completedMinutes += step.minutes;
-          completedByKind.update(
-            step.kind,
-            (int value) => value + step.minutes,
-            ifAbsent: () => step.minutes,
-          );
+        // An explicitly completed task counts every step as done.
+        final StepProgress progress = done
+            ? StepProgress.completed
+            : step.effectiveProgress;
+        if (progress != StepProgress.notStarted) {
+          if (progress.isComplete) {
+            completedSteps += 1;
+          }
+          if (progress == StepProgress.partial) {
+            partialSteps += 1;
+            // Partial progress credits half the step's planned minutes.
+            completedMinutes += step.minutes ~/ 2;
+            completedByKind.update(
+              step.kind,
+              (int value) => value + step.minutes ~/ 2,
+              ifAbsent: () => step.minutes ~/ 2,
+            );
+          } else {
+            completedMinutes += step.minutes;
+            completedByKind.update(
+              step.kind,
+              (int value) => value + step.minutes,
+              ifAbsent: () => step.minutes,
+            );
+          }
         }
       }
     }
@@ -119,6 +155,7 @@ class PlanProgress {
       completedTasks: completedTasks,
       plannedSteps: plannedSteps,
       completedSteps: completedSteps,
+      partialSteps: partialSteps,
       plannedMinutesByKind: Map<String, int>.unmodifiable(plannedByKind),
       completedMinutesByKind: Map<String, int>.unmodifiable(completedByKind),
     );
@@ -132,6 +169,7 @@ class PlanProgress {
     int completedTasks = 0;
     int plannedSteps = 0;
     int completedSteps = 0;
+    int partialSteps = 0;
     final Map<String, int> plannedByKind = <String, int>{};
     final Map<String, int> completedByKind = <String, int>{};
 
@@ -142,6 +180,7 @@ class PlanProgress {
       completedTasks += part.completedTasks;
       plannedSteps += part.plannedSteps;
       completedSteps += part.completedSteps;
+      partialSteps += part.partialSteps;
       part.plannedMinutesByKind.forEach((String kind, int minutes) {
         plannedByKind.update(
           kind,
@@ -165,6 +204,7 @@ class PlanProgress {
       completedTasks: completedTasks,
       plannedSteps: plannedSteps,
       completedSteps: completedSteps,
+      partialSteps: partialSteps,
       plannedMinutesByKind: Map<String, int>.unmodifiable(plannedByKind),
       completedMinutesByKind: Map<String, int>.unmodifiable(completedByKind),
     );
@@ -176,6 +216,7 @@ class PlanProgress {
   final int completedTasks;
   final int plannedSteps;
   final int completedSteps;
+  final int partialSteps;
   final Map<String, int> plannedMinutesByKind;
   final Map<String, int> completedMinutesByKind;
 

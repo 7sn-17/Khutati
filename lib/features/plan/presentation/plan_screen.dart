@@ -1174,6 +1174,30 @@ class _TinySubject extends StatelessWidget {
   }
 }
 
+/// The ring mirrors the same fraction Today shows, so a partial step is
+/// visibly half-done in both tabs. It only appears once work has started.
+Widget _taskProgressRing(BuildContext context, PlanTask task) {
+  final KhutatiPalette palette = context.palette;
+  return SizedBox(
+    width: 16,
+    height: 16,
+    child: CircularProgressIndicator(
+      value: task.fraction,
+      strokeWidth: 2,
+      color: palette.gold,
+      backgroundColor: palette.line,
+    ),
+  );
+}
+
+IconData _taskStatusIcon(PlanTask task) => task.isComplete
+    ? Icons.check_circle_rounded
+    : task.status == PlanTaskStatus.inProgress
+    ? Icons.timelapse_rounded
+    : task.status == PlanTaskStatus.postponed
+    ? Icons.schedule_send_rounded
+    : Icons.radio_button_unchecked_rounded;
+
 class _GroupBlock extends StatelessWidget {
   const _GroupBlock({required this.group, required this.format});
 
@@ -1246,10 +1270,7 @@ class _TaskLine extends ConsumerWidget {
         ? l10n.planTaskLecture
         : l10n.planTaskQuestions;
     final String? subtitle = task.groupTitle?.trim();
-    final String title = <String>[
-      task.subjectName ?? task.subjectKey,
-      task.title,
-    ].join(' — ');
+    final String title = task.title;
 
     return Padding(
       padding: const EdgeInsets.only(top: 7),
@@ -1276,10 +1297,6 @@ class _TaskLine extends ConsumerWidget {
                     height: 1.35,
                     fontWeight: FontWeight.w500,
                     color: task.isComplete ? palette.mute : palette.tx,
-                    decoration: task.isComplete
-                        ? TextDecoration.lineThrough
-                        : null,
-                    decorationColor: palette.mute,
                   ),
                 ),
                 if (subtitle != null && subtitle.isNotEmpty)
@@ -1293,10 +1310,24 @@ class _TaskLine extends ConsumerWidget {
                       color: palette.mute,
                     ),
                   ),
+                if (task.isComplete)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      l10n.planLineComplete,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 9,
+                        color: palette.ok,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Text(
             '$kind · ${task.plannedMinutes} ${l10n.unitMinute}',
             style: TextStyle(
@@ -1305,9 +1336,14 @@ class _TaskLine extends ConsumerWidget {
               color: palette.mute,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
+          if (!task.isComplete && task.fraction > 0)
+            _taskProgressRing(context, task),
+          const SizedBox(width: 8),
           PopupMenuButton<PlanTaskStatus>(
             tooltip: l10n.planTaskStatusTooltip,
+            padding: EdgeInsets.zero,
+            splashRadius: 16,
             onSelected: (PlanTaskStatus status) async {
               ref.read(hapticsProvider).selection();
               await ref.read(planActionsProvider).setTaskStatus(task.id, status);
@@ -1325,17 +1361,11 @@ class _TaskLine extends ConsumerWidget {
                     ),
                 ],
             child: Icon(
-              task.isComplete
-                  ? Icons.check_circle_rounded
-                  : task.status == PlanTaskStatus.inProgress
-                  ? Icons.timelapse_rounded
-                  : task.status == PlanTaskStatus.postponed
-                  ? Icons.schedule_send_rounded
-                  : Icons.radio_button_unchecked_rounded,
+              _taskStatusIcon(task),
               size: 18,
               color: task.isComplete ? palette.ok : palette.mute,
             ),
-          ),
+          );
         ],
       ),
     );

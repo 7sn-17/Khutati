@@ -9,6 +9,7 @@ import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
 import '../../../data/database/app_database.dart' show BreakRow;
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/step_progress.dart';
 import '../../../l10n/l10n.dart';
 import '../application/today_controller.dart';
 
@@ -535,114 +536,129 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         ? widget.format.range(task.suggestedStart!, task.suggestedEnd!)
         : null;
 
-    return KCard(
-      accentColor: widget.accent,
-      showPattern: false,
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: <Widget>[
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: KMetrics.timelinePaddingX,
-                vertical: KMetrics.timelinePaddingY,
-              ),
-              child: Row(
-                children: <Widget>[
-                  SizedBox(
-                    width: 30,
-                    child: Text(
-                      '${widget.number}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: KTypography.displayFamily,
-                        fontSize: KTypography.timelineNumSize,
-                        fontWeight: FontWeight.w700,
-                        color: widget.accent,
-                      ),
-                    ),
+    return Semantics(
+      button: true,
+      child: KCard(
+        accentColor: widget.accent,
+        showPattern: false,
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: <Widget>[
+            // The ripple is drawn inside the card's own clip, so it can no
+            // longer spill past the rounded corners when the row expands.
+            Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: KMetrics.timelinePaddingX,
+                    vertical: KMetrics.timelinePaddingY,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          title,
+                  child: Row(
+                    children: <Widget>[
+                      SizedBox(
+                        width: 30,
+                        child: Text(
+                          '${widget.number}',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontFamily: KTypography.bodyFamily,
-                            fontSize: KTypography.quoteSize,
-                            fontWeight: FontWeight.w500,
-                            color: palette.tx,
+                            fontFamily: KTypography.displayFamily,
+                            fontSize: KTypography.timelineNumSize,
+                            fontWeight: FontWeight.w700,
+                            color: widget.accent,
                           ),
                         ),
-                        if (task.groupTitle != null &&
-                            task.groupTitle!.trim().isNotEmpty)
-                          Text(
-                            task.groupTitle!,
-                            style: TextStyle(
-                              fontFamily: KTypography.bodyFamily,
-                              fontSize: KTypography.smallSize,
-                              color: palette.mute,
-                            ),
-                          ),
-                        if (range != null)
-                          Text(
-                            range,
-                            style: TextStyle(
-                              fontFamily: KTypography.bodyFamily,
-                              fontSize: KTypography.smallSize,
-                              color: palette.mute,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: task.isComplete ? palette.ok : Colors.transparent,
-                      borderRadius: BorderRadius.circular(KMetrics.pillRadius),
-                      border: Border.all(
-                        color: task.isComplete ? palette.ok : palette.line,
                       ),
-                    ),
-                    child: Text(
-                      '${task.completedStepCount}/${task.steps.length}',
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: KTypography.counterSize,
-                        color: task.isComplete ? KColors.dark.bg : palette.mute,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontFamily: KTypography.bodyFamily,
+                                fontSize: KTypography.quoteSize,
+                                fontWeight: FontWeight.w500,
+                                color: palette.tx,
+                              ),
+                            ),
+                            if (task.groupTitle != null &&
+                                task.groupTitle!.trim().isNotEmpty)
+                              Text(
+                                task.groupTitle!,
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: KTypography.smallSize,
+                                  color: palette.mute,
+                                ),
+                              ),
+                            if (range != null)
+                              Text(
+                                range,
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: KTypography.smallSize,
+                                  color: palette.mute,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: task.isComplete
+                              ? palette.ok
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(
+                            KMetrics.pillRadius,
+                          ),
+                          border: Border.all(
+                            color: task.isComplete ? palette.ok : palette.line,
+                          ),
+                        ),
+                        child: Text(
+                          '${task.completedStepCount}/${task.steps.length}',
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.counterSize,
+                            color: task.isComplete
+                                ? KColors.dark.bg
+                                : palette.mute,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-          if (_expanded)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(
-                KMetrics.timelinePaddingX,
-                0,
-                KMetrics.timelinePaddingX,
-                KMetrics.timelinePaddingY,
+            if (_expanded)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(
+                  KMetrics.timelinePaddingX,
+                  0,
+                  KMetrics.timelinePaddingX,
+                  KMetrics.timelinePaddingY,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: palette.line)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: StepChips(task: task, format: widget.format),
+                ),
               ),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: palette.line)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: StepChips(task: task, format: widget.format),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -670,7 +686,17 @@ class StepChips extends ConsumerWidget {
           subtitle: step.suggestedStart != null && step.suggestedEnd != null
               ? format.range(step.suggestedStart!, step.suggestedEnd!)
               : format.duration(step.minutes),
-          selected: step.completed,
+          // The bar only appears between the two taps; a completed chip is
+          // already filled, so a full bar would say nothing new.
+          fraction: step.progress == StepProgress.partial ? 0.5 : 0.0,
+          icon: step.progress == StepProgress.completed
+              ? Icons.check_rounded
+              : step.isAttendance
+              ? Icons.play_circle_outline_rounded
+              : step.isStudy
+              ? Icons.menu_book_outlined
+              : Icons.quiz_outlined,
+          selected: step.progress != StepProgress.notStarted,
           wide: steps.length == 1,
           onTap: () => _toggle(context, ref, step),
         ),
@@ -678,7 +704,10 @@ class StepChips extends ConsumerWidget {
 
     if (chips.length == 1) return chips.single;
 
+    // Stretch keeps the three chips the same height even when one of them
+    // carries the partial-progress bar.
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         for (int i = 0; i < chips.length; i++) ...<Widget>[
           if (i > 0) const SizedBox(width: 8),
@@ -693,19 +722,19 @@ class StepChips extends ConsumerWidget {
     WidgetRef ref,
     PlanStep step,
   ) async {
-    final bool completed = !step.completed;
+    final StepProgress next = step.progress.nextWithinSession();
     final AppLocalizations l10n = context.l10n;
 
-    if (completed) {
-      ref.read(hapticsProvider).light();
-    } else {
-      ref.read(hapticsProvider).selection();
-    }
+    ref.read(hapticsProvider).selection();
 
-    await ref.read(todayActionsProvider).setStepCompleted(step.id, completed);
+    await ref.read(todayActionsProvider).setStepCompleted(step.id, next);
 
     if (!context.mounted) return;
-    if (completed) showKToast(context, l10n.galleryToast);
+    if (next == StepProgress.partial) {
+      showKToast(context, l10n.todayStepPartialToast);
+    } else if (next == StepProgress.completed) {
+      showKToast(context, l10n.todayStepCompleteToast);
+    }
   }
 }
 

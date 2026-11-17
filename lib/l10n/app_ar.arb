@@ -214,5 +214,12 @@
   "planTaskStatusTooltip": "تغيير حالة المهمة",
   "pastTasksTitle": "المهام المتأخرة",
   "pastTasksEmpty": "لا توجد مهام متأخرة. أحسنت!",
-  "pastTasksReview": "مراجعة المهام المتأخرة"
+  "pastTasksReview": "مراجعة المهام المتأخرة",
+  "todayStepPartialToast": "سُجِّلت الخطوة جزئياً — اضغط مرة أخرى لإكمالها",
+  "todayStepCompleteToast": "أحسنت، أكملت الخطوة",
+  "planLineComplete": "مكتملة",
+  "aboutAppBody": "Khutati تطبيق دراسي يساعدك على تخطيط وقتك اليومي ومتابعة مهامك والحفاظ على روتين الثبات والاستمرارية في التعلّم. صُنع ليكون رفيقك في رحلة طويلة، بسلاسة وبأسلوب جاد ودقيق.",
+  "aboutDeveloperName": "حسن المحمد",
+  "aboutTelegram": "تليجرام",
+  "aboutWhatsapp": "واتساب"
 }

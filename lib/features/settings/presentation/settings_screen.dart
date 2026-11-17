@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_info.dart';
+import '../../../core/design/khutati_icons.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
@@ -43,15 +45,7 @@ class SettingsScreen extends ConsumerWidget {
         KMetrics.appPaddingBottom,
       ),
       children: <Widget>[
-        Text(
-          l10n.settingsTitle,
-          style: TextStyle(
-            fontFamily: KTypography.displayFamily,
-            fontSize: 34,
-            fontWeight: FontWeight.w700,
-            color: palette.tx,
-          ),
-        ),
+        KAppTitle(text: l10n.settingsTitle),
         KSectionHeader(title: l10n.settingsAppearance),
         _SettingsCard(
           child: Column(
@@ -65,7 +59,7 @@ class SettingsScreen extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 12),
-              _ToggleRow(
+              _SettingsSwitchRow(
                 title: l10n.settingsHaptics,
                 value: hapticsEnabled,
                 onChanged: (bool value) {
@@ -80,28 +74,28 @@ class SettingsScreen extends ConsumerWidget {
         _SettingsCard(
           child: Column(
             children: <Widget>[
-              _ToggleRow(
+              _SettingsSwitchRow(
                 title: l10n.settingsNotifTasks,
                 value: prefs.tasks,
                 onChanged: ref
                     .read(notificationPrefsProvider.notifier)
                     .setTasks,
               ),
-              _ToggleRow(
+              _SettingsSwitchRow(
                 title: l10n.settingsNotifDaily,
                 value: prefs.daily,
                 onChanged: ref
                     .read(notificationPrefsProvider.notifier)
                     .setDaily,
               ),
-              _ToggleRow(
+              _SettingsSwitchRow(
                 title: l10n.settingsNotifReview,
                 value: prefs.review,
                 onChanged: ref
                     .read(notificationPrefsProvider.notifier)
                     .setReview,
               ),
-              _ToggleRow(
+              _SettingsSwitchRow(
                 title: l10n.settingsNotifTimer,
                 value: prefs.timer,
                 onChanged: ref
@@ -109,7 +103,7 @@ class SettingsScreen extends ConsumerWidget {
                     .setTimer,
               ),
               const SizedBox(height: 6),
-              _Hint(text: l10n.settingsNotificationsHint),
+              _SettingsHint(text: l10n.settingsNotificationsHint),
             ],
           ),
         ),
@@ -117,18 +111,19 @@ class SettingsScreen extends ConsumerWidget {
         _SettingsCard(
           child: Column(
             children: <Widget>[
-              _ActionRow(
+              _SettingsActionRow(
                 title: l10n.settingsBackupExport,
                 icon: Icons.upload_file_outlined,
                 badge: l10n.settingsComingSoon,
               ),
-              _ActionRow(
+              const SizedBox(height: 8),
+              _SettingsActionRow(
                 title: l10n.settingsBackupImport,
                 icon: Icons.download_outlined,
                 badge: l10n.settingsComingSoon,
               ),
               const SizedBox(height: 6),
-              _Hint(text: l10n.settingsBackupHint),
+              _SettingsHint(text: l10n.settingsBackupHint),
             ],
           ),
         ),
@@ -136,13 +131,13 @@ class SettingsScreen extends ConsumerWidget {
         _SettingsCard(
           child: Column(
             children: <Widget>[
-              _ActionRow(
+              _SettingsActionRow(
                 title: l10n.settingsSignIn,
                 icon: Icons.login,
                 badge: l10n.settingsComingSoon,
               ),
               const SizedBox(height: 6),
-              _Hint(text: l10n.settingsAccountHint),
+              _SettingsHint(text: l10n.settingsAccountHint),
             ],
           ),
         ),
@@ -151,7 +146,7 @@ class SettingsScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              _ActionRow(
+              _SettingsActionRow(
                 title: l10n.settingsInstalledVersion,
                 icon: Icons.phone_android,
                 trailing: Text(
@@ -170,20 +165,29 @@ class SettingsScreen extends ConsumerWidget {
         ),
         KSectionHeader(title: l10n.settingsAbout),
         _SettingsCard(
-          child: _ActionRow(
-            title: l10n.appName,
-            icon: Icons.info_outline,
-            trailing: Text(
-              AppInfo.versionLabel,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.muteSize,
-                color: palette.mute,
+          child: Column(
+            children: <Widget>[
+              _SettingsActionRow(
+                title: l10n.settingsAbout,
+                icon: Icons.info_outline,
+                trailing: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 20,
+                  color: palette.mute,
+                ),
+                onTap: () => _openAbout(context),
               ),
-            ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  void _openAbout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(child: const _AboutModalContent()),
     );
   }
 }
@@ -258,6 +262,233 @@ class _UpdatePanel extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+class _AboutModalContent extends ConsumerWidget {
+  const _AboutModalContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 12, 10),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: palette.gold,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.school_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.appName,
+                  style: TextStyle(
+                    fontFamily: KTypography.displayFamily,
+                    fontSize: KTypography.subheadSize,
+                    fontWeight: FontWeight.w700,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: palette.card2,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 20,
+                    color: palette.mute,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            l10n.aboutAppBody,
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: KTypography.bodySize,
+              height: 1.6,
+              color: palette.tx,
+            ),
+          ),
+        ),
+        Divider(height: 1, color: palette.line),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: palette.card2,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.person_outline,
+                  size: 12,
+                  color: palette.mute,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.aboutDeveloperName,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.smallSize,
+                    fontWeight: FontWeight.w600,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: <Widget>[
+              _DeveloperActionTile(
+                glyph: KhutatiBrandIcons.telegramPath,
+                brand: KhutatiBrandIcons.telegram,
+                label: l10n.aboutTelegram,
+                handle: '@DOVx3',
+                url: 'https://t.me/DOVx3',
+              ),
+              const SizedBox(height: 10),
+              _DeveloperActionTile(
+                glyph: KhutatiBrandIcons.whatsappPath,
+                brand: KhutatiBrandIcons.whatsapp,
+                label: l10n.aboutWhatsapp,
+                handle: '+963 984 623 461',
+                url: 'https://wa.me/963984623461',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+/// One contact row: the official brand mark, a label, the handle and an
+/// affordance that it opens outside the app.
+class _DeveloperActionTile extends ConsumerWidget {
+  const _DeveloperActionTile({
+    required this.glyph,
+    required this.brand,
+    required this.label,
+    required this.handle,
+    required this.url,
+  });
+
+  final String glyph;
+  final Color brand;
+  final String label;
+  final String handle;
+  final String url;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final KhutatiPalette palette = context.palette;
+
+    return Semantics(
+      button: true,
+      label: '$label، $handle',
+      child: PressScale(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _open(url),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: palette.card2,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: palette.line),
+              ),
+              child: Row(
+                children: <Widget>[
+                  KBrandMark(path: glyph, color: brand, size: 38),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.bodySize,
+                            fontWeight: FontWeight.w500,
+                            color: palette.tx,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          handle,
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.muteSize,
+                            color: palette.mute,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    size: 16,
+                    color: palette.mute,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(String target) async {
+    final Uri uri = Uri.parse(target);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // A device without the app or a browser simply keeps the sheet open.
+    }
   }
 }
 
@@ -415,8 +646,8 @@ class _ThemeOption extends StatelessWidget {
   }
 }
 
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
+class _SettingsSwitchRow extends StatelessWidget {
+  const _SettingsSwitchRow({
     required this.title,
     required this.value,
     required this.onChanged,
@@ -451,24 +682,26 @@ class _ToggleRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
+class _SettingsActionRow extends StatelessWidget {
+  const _SettingsActionRow({
     required this.title,
     required this.icon,
     this.badge,
     this.trailing,
+    this.onTap,
   });
 
   final String title;
   final IconData icon;
   final String? badge;
   final Widget? trailing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
 
-    return ConstrainedBox(
+    final Widget content = ConstrainedBox(
       constraints: const BoxConstraints(minHeight: KMetrics.tapTarget),
       child: Row(
         children: <Widget>[
@@ -505,11 +738,27 @@ class _ActionRow extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return content;
+
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: content,
+        ),
+      ),
+    );
   }
 }
 
-class _Hint extends StatelessWidget {
-  const _Hint({required this.text});
+class _SettingsHint extends StatelessWidget {
+  const _SettingsHint({required this.text});
 
   final String text;
 
@@ -531,3 +780,4 @@ class _Hint extends StatelessWidget {
     );
   }
 }
+

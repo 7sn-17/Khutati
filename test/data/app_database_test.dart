@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:khutati/data/database/app_database.dart';
 import 'package:khutati/data/repositories/template_repository.dart';
 import 'package:khutati/data/repositories/user_state_repository.dart';
+import 'package:khutati/domain/plan/step_progress.dart';
 
 void main() {
   late AppDatabase db;
@@ -143,7 +144,10 @@ void main() {
   test('user progress never mutates the template', () async {
     await seedDay();
 
-    await userState.setStepCompleted('d001-chem-01-01', true);
+    await userState.setStepCompleted(
+      'd001-chem-01-01',
+      StepProgress.completed,
+    );
     await userState.setTaskStatus('d001-chem-01', 'completed');
 
     final DayBundle? bundle = await template.dayBundle(1);
@@ -174,7 +178,10 @@ void main() {
         .listen(emissions.add);
 
     await pumpEventQueue();
-    await userState.setStepCompleted('d001-chem-01-01', true);
+    await userState.setStepCompleted(
+      'd001-chem-01-01',
+      StepProgress.completed,
+    );
     await pumpEventQueue();
     await subscription.cancel();
 
@@ -187,10 +194,49 @@ void main() {
     );
   });
 
+  test('partial state is stored and read back per step', () async {
+    await seedDay();
+
+    await userState.setStepCompleted('d001-chem-01-01', StepProgress.partial);
+    expect(
+      await userState.stepProgress('d001-chem-01-01'),
+      StepProgress.partial,
+    );
+    expect(
+      (await userState.stepProgressForDay('d001'))['d001-chem-01-01'],
+      StepProgress.partial,
+    );
+  });
+
+  test('rows written before the progress column read as complete', () async {
+    await seedDay();
+
+    // A v1 row: `completed` only, `progress` left at its default.
+    await db
+        .into(db.userStepStates)
+        .insert(
+          UserStepStatesCompanion.insert(
+            stepId: 'd001-chem-01-02',
+            completed: const Value<bool>(true),
+          ),
+        );
+
+    expect(
+      await userState.stepProgress('d001-chem-01-02'),
+      StepProgress.completed,
+    );
+  });
+
   test('uncompleting a step clears its completion time', () async {
     await seedDay();
-    await userState.setStepCompleted('d001-chem-01-01', true);
-    await userState.setStepCompleted('d001-chem-01-01', false);
+    await userState.setStepCompleted(
+      'd001-chem-01-01',
+      StepProgress.completed,
+    );
+    await userState.setStepCompleted(
+      'd001-chem-01-01',
+      StepProgress.notStarted,
+    );
 
     final UserStepStateRow state = await db
         .select(db.userStepStates)

@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../../domain/plan/step_progress.dart';
+
 // ---------------------------------------------------------------------------
 // Template tables — the imported 68-day plan.
 //
@@ -168,6 +170,8 @@ class UserStepStates extends Table {
   TextColumn get stepId => text()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
+  IntColumn get progress =
+      integer().withDefault(const Constant(StepProgress.notStarted.code))();
 
   @override
   Set<Column> get primaryKey => <Column>{stepId};

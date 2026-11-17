@@ -12,6 +12,7 @@ import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/step_progress.dart';
 import '../../today/application/today_controller.dart' show todayClockProvider;
 
 /// One accessible colour-labelled group of tasks inside a day.
@@ -317,6 +318,8 @@ Future<PlanBrowserData> _build(
 
   final List<TaskWithSteps> templateTasks = await template.allTasksWithSteps();
   final Set<String> completedSteps = await userState.allCompletedStepIds();
+  final Map<String, StepProgress> stepProgresses = await userState
+      .allStepProgresses();
   final Map<String, String> taskStatuses = await userState.allTaskStatuses();
   final Map<int, PlanProgress> progressByDay = await progressRepository
       .progressByDay();
@@ -337,6 +340,7 @@ Future<PlanBrowserData> _build(
         items: tasksByDay[day.id] ?? const <TaskWithSteps>[],
         progress: progressByDay[day.dayNumber] ?? PlanProgress.empty,
         completedSteps: completedSteps,
+        stepProgresses: stepProgresses,
         taskStatuses: taskStatuses,
         subjectNames: subjectNames,
         subjectAccents: subjectAccents,
@@ -361,6 +365,7 @@ PlanDayData _dayData({
   required List<TaskWithSteps> items,
   required PlanProgress progress,
   required Set<String> completedSteps,
+  required Map<String, StepProgress> stepProgresses,
   required Map<String, String> taskStatuses,
   required Map<String, String> subjectNames,
   required Map<String, Color> subjectAccents,
@@ -391,6 +396,11 @@ PlanDayData _dayData({
               completed: completedSteps.contains(step.id),
               suggestedStart: step.suggestedStart,
               suggestedEnd: step.suggestedEnd,
+              progress:
+                  stepProgresses[step.id] ??
+                  (completedSteps.contains(step.id)
+                      ? StepProgress.completed
+                      : StepProgress.notStarted),
             ),
         ],
       ),
@@ -428,10 +438,15 @@ class PlanActions {
         .setTaskStatus(taskId, status.wireValue);
   }
 
-  Future<void> setStepCompleted(String stepId, bool completed) async {
+  /// Sets the step state used by Plan and read by Today, so both tabs agree on
+  /// a step's partial/complete state.
+  Future<void> setStepCompleted(
+    String stepId,
+    StepProgress progress,
+  ) async {
     await _ref
         .read(userStateRepositoryProvider)
-        .setStepCompleted(stepId, completed);
+        .setStepCompleted(stepId, progress);
   }
 }
 
