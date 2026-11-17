@@ -206,18 +206,38 @@ class KBreakDivider extends StatelessWidget {
     final KhutatiPalette palette = context.palette;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 10, top: 2),
       child: Row(
         children: <Widget>[
           Expanded(child: Container(height: 1, color: palette.line)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.smallSize,
-                color: palette.mute,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: palette.card2,
+                borderRadius: BorderRadius.circular(KMetrics.pillRadius),
+                border: Border.all(color: palette.line),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.pause_circle_outline_rounded,
+                    size: 14,
+                    color: palette.gold,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: KTypography.smallSize,
+                      fontWeight: FontWeight.w500,
+                      color: palette.tx,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

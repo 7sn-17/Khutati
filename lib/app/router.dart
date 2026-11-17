@@ -7,6 +7,7 @@ import '../features/focus/presentation/focus_screen.dart';
 import '../features/gallery/presentation/widget_gallery_screen.dart';
 import '../features/plan/presentation/plan_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/today/presentation/past_tasks_screen.dart';
 import '../features/today/presentation/today_screen.dart';
 import 'router_transitions.dart';
 import 'shell/app_shell.dart';
@@ -82,6 +83,16 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
         ],
       ),
       // Debug-only design gallery, opened from Today in debug builds.
+      GoRoute(
+        path: '/past-tasks',
+        name: 'past-tasks',
+        builder: (BuildContext context, GoRouterState state) {
+          final int? day = int.tryParse(
+            state.uri.queryParameters['day'] ?? '',
+          );
+          return PastTasksScreen(dayNumber: day);
+        },
+      ),
       GoRoute(
         path: '/gallery',
         name: 'gallery',

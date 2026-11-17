@@ -180,7 +180,7 @@ class _TodayBody extends ConsumerWidget {
       children.add(
         Padding(
           padding: const EdgeInsets.only(bottom: KMetrics.cardGap),
-          child: _TaskCard(
+          child: TaskCard(
             key: ValueKey<String>(task.id),
             task: task,
             number: number,
@@ -361,7 +361,7 @@ class _Hero extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                next.title,
+                '${next.subjectName ?? data.subjectNames[next.subjectKey] ?? next.subjectKey} — ${next.title}',
                 style: TextStyle(
                   fontFamily: KTypography.displayFamily,
                   fontSize: KTypography.heroTitleSize,
@@ -439,46 +439,62 @@ class _OverdueAlert extends StatelessWidget {
     final AppLocalizations l10n = context.l10n;
     final KhutatiPalette palette = context.palette;
 
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(
-        horizontal: KMetrics.timelinePaddingX,
-        vertical: KMetrics.timelinePaddingY,
-      ),
-      decoration: BoxDecoration(
-        color: palette.card,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/past-tasks'),
         borderRadius: BorderRadius.circular(KMetrics.statRadius),
-        border: Border.all(color: palette.red),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            l10n.todayOverdueTitle(tasks),
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: KTypography.quoteSize,
-              fontWeight: FontWeight.w500,
-              color: palette.redtx,
-            ),
+        child: Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: KMetrics.timelinePaddingX,
+            vertical: KMetrics.timelinePaddingY,
           ),
-          const SizedBox(height: 2),
-          Text(
-            l10n.todayOverdueBody(format.duration(minutes)),
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: KTypography.muteSize,
-              color: palette.mute,
-            ),
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(KMetrics.statRadius),
+            border: Border.all(color: palette.red),
           ),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.todayOverdueTitle(tasks),
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.quoteSize,
+                        fontWeight: FontWeight.w500,
+                        color: palette.redtx,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      l10n.todayOverdueBody(format.duration(minutes)),
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.muteSize,
+                        color: palette.mute,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_left_rounded, color: palette.redtx),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _TaskCard extends ConsumerStatefulWidget {
-  const _TaskCard({
+class TaskCard extends ConsumerStatefulWidget {
+  const TaskCard({
     required this.task,
     required this.number,
     required this.accent,
@@ -492,10 +508,10 @@ class _TaskCard extends ConsumerStatefulWidget {
   final KhutatiFormat format;
 
   @override
-  ConsumerState<_TaskCard> createState() => _TaskCardState();
+  ConsumerState<TaskCard> createState() => _TaskCardState();
 }
 
-class _TaskCardState extends ConsumerState<_TaskCard> {
+class _TaskCardState extends ConsumerState<TaskCard> {
   bool _expanded = true;
 
   @override
@@ -512,8 +528,8 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
 
     final String title = <String>[
       task.subjectName ?? task.subjectKey,
-      if (task.groupTitle != null) task.groupTitle!,
-    ].join('، ');
+      task.title,
+    ].join(' — ');
     final String? range =
         task.suggestedStart != null && task.suggestedEnd != null
         ? widget.format.range(task.suggestedStart!, task.suggestedEnd!)
@@ -561,6 +577,16 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
                             color: palette.tx,
                           ),
                         ),
+                        if (task.groupTitle != null &&
+                            task.groupTitle!.trim().isNotEmpty)
+                          Text(
+                            task.groupTitle!,
+                            style: TextStyle(
+                              fontFamily: KTypography.bodyFamily,
+                              fontSize: KTypography.smallSize,
+                              color: palette.mute,
+                            ),
+                          ),
                         if (range != null)
                           Text(
                             range,
@@ -613,7 +639,7 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
               ),
               child: Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: _StepChips(task: task, format: widget.format),
+                child: StepChips(task: task, format: widget.format),
               ),
             ),
         ],
@@ -622,8 +648,8 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
   }
 }
 
-class _StepChips extends ConsumerWidget {
-  const _StepChips({required this.task, required this.format});
+class StepChips extends ConsumerWidget {
+  const StepChips({required this.task, required this.format});
 
   final PlanTask task;
   final KhutatiFormat format;

@@ -48,7 +48,7 @@
     "description": "Overdue alert detail line",
     "placeholders": {"duration": {"type": "String"}}
   },
-  "todayBreakLabel": "استراحة {duration}، {range}",
+  "todayBreakLabel": "استراحة · {duration} · {range}",
   "@todayBreakLabel": {
     "description": "Break divider between periods",
     "placeholders": {"duration": {"type": "String"}, "range": {"type": "String"}}
@@ -146,7 +146,7 @@
   "galleryStart": "ابدأ التركيز",
   "gallerySkip": "تخطَّ",
   "galleryBreaks": "الاستراحات",
-  "galleryBreakLabel": "استراحة 15 د، 9:14 – 9:30",
+  "galleryBreakLabel": "استراحة · 15 د · 9:14 – 9:30",
   "galleryFeedback": "التنبيهات",
 
   "unitHour": "س",
@@ -206,5 +206,13 @@
   "updateNoNotes": "تحسينات في الأداء والاستقرار، مع تجربة أسهل في استخدام خطتك.",
   "updateLater": "لاحقاً",
   "updateSkipVersion": "تخطّي هذا الإصدار",
-  "updateView": "عرض التحديث"
+  "updateView": "عرض التحديث",
+  "planTaskStatusNotStarted": "لم تبدأ",
+  "planTaskStatusInProgress": "قيد التنفيذ",
+  "planTaskStatusCompleted": "مكتملة",
+  "planTaskStatusPostponed": "مؤجلة",
+  "planTaskStatusTooltip": "تغيير حالة المهمة",
+  "pastTasksTitle": "المهام المتأخرة",
+  "pastTasksEmpty": "لا توجد مهام متأخرة. أحسنت!",
+  "pastTasksReview": "مراجعة المهام المتأخرة"
 }

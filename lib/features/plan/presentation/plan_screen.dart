@@ -1104,6 +1104,16 @@ class _DayCard extends StatelessWidget {
                 else
                   for (final PlanSubjectGroup group in day.groups)
                     _GroupBlock(group: group, format: format),
+                if (day.status == PlanDayStatus.overdue) ...<Widget>[
+                  const SizedBox(height: 12),
+                  KButton(
+                    label: l10n.pastTasksReview,
+                    variant: KButtonVariant.secondary,
+                    expand: true,
+                    onPressed: () =>
+                        context.push('/past-tasks?day=${day.day.dayNumber}'),
+                  ),
+                ],
               ],
             ],
           ),
@@ -1217,13 +1227,13 @@ class _GroupBlock extends StatelessWidget {
   }
 }
 
-class _TaskLine extends StatelessWidget {
+class _TaskLine extends ConsumerWidget {
   const _TaskLine({required this.task});
 
   final PlanTask task;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final KhutatiPalette palette = context.palette;
     final AppLocalizations l10n = context.l10n;
     final IconData icon = task.type == PlanTaskType.courseQuestions
@@ -1235,6 +1245,10 @@ class _TaskLine extends StatelessWidget {
         ? l10n.planTaskLecture
         : l10n.planTaskQuestions;
     final String? subtitle = task.groupTitle?.trim();
+    final String title = <String>[
+      task.subjectName ?? task.subjectKey,
+      task.title,
+    ].join(' — ');
 
     return Padding(
       padding: const EdgeInsets.only(top: 7),
@@ -1252,7 +1266,7 @@ class _TaskLine extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  task.title,
+                  title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1290,10 +1304,37 @@ class _TaskLine extends StatelessWidget {
               color: palette.mute,
             ),
           ),
-          if (task.isComplete) ...<Widget>[
-            const SizedBox(width: 4),
-            Icon(Icons.check_circle_rounded, size: 14, color: palette.ok),
-          ],
+          const SizedBox(width: 6),
+          PopupMenuButton<PlanTaskStatus>(
+            tooltip: l10n.planTaskStatusTooltip,
+            onSelected: (PlanTaskStatus status) async {
+              ref.read(hapticsProvider).selection();
+              await ref.read(planActionsProvider).setTaskStatus(task.id, status);
+              if (!context.mounted) return;
+              if (status == PlanTaskStatus.completed) {
+                showKToast(context, l10n.galleryToast);
+              }
+            },
+            itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<PlanTaskStatus>>[
+                  for (final PlanTaskStatus status in PlanTaskStatus.values)
+                    PopupMenuItem<PlanTaskStatus>(
+                      value: status,
+                      child: Text(_planTaskStatusLabel(l10n, status)),
+                    ),
+                ],
+            child: Icon(
+              task.isComplete
+                  ? Icons.check_circle_rounded
+                  : task.status == PlanTaskStatus.inProgress
+                  ? Icons.timelapse_rounded
+                  : task.status == PlanTaskStatus.postponed
+                  ? Icons.schedule_send_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 18,
+              color: task.isComplete ? palette.ok : palette.mute,
+            ),
+          ),
         ],
       ),
     );
@@ -1347,7 +1388,7 @@ class _SearchResult extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      task.title,
+                      '${task.subjectName ?? task.subjectKey} — ${task.title}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1450,5 +1491,19 @@ class _PlanError extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+
+String _planTaskStatusLabel(AppLocalizations l10n, PlanTaskStatus status) {
+  switch (status) {
+    case PlanTaskStatus.notStarted:
+      return l10n.planTaskStatusNotStarted;
+    case PlanTaskStatus.inProgress:
+      return l10n.planTaskStatusInProgress;
+    case PlanTaskStatus.completed:
+      return l10n.planTaskStatusCompleted;
+    case PlanTaskStatus.postponed:
+      return l10n.planTaskStatusPostponed;
   }
 }

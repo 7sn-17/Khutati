@@ -415,6 +415,32 @@ PlanDayData _dayData({
   );
 }
 
+/// Writes plan task state; the live DB stream rebuilds the Plan tab without a
+/// manual invalidation, so future and past tasks can be updated in place.
+class PlanActions {
+  PlanActions(this._ref);
+
+  final Ref _ref;
+
+  Future<void> setTaskStatus(String taskId, PlanTaskStatus status) async {
+    await _ref
+        .read(userStateRepositoryProvider)
+        .setTaskStatus(taskId, status.wireValue);
+  }
+
+  Future<void> setStepCompleted(String stepId, bool completed) async {
+    await _ref
+        .read(userStateRepositoryProvider)
+        .setStepCompleted(stepId, completed);
+  }
+}
+
+final Provider<PlanActions> planActionsProvider = Provider<PlanActions>((
+  Ref ref,
+) {
+  return PlanActions(ref);
+});
+
 Color _hexColor(String hex) {
   final String value = hex.replaceFirst('#', '');
   final int parsed = int.parse(value, radix: 16);
