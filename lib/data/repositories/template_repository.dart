@@ -51,6 +51,13 @@ class TemplateRepository {
     return query.get();
   }
 
+  /// Subjects with their display names and accents, for tags and headers.
+  Future<List<SubjectRow>> allSubjects() {
+    final query = _db.select(_db.subjects);
+    query.orderBy([(t) => OrderingTerm.asc(t.sortOrder)]);
+    return query.get();
+  }
+
   /// The single built-in plan row. `null` only before the bootstrap import.
   Future<PlanRow?> activePlan() {
     return (_db.select(

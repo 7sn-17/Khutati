@@ -13,6 +13,54 @@
   "foundationSubtitle": "المرحلة 0 — الأساس جاهز",
   "foundationProof": "الاتجاه من اليمين إلى اليسار، الخطوط العربية مضمّنة، والألوان مستخرجة من النموذج.",
   "todayPlaceholder": "شاشة اليوم تُبنى في المرحلة 3",
+  "todayGreetingMorning": "صباح الخير",
+  "todayGreetingEvening": "مساء الخير",
+  "todayGreetingNight": "مساء النور",
+  "todayDayNumber": "اليوم {day}",
+  "@todayDayNumber": {
+    "description": "Today screen heading, e.g. اليوم 12",
+    "placeholders": {"day": {"type": "int"}}
+  },
+  "todayRemainingDays": "{days, plural, =0{انتهت الخطة} =1{باقي يوم واحد} =2{باقي يومان} few{باقي {days} أيام} many{باقي {days} يوماً} other{باقي {days} يوماً}}",
+  "@todayRemainingDays": {
+    "description": "Days left after today, printed in the date line",
+    "placeholders": {"days": {"type": "int"}}
+  },
+  "todayStudyDay": "يوم دراسة",
+  "todayPracticalDay": "يوم عملي بنصف الوقت",
+  "todayRestDay": "يوم راحة",
+  "todayDone": "المنجز",
+  "todayRemaining": "المتبقي",
+  "todayEnds": "تنتهي",
+  "todayNextTask": "المهمة التالية",
+  "todayStartFocus": "ابدأ التركيز",
+  "todayAllDoneTitle": "أنهيت يومك بالكامل",
+  "todayAllDoneBody": "استرح الآن، غداً يوم جديد ودرجة أعلى.",
+  "todayRestBody": "لا مهام اليوم، استرح واستعد للغد.",
+  "todaySchedule": "جدول اليوم",
+  "todayOverdueTitle": "{count, plural, =1{مهمة متأخرة} =2{مهمتان متأخرتان} few{{count} مهام متأخرة} many{{count} مهمة متأخرة} other{{count} مهمة متأخرة}}",
+  "@todayOverdueTitle": {
+    "description": "Overdue alert heading",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "todayOverdueBody": "باقي {duration} من أيام سابقة",
+  "@todayOverdueBody": {
+    "description": "Overdue alert detail line",
+    "placeholders": {"duration": {"type": "String"}}
+  },
+  "todayBreakLabel": "استراحة {duration}، {range}",
+  "@todayBreakLabel": {
+    "description": "Break divider between periods",
+    "placeholders": {"duration": {"type": "String"}, "range": {"type": "String"}}
+  },
+  "todayQuote1": "كل خطوة تعلّمها اليوم تقصّر عليك سنوات الطب.",
+  "todayQuote2": "الانضباط أثقل من الموهبة، وأبقى منها.",
+  "todayQuote3": "لا تحتاج يوماً مثالياً، تحتاج يوماً مكتملاً.",
+  "todayQuote4": "من أنهى مهمة اليوم لا يخشى امتحان الغد.",
+  "todayQuote5": "ساعة الدورات هي التي تثبّت الفصل في رأسك.",
+  "todayQuote6": "أنت اليوم أقرب إلى الكلية مما كنت أمس.",
+  "todayLoadError": "تعذّر تحميل خطة اليوم.",
+  "todayRetry": "إعادة المحاولة",
   "planPlaceholder": "شاشة الخطة تُبنى في المرحلة 3",
   "focusPlaceholder": "المؤقت يُبنى في المرحلة 4",
   "achievementsPlaceholder": "الإنجازات تُبنى في المرحلة 6",

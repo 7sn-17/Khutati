@@ -35,6 +35,54 @@ class PlanProgressRepository {
     return PlanProgress.of(plan.tasks.map(plan.inputFor));
   }
 
+  /// Progress for every plan day, keyed by 1-based day number.
+  ///
+  /// Today needs a streak and overdue totals, which would otherwise mean one
+  /// query per day. This loads the plan once and groups it in memory.
+  Future<Map<int, PlanProgress>> progressByDay() async {
+    final List<DayRow> days = await _template.allDays();
+    final _LoadedPlan plan = await _load();
+
+    final Map<String, int> numberByDayId = <String, int>{
+      for (final DayRow day in days) day.id: day.dayNumber,
+    };
+    final Map<int, List<ProgressTaskInput>> grouped =
+        <int, List<ProgressTaskInput>>{};
+
+    for (final TaskRow task in plan.tasks) {
+      final int? dayNumber = numberByDayId[task.dayId];
+      if (dayNumber == null) continue;
+      grouped
+          .putIfAbsent(dayNumber, () => <ProgressTaskInput>[])
+          .add(plan.inputFor(task));
+    }
+
+    return <int, PlanProgress>{
+      for (final DayRow day in days)
+        day.dayNumber: PlanProgress.of(
+          grouped[day.dayNumber] ?? const <ProgressTaskInput>[],
+        ),
+    };
+  }
+
+  /// Work still open on study days before [dayNumber] (PRD 5.3 overdue).
+  Future<({int tasks, int minutes})> overdueBefore(int dayNumber) async {
+    final Map<int, PlanProgress> byDay = await progressByDay();
+    int tasks = 0;
+    int minutes = 0;
+
+    for (final MapEntry<int, PlanProgress> entry in byDay.entries) {
+      if (entry.key >= dayNumber) continue;
+      final PlanProgress progress = entry.value;
+      // Rest days have no tasks and are never overdue.
+      if (progress.plannedTasks == 0 || progress.isComplete) continue;
+      tasks += progress.remainingTasks;
+      minutes += progress.remainingMinutes;
+    }
+
+    return (tasks: tasks, minutes: minutes);
+  }
+
   /// Per-subject totals for the Achievements screen (PRD 5.7).
   Future<Map<String, PlanProgress>> progressBySubject() async {
     final _LoadedPlan plan = await _load();
