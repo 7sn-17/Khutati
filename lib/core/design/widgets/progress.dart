@@ -151,7 +151,7 @@ class _KEcgLineState extends State<KEcgLine>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1800),
+    duration: const Duration(milliseconds: 5000),
   )..repeat();
 
   @override
@@ -213,11 +213,10 @@ class _EcgPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Strict bounds: never let the waveform escape its container.
+    // Strict bounds: the waveform must never escape its container.
     canvas.save();
     canvas.clipRect(Offset.zero & size);
 
-    // The SVG uses preserveAspectRatio="xMidYMid meet": uniform scale, centred.
     final double scale = math.min(
       size.width / KArtwork.ecgViewWidth,
       size.height / KArtwork.ecgViewHeight,
@@ -226,21 +225,34 @@ class _EcgPainter extends CustomPainter {
     final double tileHeight = KArtwork.ecgViewHeight * scale;
     final double dy = (size.height - tileHeight) / 2;
 
-    // Organic, seamless scroll: a monotonically increasing position with a
-    // sine-modulated speed, so the wave breathes instead of sliding linearly.
-    // The pattern repeats every tile, so the reset at the period boundary is
-    // invisible.
-    final double position =
-        (pulse + 0.08 * math.sin(2 * math.pi * pulse)).clamp(0.0, 1.0);
-    final double offset = -position * tileWidth;
+    // Sweep head travels left-to-right over the full duration.
+    final double headX = pulse * size.width;
+    // Trail length behind the head (the part still visible).
+    final double trail = size.width * 0.34;
 
+    // Faint phosphor track across the whole width (static structure).
     final Paint trackPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = KArtwork.ecgStrokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = trackColor.withValues(alpha: 0.35);
+      ..color = trackColor.withValues(alpha: 0.18);
 
+    canvas.save();
+    canvas.translate(0, dy);
+    canvas.scale(scale);
+    final int trackTiles = (size.width / tileWidth).ceil() + 2;
+    for (int i = -1; i < trackTiles; i++) {
+      canvas.save();
+      canvas.translate(i * KArtwork.ecgViewWidth, 0);
+      canvas.drawPath(_path, trackPaint);
+      canvas.restore();
+    }
+    canvas.restore();
+
+    // Sweep: draw the waveform only within the trail behind the head, with a
+    // smooth fade from the head backwards (comet tail). Distance behind head
+    // wraps around the container so the loop is seamless.
     final Paint valuePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = KArtwork.ecgStrokeWidth
@@ -249,35 +261,56 @@ class _EcgPainter extends CustomPainter {
       ..color = valueColor;
 
     final int tileCount = (size.width / tileWidth).ceil() + 2;
-
-    // Track (faint, full waveform).
-    canvas.save();
-    canvas.translate(offset, dy);
-    canvas.scale(scale);
-    for (int i = -1; i < tileCount; i++) {
+    const double chunk = 6.0; // view units per segment
+    for (int t = -1; t < tileCount; t++) {
       canvas.save();
-      canvas.translate(i * KArtwork.ecgViewWidth, 0);
-      canvas.drawPath(_path, trackPaint);
-      canvas.restore();
-    }
-    canvas.restore();
-
-    // Revealed (progress) waveform scrolls with it, clipped to the left.
-    if (progress > 0) {
-      canvas.save();
-      canvas.clipRect(Rect.fromLTWH(0, 0, size.width * progress, size.height));
-      canvas.translate(offset, dy);
+      canvas.translate(t * tileWidth, dy);
       canvas.scale(scale);
-      for (int i = -1; i < tileCount; i++) {
-        canvas.save();
-        canvas.translate(i * KArtwork.ecgViewWidth, 0);
-        canvas.drawPath(_path, valuePaint);
-        canvas.restore();
+      for (final PathMetric metric in _path.computeMetrics()) {
+        double s = 0;
+        while (s < metric.length) {
+          final double e = (s + chunk).clamp(0.0, metric.length);
+          final double midView = (s + e) / 2;
+          final double midCanvas = t * tileWidth + midView * scale;
+          // Distance behind the head, wrapped.
+          double d = headX - midCanvas;
+          if (d < 0) d += size.width;
+          if (d <= trail) {
+            final double tt = (d / trail).clamp(0.0, 1.0);
+            // smoothstep fade: full at the head, zero at the trail end.
+            final double fade = 1.0 - (tt * tt * (3 - 2 * tt));
+            valuePaint.color = valueColor.withValues(alpha: fade);
+            canvas.drawPath(metric.extractPath(s, e), valuePaint);
+          }
+          s = e;
+        }
       }
       canvas.restore();
     }
 
-    canvas.restore(); // clipRect bounds
+    // Premium glowing sweep head (vertical line + soft glow).
+    final Paint glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = KArtwork.ecgStrokeWidth * 4
+      ..strokeCap = StrokeCap.round
+      ..color = valueColor.withValues(alpha: 0.22);
+    final Paint headPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = KArtwork.ecgStrokeWidth * 1.6
+      ..strokeCap = StrokeCap.round
+      ..color = valueColor;
+    canvas.drawLine(
+      Offset(headX, dy),
+      Offset(headX, dy + tileHeight),
+      glowPaint,
+    );
+    canvas.drawLine(
+      Offset(headX, dy),
+      Offset(headX, dy + tileHeight),
+      headPaint,
+    );
+
+    canvas.restore(); // bounds clip
   }
 
   @override
