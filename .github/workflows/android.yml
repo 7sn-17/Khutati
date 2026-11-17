@@ -207,8 +207,10 @@ jobs:
 
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/apk-signature.txt
 
-          DN="$(sed -n 's/^Signer #1 certificate DN: //p' build/apk-signature.txt | head -n 1)"
-          APK_FP="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/apk-signature.txt | head -n 1 | tr -d ':' | tr 'A-F' 'a-f')"
+          # apksigner labels the certificate as "V2 Signer: ...", not
+          # "Signer #1", so match the suffix rather than a fixed prefix.
+          DN="$(sed -n 's/^.*certificate DN: //p' build/apk-signature.txt | head -n 1)"
+          APK_FP="$(sed -n 's/^.*certificate SHA-256 digest: //p' build/apk-signature.txt | head -n 1 | tr -d ':' | tr 'A-F' 'a-f')"
           EXPECTED_FP="$(keytool -list -v \
             -keystore android/app/khutati-release.jks \
             -storepass "$KEYSTORE_PASSWORD" \
