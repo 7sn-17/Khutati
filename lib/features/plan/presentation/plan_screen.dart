@@ -182,7 +182,7 @@ class _PlanBodyState extends ConsumerState<_PlanBody> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: data.calendar.weekCount,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (BuildContext context, int index) {
                   final PlanWeekData chipWeek = data.week(index + 1);
                   return _WeekChip(
