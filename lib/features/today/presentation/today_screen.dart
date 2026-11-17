@@ -29,7 +29,7 @@ class TodayScreen extends ConsumerWidget {
       data: (TodayData? data) =>
           data == null ? const _LoadError() : _TodayBody(data: data),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (Object error, StackTrace stack) => const _LoadError(),
+      error: (Object error, StackTrace stack) => _LoadError(error: error),
     );
   }
 }
@@ -210,7 +210,7 @@ class _TodayBody extends ConsumerWidget {
           KBreakDivider(
             label: l10n.todayBreakLabel(
               format.duration(rest.minutes),
-              format.range(rest.startClock, rest.endClock),
+              format.tryRange(rest.startClock, rest.endClock) ?? '—',
             ),
           ),
         );
@@ -223,9 +223,13 @@ class _TodayBody extends ConsumerWidget {
   String _endsLabel(TodayData data, KhutatiFormat format) {
     final String? end = data.day.endClock;
     if (end == null) return '—';
-    final String clock = KhutatiFormat.twelveHour(end);
-    final String part = format.dayPart(KhutatiFormat.minutesOfDay(end) ~/ 60);
-    return '$clock $part';
+    try {
+      final String clock = KhutatiFormat.twelveHour(end);
+      final String part = format.dayPart(KhutatiFormat.minutesOfDay(end) ~/ 60);
+      return '$clock $part';
+    } on FormatException {
+      return '—';
+    }
   }
 
   String _quoteOfDay(AppLocalizations l10n, DateTime now) {
@@ -421,11 +425,8 @@ class _Hero extends ConsumerWidget {
         : step.isStudy
         ? l10n.galleryStudy
         : l10n.gallerySolve;
-    final String? start = step.suggestedStart;
-    final String? end = step.suggestedEnd;
-    final String timing = start != null && end != null
-        ? format.range(start, end)
-        : '';
+    final String timing =
+        format.tryRange(step.suggestedStart, step.suggestedEnd) ?? '';
 
     return <String>[
       kind,
@@ -542,10 +543,13 @@ class _TaskCardState extends ConsumerState<TaskCard> {
       task.subjectName ?? task.subjectKey,
       task.title,
     ].join(' — ');
-    final String? range =
-        task.suggestedStart != null && task.suggestedEnd != null
-        ? widget.format.range(task.suggestedStart!, task.suggestedEnd!)
-        : null;
+    // Never throws: a malformed clock string hides the time line instead of
+    // taking the whole schedule down with it.
+    final String? range = widget.format.tryRange(
+      task.suggestedStart,
+      task.suggestedEnd,
+    );
+    final int stepCount = task.steps.length;
 
     return Semantics(
       button: true,
@@ -636,7 +640,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                           ),
                         ),
                         child: Text(
-                          '${task.completedStepCount}/${task.steps.length}',
+                          '${task.completedStepCount}/$stepCount',
                           style: TextStyle(
                             fontFamily: KTypography.bodyFamily,
                             fontSize: KTypography.counterSize,
@@ -694,9 +698,9 @@ class StepChips extends ConsumerWidget {
               : step.isStudy
               ? l10n.galleryStudy
               : l10n.gallerySolve,
-          subtitle: step.suggestedStart != null && step.suggestedEnd != null
-              ? format.range(step.suggestedStart!, step.suggestedEnd!)
-              : format.duration(step.minutes),
+          subtitle:
+              format.tryRange(step.suggestedStart, step.suggestedEnd) ??
+              format.duration(step.minutes),
           // The bar only appears between the two taps; a completed chip is
           // already filled, so a full bar would say nothing new.
           fraction: step.progress == StepProgress.partial ? 0.5 : 0.0,
@@ -713,18 +717,23 @@ class StepChips extends ConsumerWidget {
         ),
     ];
 
+    if (chips.isEmpty) return const SizedBox.shrink();
     if (chips.length == 1) return chips.single;
 
-    // Stretch keeps the three chips the same height even when one of them
-    // carries the partial-progress bar.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        for (int i = 0; i < chips.length; i++) ...<Widget>[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(child: chips[i]),
+    // Equal-height chips: the partial-progress bar makes one chip taller, and
+    // the row must still line up. IntrinsicHeight supplies the bounded height
+    // that `stretch` needs — without it the Row asks for infinite height inside
+    // the unbounded scroll list and the whole card collapses to blank space.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (int i = 0; i < chips.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: chips[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -750,7 +759,10 @@ class StepChips extends ConsumerWidget {
 }
 
 class _LoadError extends ConsumerWidget {
-  const _LoadError();
+  const _LoadError({this.error});
+
+  /// Debug-only detail, so a failing provider can never look like a blank tab.
+  final Object? error;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -773,6 +785,17 @@ class _LoadError extends ConsumerWidget {
             color: palette.mute,
           ),
         ),
+        if (kDebugMode && error != null) ...<Widget>[
+          const SizedBox(height: 8),
+          Text(
+            '$error',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: KTypography.smallSize,
+              color: palette.redtx,
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         KButton(
           label: l10n.todayRetry,

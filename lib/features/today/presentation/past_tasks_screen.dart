@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,7 +31,7 @@ class PastTasksScreen extends ConsumerWidget {
           ? const _PastTasksError()
           : _PastTasksBody(data: data, dayNumber: dayNumber),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (Object error, StackTrace stack) => const _PastTasksError(),
+      error: (Object error, StackTrace stack) => _PastTasksError(error: error),
     );
   }
 }
@@ -157,19 +158,43 @@ class _PastTasksBody extends ConsumerWidget {
 }
 
 class _PastTasksError extends StatelessWidget {
-  const _PastTasksError();
+  const _PastTasksError({this.error});
+
+  /// Debug-only detail, so a failing provider never looks like a blank page.
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.pastTasksTitle)),
       body: Center(
-        child: Text(
-          context.l10n.todayLoadError,
-          style: TextStyle(
-            fontFamily: KTypography.bodyFamily,
-            color: context.palette.mute,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              context.l10n.todayLoadError,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                color: context.palette.mute,
+              ),
+            ),
+            if (kDebugMode && error != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  '$error',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.smallSize,
+                    color: context.palette.redtx,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

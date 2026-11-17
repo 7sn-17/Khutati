@@ -71,6 +71,14 @@ class TemplateRepository {
     )..where((t) => t.dayNumber.equals(dayNumber))).getSingleOrNull();
   }
 
+  /// The scheduled breaks of one day, oldest first. Today reads breaks through
+  /// this instead of [dayBundle] so its task list has a single source.
+  Future<List<BreakRow>> breaksForDay(String dayId) {
+    return (_db.select(
+      _db.breaks,
+    )..where((t) => t.dayId.equals(dayId))).get();
+  }
+
   /// Loads a day, its tasks and their steps in one round trip.
   Future<DayBundle?> dayBundle(int dayNumber) async {
     final DayRow? day = await dayByNumber(dayNumber);

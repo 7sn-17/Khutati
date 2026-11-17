@@ -78,6 +78,20 @@ class KhutatiFormat {
     return '$left – ${twelveHour(end)} $endPart';
   }
 
+  /// [range] for values that come from data and may be malformed.
+  ///
+  /// The strict [range] throws on a bad clock string, which would tear down the
+  /// whole list that contains the card; this returns `null` instead so the
+  /// caller can fall back to a duration.
+  String? tryRange(String? start, String? end) {
+    if (start == null || end == null) return null;
+    try {
+      return range(start, end);
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// `135` -> `2 س 15 د`, `45` -> `45 د`, `120` -> `2 س`.
   String duration(int minutes) {
     final int h = minutes ~/ 60;

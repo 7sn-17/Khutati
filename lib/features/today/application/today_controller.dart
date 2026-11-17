@@ -194,30 +194,38 @@ Future<TodayData?> _buildToday(
 ) async {
   final ResolvedPlanDay resolved = calendar.resolveToday(now);
   final int dayNumber = resolved.dayNumber;
-  DayBundle? bundle = await template.dayBundle(dayNumber);
-  if (bundle == null) return null;
-  // Defensive fallback: if the per-day join returned no tasks (for example an
-  // upgraded database where the day's tasks live under a slightly different id),
-  // rebuild the day from the global task list so Today never renders empty.
-  if (bundle.tasks.isEmpty) {
-    final List<DayRow> allDays = await template.allDays();
-    final Set<String> dayIds = <String>{
-      for (final DayRow d in allDays)
-        if (d.dayNumber == dayNumber) d.id,
-    };
-    final List<TaskWithSteps> all = await template.allTasksWithSteps();
-    final List<TaskWithSteps> forDay = <TaskWithSteps>[
-      for (final TaskWithSteps item in all)
-        if (dayIds.contains(item.task.dayId)) item,
-    ];
-    if (forDay.isNotEmpty) {
-      bundle = DayBundle(
-        day: bundle!.day,
-        tasks: forDay,
-        breaks: bundle.breaks,
-      );
-    }
+
+  // One snapshot, exactly like the Plan tab: every day, every task with its
+  // steps, then a pure-Dart filter for the resolved day. No per-day SQL join
+  // is involved, so a stale, duplicated or re-keyed `days.id` can never blank
+  // the schedule and Today and Plan read the same rows by construction.
+  final List<DayRow> allDays = await template.allDays();
+  DayRow? todayDay;
+  final Set<String> dayIds = <String>{};
+  for (final DayRow day in allDays) {
+    if (day.dayNumber != dayNumber) continue;
+    todayDay ??= day;
+    dayIds.add(day.id);
   }
+  // Before the plan import there is no row for today; the screen shows the
+  // load-error state rather than an empty schedule.
+  if (todayDay == null) return null;
+
+  final List<TaskWithSteps> allTasks = await template.allTasksWithSteps();
+  final List<TaskWithSteps> dayTasks =
+      <TaskWithSteps>[
+        for (final TaskWithSteps item in allTasks)
+          if (dayIds.contains(item.task.dayId)) item,
+      ]..sort(
+        (TaskWithSteps a, TaskWithSteps b) =>
+            a.task.sortOrder.compareTo(b.task.sortOrder),
+      );
+
+  final List<BreakRow> breaks = <BreakRow>[];
+  for (final String dayId in dayIds) {
+    breaks.addAll(await template.breaksForDay(dayId));
+  }
+  breaks.sort((BreakRow a, BreakRow b) => a.startClock.compareTo(b.startClock));
 
   // Use the global (non-joined) reads, exactly like the Plan tab, so Today
   // and Plan never disagree on progress and an upgraded database cannot make
@@ -225,8 +233,7 @@ Future<TodayData?> _buildToday(
   final Set<String> allCompletedStepIds = await userState.allCompletedStepIds();
   final Map<String, StepProgress> allStepProgresses = await userState
       .allStepProgresses();
-  final Map<String, String> allTaskStatuses = await userState
-      .allTaskStatuses();
+  final Map<String, String> allTaskStatuses = await userState.allTaskStatuses();
   final List<SubjectRow> subjects = await template.allSubjects();
   final Map<String, String> subjectNames = <String, String>{
     for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
@@ -244,7 +251,7 @@ Future<TodayData?> _buildToday(
       .overdueBefore(dayNumber);
 
   final List<PlanTask> tasks = <PlanTask>[
-    for (final TaskWithSteps item in bundle.tasks)
+    for (final TaskWithSteps item in dayTasks)
       PlanTask(
         id: item.task.id,
         dayNumber: dayNumber,
@@ -278,7 +285,6 @@ Future<TodayData?> _buildToday(
       ),
   ];
 
-  final List<DayRow> allDays = await template.allDays();
   final Map<int, DayRow> dayByNumber = <int, DayRow>{
     for (final DayRow day in allDays) day.dayNumber: day,
   };
@@ -288,9 +294,9 @@ Future<TodayData?> _buildToday(
     window: resolved.window,
     dayNumber: dayNumber,
     date: resolved.date,
-    day: bundle.day,
+    day: todayDay,
     tasks: tasks,
-    breaks: bundle.breaks,
+    breaks: breaks,
     progress: progress,
     overdueTasks: overdue.tasks,
     overdueMinutes: overdue.minutes,
