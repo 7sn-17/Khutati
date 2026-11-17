@@ -213,6 +213,10 @@ class _EcgPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Strict bounds: never let the waveform escape its container.
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+
     // The SVG uses preserveAspectRatio="xMidYMid meet": uniform scale, centred.
     final double scale = math.min(
       size.width / KArtwork.ecgViewWidth,
@@ -222,15 +226,20 @@ class _EcgPainter extends CustomPainter {
     final double tileHeight = KArtwork.ecgViewHeight * scale;
     final double dy = (size.height - tileHeight) / 2;
 
-    // Seamless horizontal scroll: tile the waveform and translate by the pulse.
-    final double offset = -pulse * tileWidth;
+    // Organic, seamless scroll: a monotonically increasing position with a
+    // sine-modulated speed, so the wave breathes instead of sliding linearly.
+    // The pattern repeats every tile, so the reset at the period boundary is
+    // invisible.
+    final double position =
+        (pulse + 0.08 * math.sin(2 * math.pi * pulse)).clamp(0.0, 1.0);
+    final double offset = -position * tileWidth;
 
     final Paint trackPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = KArtwork.ecgStrokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = trackColor;
+      ..color = trackColor.withValues(alpha: 0.35);
 
     final Paint valuePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -239,9 +248,9 @@ class _EcgPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..color = valueColor;
 
-    // Draw enough tiles to cover the canvas plus one extra for the scroll.
     final int tileCount = (size.width / tileWidth).ceil() + 2;
 
+    // Track (faint, full waveform).
     canvas.save();
     canvas.translate(offset, dy);
     canvas.scale(scale);
@@ -253,7 +262,7 @@ class _EcgPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // Revealed portion (progress) scrolls with the wave, clipped to the left.
+    // Revealed (progress) waveform scrolls with it, clipped to the left.
     if (progress > 0) {
       canvas.save();
       canvas.clipRect(Rect.fromLTWH(0, 0, size.width * progress, size.height));
@@ -267,6 +276,8 @@ class _EcgPainter extends CustomPainter {
       }
       canvas.restore();
     }
+
+    canvas.restore(); // clipRect bounds
   }
 
   @override
