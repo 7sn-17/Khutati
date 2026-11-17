@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "proxied-server",
+  "dolt_database": "Khutati",
+  "project_id": "154d6d6c-1e95-4ce4-abb1-6fd8ca9844b1"
+}
