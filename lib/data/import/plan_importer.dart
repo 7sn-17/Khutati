@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/plan/plan_dataset.dart';
 import '../database/app_database.dart';
+import '../database/tables.dart';
 
 /// The stable id of the single built-in plan (PRD section 2, decision 4).
 const String kPlanId = 'medx-68';

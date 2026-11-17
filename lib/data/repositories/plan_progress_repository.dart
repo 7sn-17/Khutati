@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../domain/plan/plan_progress.dart';
 import '../database/app_database.dart';
+import '../database/tables.dart';
 import 'template_repository.dart';
 
 /// Bridges Drift rows to the pure progress engine.

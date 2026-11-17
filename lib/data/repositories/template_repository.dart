@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../database/app_database.dart';
+import '../database/tables.dart';
 
 /// A task with its ordered steps, ready for the hybrid task list (PRD 5.4).
 class TaskWithSteps {
