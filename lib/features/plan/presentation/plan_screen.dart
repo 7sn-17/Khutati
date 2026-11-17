@@ -1355,7 +1355,7 @@ class _TaskLine extends ConsumerWidget {
               size: 18,
               color: task.isComplete ? palette.ok : palette.mute,
             ),
-          );
+          ),
         ],
       ),
     );
