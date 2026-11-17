@@ -60,6 +60,25 @@ class UserStateRepository {
     };
   }
 
+  /// All completed step ids, for read models that render the whole plan at
+  /// once (the Plan tab). Today scopes this per day instead.
+  Future<Set<String>> allCompletedStepIds() async {
+    final List<UserStepStateRow> rows = await (_db.select(
+      _db.userStepStates,
+    )..where((UserStepStates t) => t.completed.equals(true))).get();
+    return <String>{for (final UserStepStateRow row in rows) row.stepId};
+  }
+
+  /// Explicit task statuses for the whole plan, keyed by task id.
+  Future<Map<String, String>> allTaskStatuses() async {
+    final List<UserTaskStateRow> rows = await _db
+        .select(_db.userTaskStates)
+        .get();
+    return <String, String>{
+      for (final UserTaskStateRow row in rows) row.taskId: row.status,
+    };
+  }
+
   Future<void> setTaskStatus(String taskId, String status, {DateTime? at}) {
     final DateTime now = at ?? DateTime.now();
     return _db

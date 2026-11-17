@@ -114,6 +114,42 @@ class TemplateRepository {
     );
   }
 
+  /// Every task and its ordered steps in one query. The Plan tab groups these
+  /// by day so browsing 68 days never turns into 68 round trips.
+  Future<List<TaskWithSteps>> allTasksWithSteps() async {
+    final query = _db.select(_db.tasks).join(<Join<HasResultSet, dynamic>>[
+      innerJoin(_db.steps, _db.steps.taskId.equalsExp(_db.tasks.id)),
+    ]);
+    query.orderBy(<OrderingTerm>[
+      OrderingTerm.asc(_db.tasks.sortOrder),
+      OrderingTerm.asc(_db.steps.sortOrder),
+    ]);
+
+    final List<TypedResult> rows = await query.get();
+    final Map<String, TaskRow> tasksById = <String, TaskRow>{};
+    final Map<String, List<StepRow>> stepsByTask = <String, List<StepRow>>{};
+
+    for (final TypedResult row in rows) {
+      final TaskRow task = row.readTable(_db.tasks);
+      final StepRow step = row.readTable(_db.steps);
+      tasksById[task.id] = task;
+      stepsByTask.putIfAbsent(task.id, () => <StepRow>[]).add(step);
+    }
+
+    final List<TaskWithSteps> tasks = <TaskWithSteps>[
+      for (final TaskRow task in tasksById.values)
+        TaskWithSteps(
+          task: task,
+          steps: stepsByTask[task.id] ?? const <StepRow>[],
+        ),
+    ];
+    tasks.sort(
+      (TaskWithSteps a, TaskWithSteps b) =>
+          a.task.sortOrder.compareTo(b.task.sortOrder),
+    );
+    return tasks;
+  }
+
   /// Planned totals per bucket, used to reconcile the template to the PDF.
   Future<({int attendance, int study, int questions})> plannedTotals() async {
     final List<TaskRow> tasks = await _db.select(_db.tasks).get();
