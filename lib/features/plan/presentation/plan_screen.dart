@@ -1318,20 +1318,6 @@ class _TaskLine extends ConsumerWidget {
                       color: palette.mute,
                     ),
                   ),
-                if (task.isComplete)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      l10n.planLineComplete,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: 9,
-                        color: palette.ok,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1348,8 +1334,6 @@ class _TaskLine extends ConsumerWidget {
           _taskProgressRing(context, task),
           PopupMenuButton<PlanTaskStatus>(
             tooltip: l10n.planTaskStatusTooltip,
-            padding: EdgeInsets.zero,
-            splashRadius: 16,
             onSelected: (PlanTaskStatus status) async {
               ref.read(hapticsProvider).selection();
               await ref.read(planActionsProvider).setTaskStatus(task.id, status);
