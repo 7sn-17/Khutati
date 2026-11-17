@@ -45,7 +45,16 @@ class SettingsScreen extends ConsumerWidget {
         KMetrics.appPaddingBottom,
       ),
       children: <Widget>[
-        KAppTitle(text: l10n.settingsTitle),
+        Text(
+          l10n.settingsTitle,
+          style: TextStyle(
+            fontFamily: KTypography.displayFamily,
+            fontSize: KTypography.heroTitleSize,
+            fontWeight: FontWeight.w700,
+            height: KTypography.heroTitleHeight,
+            color: palette.tx,
+          ),
+        ),
         KSectionHeader(title: l10n.settingsAppearance),
         _SettingsCard(
           child: Column(
@@ -299,7 +308,7 @@ class _AboutModalContent extends ConsumerWidget {
                   l10n.appName,
                   style: TextStyle(
                     fontFamily: KTypography.displayFamily,
-                    fontSize: KTypography.subheadSize,
+                    fontSize: KTypography.h2Size,
                     fontWeight: FontWeight.w700,
                     color: palette.tx,
                   ),

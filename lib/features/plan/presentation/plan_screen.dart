@@ -1360,7 +1360,7 @@ class _TaskLine extends ConsumerWidget {
                       child: Text(_planTaskStatusLabel(l10n, status)),
                     ),
                 ],
-            child: Icon(
+            icon: Icon(
               _taskStatusIcon(task),
               size: 18,
               color: task.isComplete ? palette.ok : palette.mute,
