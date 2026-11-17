@@ -138,7 +138,7 @@ void main() {
     expect(tester.getSize(find.byType(KEcgLine)).height, KMetrics.ecgHeight);
 
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
   });
 
