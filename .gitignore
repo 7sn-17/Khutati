@@ -17,6 +17,9 @@ build/
 .idea/
 .vscode/
 coverage/
+# Drift/codegen output is generated in CI (dart run build_runner build)
+*.g.dart
+*.freezed.dart
 *.log
 
 # Android

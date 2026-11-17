@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Generate Drift code
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Design tokens are in sync with the HTML prototype
         run: node tools/extract_tokens.mjs --check
 
@@ -70,6 +73,8 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - name: Generate Drift code
+        run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter build apk --debug
 
       - name: Upload debug APK
@@ -100,6 +105,9 @@ jobs:
           cache: true
 
       - run: flutter pub get
+
+      - name: Generate Drift code
+        run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Configure release signing
         env:
