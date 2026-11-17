@@ -1175,18 +1175,26 @@ class _TinySubject extends StatelessWidget {
 }
 
 /// The ring mirrors the same fraction Today shows, so a partial step is
-/// visibly half-done in both tabs. It only appears once work has started.
+/// visibly half-done in both tabs. It only appears once work has started, and
+/// it carries its own trailing gap so the row keeps its spacing either way.
 Widget _taskProgressRing(BuildContext context, PlanTask task) {
+  if (task.isComplete || task.fraction <= 0) return const SizedBox.shrink();
   final KhutatiPalette palette = context.palette;
-  return SizedBox(
-    width: 16,
-    height: 16,
-    child: CircularProgressIndicator(
-      value: task.fraction,
-      strokeWidth: 2,
-      color: palette.gold,
-      backgroundColor: palette.line,
-    ),
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(
+          value: task.fraction,
+          strokeWidth: 2,
+          color: palette.gold,
+          backgroundColor: palette.line,
+        ),
+      ),
+      const SizedBox(width: 8),
+    ],
   );
 }
 
@@ -1337,9 +1345,7 @@ class _TaskLine extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          if (!task.isComplete && task.fraction > 0)
-            _taskProgressRing(context, task),
-          const SizedBox(width: 8),
+          _taskProgressRing(context, task),
           PopupMenuButton<PlanTaskStatus>(
             tooltip: l10n.planTaskStatusTooltip,
             padding: EdgeInsets.zero,
@@ -1360,7 +1366,7 @@ class _TaskLine extends ConsumerWidget {
                       child: Text(_planTaskStatusLabel(l10n, status)),
                     ),
                 ],
-            icon: Icon(
+            child: Icon(
               _taskStatusIcon(task),
               size: 18,
               color: task.isComplete ? palette.ok : palette.mute,
