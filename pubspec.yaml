@@ -1,7 +1,7 @@
 name: khutati
 description: "خطتي — an Arabic-first, offline-first study plan app for the 68-day Professor MedX plan."
 publish_to: "none"
-version: 0.2.2+4
+version: 0.2.3+5
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -57,6 +57,8 @@ flutter:
   assets:
     # Plan template. The only source of plan content in the app (PRD section 3.1).
     - khutati_plan_data.json
+    # Official launcher icon, shown in the About modal.
+    - assets/app_icon.png
 
   # Declared fonts are registered before the first frame, so the Arabic faces
   # never fall back to the platform default (and never touch the network).

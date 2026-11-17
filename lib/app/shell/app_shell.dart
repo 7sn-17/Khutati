@@ -66,11 +66,13 @@ class AppShell extends ConsumerWidget {
                           final int index = navigationShell.currentIndex;
                           return Stack(
                             children: <Widget>[
-                              // Springy sliding selection pill behind the tabs.
-                              AnimatedPositioned(
-                                duration: const Duration(milliseconds: 360),
+                              // Springy sliding selection pill behind the tabs. Uses the
+                              // directional variant so the highlight follows the tapped tab
+                              // exactly under RTL (Arabic) layouts.
+                              AnimatedPositionedDirectional(
+                                duration: const Duration(milliseconds: 220),
                                 curve: Curves.easeOutBack,
-                                left: index * slotWidth,
+                                start: index * slotWidth,
                                 top: 0,
                                 bottom: 0,
                                 width: slotWidth,

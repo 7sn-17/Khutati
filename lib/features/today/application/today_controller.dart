@@ -219,14 +219,14 @@ Future<TodayData?> _buildToday(
     }
   }
 
-  final Set<String> completedStepIds = await userState.completedStepIdsForDay(
-    bundle.day.id,
-  );
-  final Map<String, StepProgress> stepProgresses = await userState
-      .stepProgressForDay(bundle.day.id);
-  final Map<String, String> taskStatuses = await userState.taskStatusesForDay(
-    bundle.day.id,
-  );
+  // Use the global (non-joined) reads, exactly like the Plan tab, so Today
+  // and Plan never disagree on progress and an upgraded database cannot make
+  // the per-day joins come back empty. State is then filtered by step id below.
+  final Set<String> allCompletedStepIds = await userState.allCompletedStepIds();
+  final Map<String, StepProgress> allStepProgresses = await userState
+      .allStepProgresses();
+  final Map<String, String> allTaskStatuses = await userState
+      .allTaskStatuses();
   final List<SubjectRow> subjects = await template.allSubjects();
   final Map<String, String> subjectNames = <String, String>{
     for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
@@ -256,7 +256,7 @@ Future<TodayData?> _buildToday(
         suggestedStart: item.task.suggestedStart,
         suggestedEnd: item.task.suggestedEnd,
         status:
-            PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
+            PlanTaskStatus.tryParse(allTaskStatuses[item.task.id]) ??
             PlanTaskStatus.notStarted,
         steps: <PlanStep>[
           for (final StepRow step in item.steps)
@@ -265,12 +265,12 @@ Future<TodayData?> _buildToday(
               kind: step.kind,
               minutes: step.minutes,
               order: step.sortOrder,
-              completed: completedStepIds.contains(step.id),
+              completed: allCompletedStepIds.contains(step.id),
               suggestedStart: step.suggestedStart,
               suggestedEnd: step.suggestedEnd,
               progress:
-                  stepProgresses[step.id] ??
-                  (completedStepIds.contains(step.id)
+                  allStepProgresses[step.id] ??
+                  (allCompletedStepIds.contains(step.id)
                       ? StepProgress.completed
                       : StepProgress.notStarted),
             ),

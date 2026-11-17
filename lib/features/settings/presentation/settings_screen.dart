@@ -119,58 +119,78 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
-        KSectionHeader(title: l10n.settingsData),
-        _SettingsCard(
-          child: Column(
-            children: <Widget>[
-              _SettingsActionRow(
-                title: l10n.settingsBackupExport,
-                icon: Icons.upload_file_outlined,
-                badge: l10n.settingsComingSoon,
-              ),
-              const SizedBox(height: 8),
-              _SettingsActionRow(
-                title: l10n.settingsBackupImport,
-                icon: Icons.download_outlined,
-                badge: l10n.settingsComingSoon,
-              ),
-              const SizedBox(height: 6),
-              _SettingsHint(text: l10n.settingsBackupHint),
-            ],
-          ),
-        ),
-        KSectionHeader(title: l10n.settingsAccount),
-        _SettingsCard(
-          child: Column(
-            children: <Widget>[
-              _SettingsActionRow(
-                title: l10n.settingsSignIn,
-                icon: Icons.login,
-                badge: l10n.settingsComingSoon,
-              ),
-              const SizedBox(height: 6),
-              _SettingsHint(text: l10n.settingsAccountHint),
-            ],
-          ),
-        ),
         KSectionHeader(title: l10n.settingsUpdates),
         _SettingsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              _SettingsActionRow(
-                title: l10n.settingsInstalledVersion,
-                icon: Icons.phone_android,
-                trailing: Text(
-                  AppInfo.versionLabel,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.muteSize,
-                    fontWeight: FontWeight.w500,
-                    color: palette.gold,
+              Row(
+                children: <Widget>[
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: palette.gold.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.system_update_alt_rounded,
+                      size: 20,
+                      color: palette.gold,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          l10n.settingsInstalledVersion,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.bodySize,
+                            fontWeight: FontWeight.w500,
+                            color: palette.tx,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          AppInfo.versionLabel,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.smallSize,
+                            color: palette.mute,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.gold.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(KMetrics.pillRadius),
+                      border: Border.all(color: palette.gold.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      AppInfo.versionName,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.smallSize,
+                        fontWeight: FontWeight.w600,
+                        color: palette.gold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: palette.line),
+              const SizedBox(height: 12),
               const _UpdatePanel(),
             ],
           ),
@@ -293,25 +313,14 @@ class _AboutModalContent extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
           child: Row(
             children: <Widget>[
-              // Official app mark: a rounded square carrying the first letter
-              // of "خطتي" in the brand gold, matching the launcher icon.
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: palette.gold,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'خ',
-                  style: TextStyle(
-                    fontFamily: KTypography.displayFamily,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    height: 1,
-                  ),
+              // Official launcher icon asset.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(width: 14),
