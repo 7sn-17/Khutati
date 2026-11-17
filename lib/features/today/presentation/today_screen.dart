@@ -303,25 +303,37 @@ class _Quote extends StatelessWidget {
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: KMetrics.quotePaddingX,
-        vertical: KMetrics.quotePaddingY,
-      ),
-      decoration: BoxDecoration(
-        color: palette.card2,
-        borderRadius: BorderRadius.circular(KMetrics.quoteRadius),
-        border: BorderDirectional(
-          start: BorderSide(color: palette.gold, width: 3),
-        ),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: KTypography.bodyFamily,
-          fontSize: KTypography.quoteSize,
-          color: palette.tx,
-        ),
+    final BorderRadius borderRadius =
+        BorderRadius.circular(KMetrics.quoteRadius);
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: Stack(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: KMetrics.quotePaddingX,
+              vertical: KMetrics.quotePaddingY,
+            ),
+            decoration: BoxDecoration(
+              color: palette.card2,
+              borderRadius: borderRadius,
+            ),
+            child: Text(
+              text,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.quoteSize,
+                color: palette.tx,
+              ),
+            ),
+          ),
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 3, color: palette.gold),
+          ),
+        ],
       ),
     );
   }

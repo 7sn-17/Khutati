@@ -4,7 +4,7 @@
 /// manifest agree. `tools/check_version.mjs` guards it against `pubspec.yaml`.
 abstract final class AppInfo {
   static const String versionName = '0.2.4';
-  static const int buildNumber = 6;
+  static const int buildNumber = 7;
 
   static const String versionLabel = '$versionName ($buildNumber)';
   static String get tag => 'v$versionName';

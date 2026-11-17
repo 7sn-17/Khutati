@@ -35,11 +35,7 @@ class KCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: borderRadius,
-        border: accentColor != null
-            ? BorderDirectional(
-                start: BorderSide(color: accentColor!, width: KMetrics.timelineAccentWidth),
-              )
-            : Border.all(color: borderColor ?? palette.line),
+        border: Border.all(color: borderColor ?? palette.line),
       ),
       child: ClipRRect(
         borderRadius: borderRadius,
@@ -52,6 +48,16 @@ class KCard extends StatelessWidget {
                 ),
               ),
             Padding(padding: padding, child: child),
+            if (accentColor != null)
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  width: KMetrics.timelineAccentWidth,
+                  color: accentColor,
+                ),
+              ),
           ],
         ),
       ),
