@@ -11,7 +11,7 @@ part 'app_database.g.dart';
 /// pipeline. User tables hold progress, overrides, additions, sessions, notes
 /// and settings. Keeping them apart is what makes "restore to default" safe.
 @DriftDatabase(
-  tables: <Type>[
+  tables: [
     Plans,
     Subjects,
     Chapters,

@@ -142,6 +142,7 @@ class _KConfettiState extends State<KConfetti> with SingleTickerProviderStateMix
           animation: _controller,
           builder: (BuildContext context, Widget? child) {
             return CustomPaint(
+              size: Size.infinite,
               painter: _ConfettiPainter(
                 pieces: _pieces,
                 progress: _controller.value,

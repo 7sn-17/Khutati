@@ -19,7 +19,7 @@ class Plans extends Table {
   IntColumn get totalPlannedMinutes => integer()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('SubjectRow')
@@ -39,7 +39,7 @@ class Subjects extends Table {
   IntColumn get courseMinutes => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('ChapterRow')
@@ -50,7 +50,7 @@ class Chapters extends Table {
   IntColumn get sortOrder => integer()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('LessonRow')
@@ -66,7 +66,7 @@ class Lessons extends Table {
   IntColumn get studyMinutes => integer()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('DayRow')
@@ -84,7 +84,7 @@ class Days extends Table {
   TextColumn get note => text().nullable()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('TaskRow')
@@ -110,7 +110,7 @@ class Tasks extends Table {
   IntColumn get questionMinutes => integer().withDefault(const Constant(0))();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('StepRow')
@@ -126,7 +126,7 @@ class Steps extends Table {
   IntColumn get sortOrder => integer()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 @DataClassName('BreakRow')
@@ -143,7 +143,7 @@ class Breaks extends Table {
   TextColumn get label => text().nullable()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+  Set<Column> get primaryKey => <Column>{id};
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ class UserTaskStates extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{taskId};
+  Set<Column> get primaryKey => <Column>{taskId};
 }
 
 @DataClassName('UserStepStateRow')
@@ -170,7 +170,7 @@ class UserStepStates extends Table {
   DateTimeColumn get completedAt => dateTime().nullable()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{stepId};
+  Set<Column> get primaryKey => <Column>{stepId};
 }
 
 @DataClassName('UserOverrideRow')
@@ -228,7 +228,7 @@ class ReviewFlags extends Table {
   DateTimeColumn get flaggedAt => dateTime()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{taskId};
+  Set<Column> get primaryKey => <Column>{taskId};
 }
 
 @DataClassName('SettingRow')
@@ -237,5 +237,5 @@ class AppSettings extends Table {
   TextColumn get value => text()();
 
   @override
-  Set<Column<Object>> get primaryKey => <Column<Object>>{key};
+  Set<Column> get primaryKey => <Column>{key};
 }
