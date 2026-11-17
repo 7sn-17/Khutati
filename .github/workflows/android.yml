@@ -152,7 +152,7 @@ jobs:
           set -euo pipefail
           test -s release_notes/ar.txt \
             || { echo "::error::release_notes/ar.txt is missing or empty."; exit 1; }
-          grep -q '[أ-ي]' release_notes/ar.txt \
+          grep -qP '[\x{0600}-\x{06FF}]' release_notes/ar.txt \
             || { echo "::error::release notes must be written in Arabic."; exit 1; }
           echo "Arabic release notes: $(wc -l < release_notes/ar.txt) lines"
 
