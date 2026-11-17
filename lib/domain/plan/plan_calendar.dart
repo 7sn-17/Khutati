@@ -8,8 +8,8 @@ enum PlanDayStatus { completed, current, overdue, upcoming, rest }
 /// the PDF can never disagree.
 class PlanCalendar {
   PlanCalendar({required DateTime startDate, required this.totalDays})
-      : assert(totalDays > 0),
-        startDate = DateTime(startDate.year, startDate.month, startDate.day);
+    : assert(totalDays > 0),
+      startDate = DateTime(startDate.year, startDate.month, startDate.day);
 
   final DateTime startDate;
   final int totalDays;
@@ -22,15 +22,22 @@ class PlanCalendar {
     }
     // Constructor arithmetic (not Duration) keeps the calendar day stable
     // across DST transitions.
-    return DateTime(startDate.year, startDate.month, startDate.day + dayNumber - 1);
+    return DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day + dayNumber - 1,
+    );
   }
 
   DateTime get endDate => dateOfDay(totalDays);
 
   /// 1-based plan day for [date], or `null` when the date is outside the plan.
   int? dayNumberFor(DateTime date) {
-    final DateTime a =
-        DateTime.utc(startDate.year, startDate.month, startDate.day);
+    final DateTime a = DateTime.utc(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+    );
     final DateTime b = DateTime.utc(date.year, date.month, date.day);
     final int index = b.difference(a).inDays + 1;
     if (index < 1 || index > totalDays) return null;
@@ -100,7 +107,11 @@ class PlanCalendar {
 
     final DateTime today = now ?? DateTime.now();
     final DateTime date = dateOfDay(dayNumber);
-    final DateTime normalisedToday = DateTime(today.year, today.month, today.day);
+    final DateTime normalisedToday = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    );
 
     if (date.isBefore(normalisedToday)) return PlanDayStatus.overdue;
     if (date.isAtSameMomentAs(normalisedToday)) return PlanDayStatus.current;

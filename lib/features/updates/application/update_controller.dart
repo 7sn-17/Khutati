@@ -76,8 +76,9 @@ class UpdateController extends Notifier<UpdateState> {
 
   bool _isRecent(int? milliseconds, Duration window) {
     if (milliseconds == null) return false;
-    final Duration age = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(milliseconds));
+    final Duration age = DateTime.now().difference(
+      DateTime.fromMillisecondsSinceEpoch(milliseconds),
+    );
     return age >= Duration.zero && age < window;
   }
 
@@ -88,10 +89,12 @@ class UpdateController extends Notifier<UpdateState> {
     state = state.copyWith(status: UpdateStatus.checking, clearError: true);
 
     try {
-      final UpdateCheck? result =
-          await ref.read(updateRepositoryProvider).check();
+      final UpdateCheck? result = await ref
+          .read(updateRepositoryProvider)
+          .check();
       final DateTime now = DateTime.now();
-      final AppVersion installed = AppVersion.tryParse(AppInfo.versionName) ??
+      final AppVersion installed =
+          AppVersion.tryParse(AppInfo.versionName) ??
           const AppVersion(major: 0, minor: 0, patch: 0);
 
       if (result == null || !result.manifest.isNewerThan(installed)) {
@@ -127,10 +130,9 @@ class UpdateController extends Notifier<UpdateState> {
         status: UpdateStatus.failed,
         error: error.toString(),
       );
-      await ref.read(sharedPreferencesProvider).setInt(
-            lastAttemptKey,
-            DateTime.now().millisecondsSinceEpoch,
-          );
+      await ref
+          .read(sharedPreferencesProvider)
+          .setInt(lastAttemptKey, DateTime.now().millisecondsSinceEpoch);
     }
   }
 
@@ -164,7 +166,9 @@ class UpdateController extends Notifier<UpdateState> {
   }
 }
 
-final Provider<http.Client> updateHttpClientProvider = Provider<http.Client>((Ref ref) {
+final Provider<http.Client> updateHttpClientProvider = Provider<http.Client>((
+  Ref ref,
+) {
   final http.Client client = http.Client();
   ref.onDispose(client.close);
   return client;
@@ -172,8 +176,8 @@ final Provider<http.Client> updateHttpClientProvider = Provider<http.Client>((Re
 
 final Provider<UpdateRepository> updateRepositoryProvider =
     Provider<UpdateRepository>((Ref ref) {
-  return UpdateRepository(ref.watch(updateHttpClientProvider));
-});
+      return UpdateRepository(ref.watch(updateHttpClientProvider));
+    });
 
 final NotifierProvider<UpdateController, UpdateState> updateControllerProvider =
     NotifierProvider<UpdateController, UpdateState>(UpdateController.new);

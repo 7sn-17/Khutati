@@ -42,11 +42,14 @@ class ProgressTaskInput {
   /// every step as done without rewriting the user's step rows.
   final bool completed;
 
-  int get plannedMinutes =>
-      steps.fold<int>(0, (int sum, ProgressStepInput step) => sum + step.minutes);
+  int get plannedMinutes => steps.fold<int>(
+    0,
+    (int sum, ProgressStepInput step) => sum + step.minutes,
+  );
 
   bool get isComplete =>
-      completed || (steps.isNotEmpty && steps.every((ProgressStepInput s) => s.completed));
+      completed ||
+      (steps.isNotEmpty && steps.every((ProgressStepInput s) => s.completed));
 }
 
 /// Immutable snapshot of progress for a day, a subject or the whole plan.
@@ -140,10 +143,18 @@ class PlanProgress {
       plannedSteps += part.plannedSteps;
       completedSteps += part.completedSteps;
       part.plannedMinutesByKind.forEach((String kind, int minutes) {
-        plannedByKind.update(kind, (int v) => v + minutes, ifAbsent: () => minutes);
+        plannedByKind.update(
+          kind,
+          (int v) => v + minutes,
+          ifAbsent: () => minutes,
+        );
       });
       part.completedMinutesByKind.forEach((String kind, int minutes) {
-        completedByKind.update(kind, (int v) => v + minutes, ifAbsent: () => minutes);
+        completedByKind.update(
+          kind,
+          (int v) => v + minutes,
+          ifAbsent: () => minutes,
+        );
       });
     }
 

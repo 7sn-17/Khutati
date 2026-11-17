@@ -16,20 +16,22 @@ class UpdateRepository {
     String? supabaseAnonKey,
     String githubRepo = defaultGithubRepo,
     Duration timeout = const Duration(seconds: 8),
-  })  : _supabaseUrl = supabaseUrl ?? _envSupabaseUrl,
-        _supabaseAnonKey = supabaseAnonKey ?? _envSupabaseAnonKey,
-        _githubRepo = githubRepo,
-        _timeout = timeout;
+  }) : _supabaseUrl = supabaseUrl ?? _envSupabaseUrl,
+       _supabaseAnonKey = supabaseAnonKey ?? _envSupabaseAnonKey,
+       _githubRepo = githubRepo,
+       _timeout = timeout;
 
   static const String defaultGithubRepo = '7sn-17/Khutati';
   static const String channel = 'stable';
 
   // Supplied through --dart-define in CI once the Supabase project exists.
   // Without them the GitHub fallback is used directly.
-  static const String _envSupabaseUrl =
-      String.fromEnvironment('KHUTATI_SUPABASE_URL');
-  static const String _envSupabaseAnonKey =
-      String.fromEnvironment('KHUTATI_SUPABASE_ANON_KEY');
+  static const String _envSupabaseUrl = String.fromEnvironment(
+    'KHUTATI_SUPABASE_URL',
+  );
+  static const String _envSupabaseAnonKey = String.fromEnvironment(
+    'KHUTATI_SUPABASE_ANON_KEY',
+  );
 
   final http.Client _client;
   final String _supabaseUrl;
@@ -75,7 +77,10 @@ class UpdateRepository {
     throw UpdateException(problems.join(' · '));
   }
 
-  static bool _isNewerManifest(UpdateManifest candidate, UpdateManifest current) {
+  static bool _isNewerManifest(
+    UpdateManifest candidate,
+    UpdateManifest current,
+  ) {
     final AppVersion? next = candidate.version;
     final AppVersion? installed = current.version;
     if (next == null) return false;
@@ -84,9 +89,12 @@ class UpdateRepository {
     final int semantic = next.withoutBuild.compareTo(installed.withoutBuild);
     if (semantic != 0) return semantic > 0;
 
-    final int nextBuild = candidate.versionCode > 0 ? candidate.versionCode : next.build;
-    final int currentBuild =
-        current.versionCode > 0 ? current.versionCode : installed.build;
+    final int nextBuild = candidate.versionCode > 0
+        ? candidate.versionCode
+        : next.build;
+    final int currentBuild = current.versionCode > 0
+        ? current.versionCode
+        : installed.build;
     return nextBuild > currentBuild;
   }
 
@@ -114,8 +122,7 @@ class UpdateRepository {
     final List<Map<String, dynamic>> rows = listOfMaps(decoded);
     if (rows.isEmpty) return null;
 
-    final UpdateManifest manifest =
-        UpdateManifest.fromSupabaseRow(rows.first);
+    final UpdateManifest manifest = UpdateManifest.fromSupabaseRow(rows.first);
     _requireHttps(manifest.apkUrl, 'Supabase');
     return manifest;
   }
@@ -155,8 +162,7 @@ class UpdateRepository {
       if (apkUrl == null && manifestUrl == null) continue;
 
       UpdateManifest? candidate;
-      if (manifestUrl != null &&
-          Uri.tryParse(manifestUrl)?.scheme == 'https') {
+      if (manifestUrl != null && Uri.tryParse(manifestUrl)?.scheme == 'https') {
         try {
           final Object? raw = await _getJson(Uri.parse(manifestUrl));
           if (raw is Map<String, dynamic>) {
@@ -192,16 +198,12 @@ class UpdateRepository {
     return best;
   }
 
-  Future<Object?> _getJson(
-    Uri uri, {
-    Map<String, String>? headers,
-  }) async {
-    final http.Response response =
-        await _client.get(uri, headers: headers).timeout(_timeout);
+  Future<Object?> _getJson(Uri uri, {Map<String, String>? headers}) async {
+    final http.Response response = await _client
+        .get(uri, headers: headers)
+        .timeout(_timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw UpdateException(
-        'HTTP ${response.statusCode} from ${uri.host}',
-      );
+      throw UpdateException('HTTP ${response.statusCode} from ${uri.host}');
     }
     return jsonDecode(response.body);
   }

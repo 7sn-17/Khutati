@@ -25,9 +25,7 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((Duration _) {
       if (mounted) {
-        unawaited(
-          ref.read(updateControllerProvider.notifier).maybeCheck(),
-        );
+        unawaited(ref.read(updateControllerProvider.notifier).maybeCheck());
       }
     });
   }

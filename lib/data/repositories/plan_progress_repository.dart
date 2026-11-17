@@ -21,7 +21,9 @@ class PlanProgressRepository {
 
     final _LoadedPlan plan = await _load();
     return PlanProgress.of(
-      plan.tasks.where((TaskRow task) => task.dayId == day.id).map(plan.inputFor),
+      plan.tasks
+          .where((TaskRow task) => task.dayId == day.id)
+          .map(plan.inputFor),
     );
   }
 
@@ -47,14 +49,14 @@ class PlanProgressRepository {
 
   /// Completed step ids for one task, used by the expandable task cards.
   Future<Set<String>> completedStepsForTask(String taskId) async {
-    final List<UserStepStateRow> states = await (_db.select(_db.userStepStates)
-          ..where((UserStepStates t) => t.completed.equals(true)))
-        .get();
+    final List<UserStepStateRow> states = await (_db.select(
+      _db.userStepStates,
+    )..where((UserStepStates t) => t.completed.equals(true))).get();
     if (states.isEmpty) return <String>{};
 
-    final List<StepRow> steps = await (_db.select(_db.steps)
-          ..where((Steps t) => t.taskId.equals(taskId)))
-        .get();
+    final List<StepRow> steps = await (_db.select(
+      _db.steps,
+    )..where((Steps t) => t.taskId.equals(taskId))).get();
     final Set<String> stepIds = <String>{
       for (final StepRow step in steps) step.id,
     };
@@ -76,10 +78,12 @@ class PlanProgressRepository {
       steps.putIfAbsent(step.taskId, () => <StepRow>[]).add(step);
     }
 
-    final List<UserStepStateRow> stepStates =
-        await _db.select(_db.userStepStates).get();
-    final List<UserTaskStateRow> taskStates =
-        await _db.select(_db.userTaskStates).get();
+    final List<UserStepStateRow> stepStates = await _db
+        .select(_db.userStepStates)
+        .get();
+    final List<UserTaskStateRow> taskStates = await _db
+        .select(_db.userTaskStates)
+        .get();
 
     return _LoadedPlan(
       tasks: tasks.values.toList(growable: false),
@@ -119,7 +123,9 @@ class _LoadedPlan {
               id: '${task.id}-total',
               kind: ProgressStepKinds.study,
               minutes:
-                  task.attendanceMinutes + task.studyMinutes + task.questionMinutes,
+                  task.attendanceMinutes +
+                  task.studyMinutes +
+                  task.questionMinutes,
               completed: false,
             ),
           ]

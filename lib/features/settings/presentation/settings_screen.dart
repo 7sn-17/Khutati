@@ -82,22 +82,30 @@ class SettingsScreen extends ConsumerWidget {
               _ToggleRow(
                 title: l10n.settingsNotifTasks,
                 value: prefs.tasks,
-                onChanged: ref.read(notificationPrefsProvider.notifier).setTasks,
+                onChanged: ref
+                    .read(notificationPrefsProvider.notifier)
+                    .setTasks,
               ),
               _ToggleRow(
                 title: l10n.settingsNotifDaily,
                 value: prefs.daily,
-                onChanged: ref.read(notificationPrefsProvider.notifier).setDaily,
+                onChanged: ref
+                    .read(notificationPrefsProvider.notifier)
+                    .setDaily,
               ),
               _ToggleRow(
                 title: l10n.settingsNotifReview,
                 value: prefs.review,
-                onChanged: ref.read(notificationPrefsProvider.notifier).setReview,
+                onChanged: ref
+                    .read(notificationPrefsProvider.notifier)
+                    .setReview,
               ),
               _ToggleRow(
                 title: l10n.settingsNotifTimer,
                 value: prefs.timer,
-                onChanged: ref.read(notificationPrefsProvider.notifier).setTimer,
+                onChanged: ref
+                    .read(notificationPrefsProvider.notifier)
+                    .setTimer,
               ),
               const SizedBox(height: 6),
               _Hint(text: l10n.settingsNotificationsHint),
@@ -193,10 +201,7 @@ class _UpdatePanel extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (state.isChecking)
-          _StatusLine(
-            text: l10n.updateChecking,
-            spinner: true,
-          )
+          _StatusLine(text: l10n.updateChecking, spinner: true)
         else if (state.hasUpdate && manifest != null)
           _AvailableUpdate(manifest: manifest, source: state.source)
         else if (state.status == UpdateStatus.failed)
@@ -407,9 +412,9 @@ class _AvailableUpdate extends ConsumerWidget {
         .openDownload(manifest);
     if (!context.mounted) return;
     if (!opened) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.updateLaunchFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.updateLaunchFailed)));
     }
   }
 }
@@ -492,7 +497,9 @@ class _ThemeOption extends StatelessWidget {
             child: AnimatedContainer(
               duration: Duration(milliseconds: KMotion.navMs),
               curve: Curves.easeOut,
-              constraints: const BoxConstraints(minHeight: KMetrics.buttonMinHeight),
+              constraints: const BoxConstraints(
+                minHeight: KMetrics.buttonMinHeight,
+              ),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected ? palette.tx : Colors.transparent,
@@ -545,11 +552,7 @@ class _ToggleRow extends StatelessWidget {
               ),
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: palette.ok,
-          ),
+          Switch(value: value, onChanged: onChanged, activeColor: palette.ok),
         ],
       ),
     );

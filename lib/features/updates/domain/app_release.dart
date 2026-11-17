@@ -30,8 +30,7 @@ class AppVersion implements Comparable<AppVersion> {
   /// Android versionCode when known; 0 otherwise.
   final int build;
 
-  static final RegExp _pattern =
-      RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?');
+  static final RegExp _pattern = RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?');
 
   static AppVersion? tryParse(String raw) {
     final RegExpMatch? match = _pattern.firstMatch(raw.trim());
@@ -44,7 +43,8 @@ class AppVersion implements Comparable<AppVersion> {
     );
   }
 
-  AppVersion get withoutBuild => AppVersion(major: major, minor: minor, patch: patch);
+  AppVersion get withoutBuild =>
+      AppVersion(major: major, minor: minor, patch: patch);
 
   @override
   int compareTo(AppVersion other) {
@@ -117,45 +117,68 @@ class UpdateManifest {
     String? fallbackApkUrl,
     String? fallbackPageUrl,
   }) {
-    final String versionName = _firstString(
-          json,
-          <String>['versionName', 'version_name', 'version', 'tag_name'],
-        ) ??
+    final String versionName =
+        _firstString(json, <String>[
+          'versionName',
+          'version_name',
+          'version',
+          'tag_name',
+        ]) ??
         '';
     if (versionName.isEmpty) {
       throw const UpdateException('manifest has no version name');
     }
 
     final String apkUrl =
-        _firstString(json, <String>['apkUrl', 'apk_url', 'downloadUrl', 'url']) ??
-            fallbackApkUrl ??
-            '';
+        _firstString(json, <String>[
+          'apkUrl',
+          'apk_url',
+          'downloadUrl',
+          'url',
+        ]) ??
+        fallbackApkUrl ??
+        '';
     if (apkUrl.isEmpty) {
       throw const UpdateException('manifest has no APK url');
     }
 
-    final String? published = _firstString(
-      json,
-      <String>['publishedAt', 'published_at', 'created_at'],
-    );
+    final String? published = _firstString(json, <String>[
+      'publishedAt',
+      'published_at',
+      'created_at',
+    ]);
 
     return UpdateManifest(
       versionName: versionName.replaceFirst(RegExp(r'^v'), ''),
-      versionCode: _firstInt(
-            json,
-            <String>['versionCode', 'version_code', 'buildNumber', 'build_number'],
-          ) ??
+      versionCode:
+          _firstInt(json, <String>[
+            'versionCode',
+            'version_code',
+            'buildNumber',
+            'build_number',
+          ]) ??
           0,
       apkUrl: apkUrl,
-      notes: _firstString(json, <String>['notes', 'notes_ar', 'releaseNotes', 'body']),
-      pageUrl: _firstString(json, <String>['pageUrl', 'page_url', 'html_url', 'htmlUrl']) ??
+      notes: _firstString(json, <String>[
+        'notes',
+        'notes_ar',
+        'releaseNotes',
+        'body',
+      ]),
+      pageUrl:
+          _firstString(json, <String>[
+            'pageUrl',
+            'page_url',
+            'html_url',
+            'htmlUrl',
+          ]) ??
           fallbackPageUrl,
       publishedAt: published == null ? null : DateTime.tryParse(published),
       mandatory: _firstBool(json, <String>['mandatory', 'force']) ?? false,
-      minSupportedVersion: _firstString(
-        json,
-        <String>['minSupportedVersion', 'min_supported_version'],
-      ),
+      minSupportedVersion: _firstString(json, <String>[
+        'minSupportedVersion',
+        'min_supported_version',
+      ]),
     );
   }
 
@@ -170,14 +193,15 @@ class UpdateManifest {
   }) {
     final String tag =
         _firstString(release, <String>['tag_name', 'name']) ?? '';
-    final List<Map<String, dynamic>> assets =
-        listOfMaps(release['assets']);
+    final List<Map<String, dynamic>> assets = listOfMaps(release['assets']);
 
     String? apkUrl;
     for (final Map<String, dynamic> asset in assets) {
       final String? name = _firstString(asset, <String>['name']);
-      final String? url =
-          _firstString(asset, <String>['browser_download_url', 'url']);
+      final String? url = _firstString(asset, <String>[
+        'browser_download_url',
+        'url',
+      ]);
       if (name == null || url == null) continue;
       if (name.endsWith('.apk') && name == 'Khutati.apk') {
         apkUrl = url;
@@ -190,14 +214,20 @@ class UpdateManifest {
       if (name.endsWith('.apk')) apkUrl ??= url;
     }
 
-    final String? published =
-        _firstString(release, <String>['published_at', 'created_at']);
+    final String? published = _firstString(release, <String>[
+      'published_at',
+      'created_at',
+    ]);
 
     return UpdateManifest(
-      versionName: (updateManifestVersionName ?? tag).replaceFirst(RegExp(r'^v'), ''),
+      versionName: (updateManifestVersionName ?? tag).replaceFirst(
+        RegExp(r'^v'),
+        '',
+      ),
       versionCode: 0,
       apkUrl: updateManifestApkUrl ?? apkUrl ?? '',
-      notes: updateManifestNotes ??
+      notes:
+          updateManifestNotes ??
           _firstString(release, <String>['body', 'name']),
       pageUrl: _firstString(release, <String>['html_url']),
       publishedAt: published == null ? null : DateTime.tryParse(published),
@@ -252,7 +282,9 @@ List<Map<String, dynamic>> listOfMaps(Object? value) {
   if (value is! List<Object?>) return const <Map<String, dynamic>>[];
   return <Map<String, dynamic>>[
     for (final Object? entry in value)
-      if (entry is Map<String, dynamic>) entry
-      else if (entry is Map<Object?, Object?>) entry.cast<String, dynamic>(),
+      if (entry is Map<String, dynamic>)
+        entry
+      else if (entry is Map<Object?, Object?>)
+        entry.cast<String, dynamic>(),
   ];
 }

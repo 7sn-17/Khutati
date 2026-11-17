@@ -49,15 +49,16 @@ class PlanImporter {
   }
 
   Future<bool> isImported(int datasetVersion) async {
-    final PlanRow? row = await (_db.select(_db.plans)
-          ..where((Plans t) => t.id.equals(kPlanId)))
-        .getSingleOrNull();
+    final PlanRow? row = await (_db.select(
+      _db.plans,
+    )..where((Plans t) => t.id.equals(kPlanId))).getSingleOrNull();
     return row != null && row.datasetVersion == datasetVersion;
   }
 
   Future<PlanRow?> currentPlan() {
-    return (_db.select(_db.plans)..where((Plans t) => t.id.equals(kPlanId)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.plans,
+    )..where((Plans t) => t.id.equals(kPlanId))).getSingleOrNull();
   }
 
   /// Parses and validates first: an invalid dataset never touches the database.
@@ -145,8 +146,9 @@ class PlanImporter {
           instructor: dataset.meta.subjects[i].instructor,
           accentHex: _subjectAccent(dataset.meta.subjects[i].key),
           sortOrder: i,
-          attendanceMinutes:
-              Value<int>(dataset.meta.subjects[i].attendanceMinutes),
+          attendanceMinutes: Value<int>(
+            dataset.meta.subjects[i].attendanceMinutes,
+          ),
           studyMinutes: Value<int>(dataset.meta.subjects[i].studyMinutes),
           courseMinutes: Value<int>(dataset.meta.subjects[i].courseMinutes),
         ),
@@ -156,7 +158,8 @@ class PlanImporter {
     final List<TasksCompanion> tasks = <TasksCompanion>[];
     final List<StepsCompanion> steps = <StepsCompanion>[];
     final List<BreaksCompanion> breaks = <BreaksCompanion>[];
-    final Map<String, ChaptersCompanion> chapters = <String, ChaptersCompanion>{};
+    final Map<String, ChaptersCompanion> chapters =
+        <String, ChaptersCompanion>{};
     final Map<String, int> chapterSort = <String, int>{};
 
     for (final PlanDay day in dataset.days) {
@@ -179,7 +182,8 @@ class PlanImporter {
         taskOrder += 1;
 
         final String chapterKey = '${item.subjectKey}|${item.group}';
-        final String chapterId = 'chapter-${item.subjectKey}-'
+        final String chapterId =
+            'chapter-${item.subjectKey}-'
             '${PlanImporter.versionOf(item.group).toRadixString(16)}';
         chapters.putIfAbsent(
           chapterKey,

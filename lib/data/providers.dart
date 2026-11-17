@@ -11,32 +11,33 @@ import 'repositories/user_state_repository.dart';
 /// on Drift, so the plan engine can be tested without Flutter (PRD section 7).
 final Provider<TemplateRepository> templateRepositoryProvider =
     Provider<TemplateRepository>((Ref ref) {
-  return TemplateRepository(ref.watch(appDatabaseProvider));
-});
+      return TemplateRepository(ref.watch(appDatabaseProvider));
+    });
 
 final Provider<UserStateRepository> userStateRepositoryProvider =
     Provider<UserStateRepository>((Ref ref) {
-  return UserStateRepository(ref.watch(appDatabaseProvider));
-});
+      return UserStateRepository(ref.watch(appDatabaseProvider));
+    });
 
 final Provider<PlanProgressRepository> planProgressRepositoryProvider =
     Provider<PlanProgressRepository>((Ref ref) {
-  return PlanProgressRepository(
-    ref.watch(appDatabaseProvider),
-    ref.watch(templateRepositoryProvider),
-  );
-});
+      return PlanProgressRepository(
+        ref.watch(appDatabaseProvider),
+        ref.watch(templateRepositoryProvider),
+      );
+    });
 
 /// The imported plan row; completes after the bootstrap in `main()`.
-final FutureProvider<PlanRow?> activePlanProvider =
-    FutureProvider<PlanRow?>((Ref ref) {
+final FutureProvider<PlanRow?> activePlanProvider = FutureProvider<PlanRow?>((
+  Ref ref,
+) {
   return ref.watch(templateRepositoryProvider).activePlan();
 });
 
 /// Date mapping derived from the plan row, never hard-coded in a screen.
 final FutureProvider<PlanCalendar?> planCalendarProvider =
     FutureProvider<PlanCalendar?>((Ref ref) async {
-  final PlanRow? plan = await ref.watch(activePlanProvider.future);
-  if (plan == null) return null;
-  return PlanCalendar(startDate: plan.startDate, totalDays: plan.totalDays);
-});
+      final PlanRow? plan = await ref.watch(activePlanProvider.future);
+      if (plan == null) return null;
+      return PlanCalendar(startDate: plan.startDate, totalDays: plan.totalDays);
+    });

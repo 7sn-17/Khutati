@@ -33,9 +33,7 @@ class KhutatiApp extends ConsumerWidget {
       builder: (BuildContext context, Widget? child) {
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: UpdateBootstrap(
-            child: child ?? const SizedBox.shrink(),
-          ),
+          child: UpdateBootstrap(child: child ?? const SizedBox.shrink()),
         );
       },
     );

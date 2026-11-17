@@ -25,7 +25,7 @@ void main() {
 
   group('KhutatiFormat.range', () {
     test('prints the day part once when both ends share it', () {
-      expect(format.range('08:00', '09:14'), '8:00 صباحاً – 9:14 صباحاً');
+      expect(format.range('08:00', '09:14'), '8:00 – 9:14 صباحاً');
     });
 
     test('repeats the day part when it changes', () {
@@ -33,7 +33,7 @@ void main() {
     });
 
     test('handles afternoon starts', () {
-      expect(format.range('16:00', '17:30'), '4:00 عصراً – 5:30 عصراً');
+      expect(format.range('16:00', '17:30'), '4:00 – 5:30 عصراً');
     });
   });
 

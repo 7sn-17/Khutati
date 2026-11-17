@@ -23,13 +23,16 @@ class DayBundle {
   final List<BreakRow> breaks;
 
   int get plannedMinutes => tasks.fold<int>(
-        0,
-        (int sum, TaskWithSteps task) =>
-            sum + task.steps.fold<int>(0, (int s, StepRow step) => s + step.minutes),
-      );
+    0,
+    (int sum, TaskWithSteps task) =>
+        sum +
+        task.steps.fold<int>(0, (int s, StepRow step) => s + step.minutes),
+  );
 
-  int get stepCount =>
-      tasks.fold<int>(0, (int sum, TaskWithSteps task) => sum + task.steps.length);
+  int get stepCount => tasks.fold<int>(
+    0,
+    (int sum, TaskWithSteps task) => sum + task.steps.length,
+  );
 }
 
 /// Read-only access to the imported plan template.
@@ -49,13 +52,15 @@ class TemplateRepository {
 
   /// The single built-in plan row. `null` only before the bootstrap import.
   Future<PlanRow?> activePlan() {
-    return (_db.select(_db.plans)
-          ..where((Plans t) => t.id.equals('medx-68')))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.plans,
+    )..where((Plans t) => t.id.equals('medx-68'))).getSingleOrNull();
   }
 
   Future<DayRow?> dayByNumber(int dayNumber) {
-    return (_db.select(_db.days)..where((t) => t.dayNumber.equals(dayNumber))).getSingleOrNull();
+    return (_db.select(
+      _db.days,
+    )..where((t) => t.dayNumber.equals(dayNumber))).getSingleOrNull();
   }
 
   /// Loads a day, its tasks and their steps in one round trip.
@@ -84,14 +89,18 @@ class TemplateRepository {
       stepsByTask.putIfAbsent(task.id, () => <StepRow>[]).add(step);
     }
 
-    final List<BreakRow> breaks =
-        await (_db.select(_db.breaks)..where((t) => t.dayId.equals(day.id))).get();
+    final List<BreakRow> breaks = await (_db.select(
+      _db.breaks,
+    )..where((t) => t.dayId.equals(day.id))).get();
 
     return DayBundle(
       day: day,
       tasks: <TaskWithSteps>[
         for (final TaskRow task in tasksById.values)
-          TaskWithSteps(task: task, steps: stepsByTask[task.id] ?? const <StepRow>[]),
+          TaskWithSteps(
+            task: task,
+            steps: stepsByTask[task.id] ?? const <StepRow>[],
+          ),
       ],
       breaks: breaks,
     );

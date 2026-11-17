@@ -28,15 +28,14 @@ void main() {
     expect((await TemplateRepository(db).dayBundle(15))!.tasks, isEmpty);
 
     expect((await importer.ensureImported(json)).imported, isFalse);
-    expect(
-      (await TemplateRepository(db).plannedTotals()).attendance,
-      12735,
-    );
+    expect((await TemplateRepository(db).plannedTotals()).attendance, 12735);
   });
 
   test('calendar maps day numbers, weeks and statuses', () {
-    final PlanCalendar calendar =
-        PlanCalendar(startDate: DateTime(2026, 11, 19), totalDays: 68);
+    final PlanCalendar calendar = PlanCalendar(
+      startDate: DateTime(2026, 11, 19),
+      totalDays: 68,
+    );
     final DateTime day12 = DateTime(2026, 11, 30);
 
     expect(calendar.dateOfDay(68), DateTime(2027, 1, 25));
@@ -45,11 +44,21 @@ void main() {
     expect(calendar.daysInWeek(10), hasLength(5));
     expect(calendar.daysAfterToday(day12), 56);
     expect(
-      calendar.statusOf(dayNumber: 3, isCompleted: false, isRest: false, now: day12),
+      calendar.statusOf(
+        dayNumber: 3,
+        isCompleted: false,
+        isRest: false,
+        now: day12,
+      ),
       PlanDayStatus.overdue,
     );
     expect(
-      calendar.statusOf(dayNumber: 15, isCompleted: false, isRest: true, now: day12),
+      calendar.statusOf(
+        dayNumber: 15,
+        isCompleted: false,
+        isRest: true,
+        now: day12,
+      ),
       PlanDayStatus.rest,
     );
   });
@@ -94,7 +103,11 @@ void main() {
   });
 
   test('update manifests compare semantic versions and build numbers', () {
-    expect(AppVersion.tryParse('v1.4.2')!.compareTo(const AppVersion(major: 1, minor: 4, patch: 1)), greaterThan(0));
+    expect(
+      AppVersion.tryParse('v1.4.2')!
+          .compareTo(const AppVersion(major: 1, minor: 4, patch: 1)),
+      greaterThan(0),
+    );
     expect(AppVersion.tryParse('nope'), isNull);
 
     const UpdateManifest manifest = UpdateManifest(
@@ -103,7 +116,17 @@ void main() {
       apkUrl: 'https://github.com/7sn-17/Khutati/releases/download/latest/Khutati.apk',
     );
 
-    expect(manifest.isNewerThan(const AppVersion(major: 0, minor: 2, patch: 0, build: 2)), isTrue);
-    expect(manifest.isNewerThan(const AppVersion(major: 0, minor: 3, patch: 0, build: 3)), isFalse);
+    expect(
+      manifest.isNewerThan(
+        const AppVersion(major: 0, minor: 2, patch: 0, build: 2),
+      ),
+      isTrue,
+    );
+    expect(
+      manifest.isNewerThan(
+        const AppVersion(major: 0, minor: 3, patch: 0, build: 3),
+      ),
+      isFalse,
+    );
   });
 }

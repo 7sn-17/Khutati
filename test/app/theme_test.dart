@@ -5,6 +5,8 @@ import 'package:khutati/core/design/tokens.dart';
 
 /// Guards theme parity with the HTML prototype.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('dark theme', () {
     final ThemeData theme = KhutatiTheme.dark;
 
@@ -65,11 +67,16 @@ void main() {
     });
 
     test('dark and light never share the background colour', () {
-      expect(KhutatiTheme.light.scaffoldBackgroundColor, isNot(KhutatiTheme.dark.scaffoldBackgroundColor));
+      expect(
+        KhutatiTheme.light.scaffoldBackgroundColor,
+        isNot(KhutatiTheme.dark.scaffoldBackgroundColor),
+      );
     });
   });
 
-  testWidgets('paletteOf follows the ambient brightness', (WidgetTester tester) async {
+  testWidgets('paletteOf follows the ambient brightness', (
+    WidgetTester tester,
+  ) async {
     late KhutatiPalette captured;
 
     await tester.pumpWidget(

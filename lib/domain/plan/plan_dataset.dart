@@ -52,27 +52,23 @@ class PlanDataset {
     return dataset;
   }
 
-  int get totalMinutes => days.fold<int>(
-        0,
-        (int sum, PlanDay day) => sum + day.totalMinutes,
-      );
+  int get totalMinutes =>
+      days.fold<int>(0, (int sum, PlanDay day) => sum + day.totalMinutes);
 
-  int get itemCount => days.fold<int>(
-        0,
-        (int sum, PlanDay day) => sum + day.items.length,
-      );
+  int get itemCount =>
+      days.fold<int>(0, (int sum, PlanDay day) => sum + day.items.length);
 
   int get videoCount => days.fold<int>(
-        0,
-        (int sum, PlanDay day) =>
-            sum + day.items.where((PlanItem i) => i.isVideo).length,
-      );
+    0,
+    (int sum, PlanDay day) =>
+        sum + day.items.where((PlanItem i) => i.isVideo).length,
+  );
 
   int get courseQuestionCount => days.fold<int>(
-        0,
-        (int sum, PlanDay day) =>
-            sum + day.items.where((PlanItem i) => i.isCourseQuestions).length,
-      );
+    0,
+    (int sum, PlanDay day) =>
+        sum + day.items.where((PlanItem i) => i.isCourseQuestions).length,
+  );
 
   /// Re-derives every numeric claim from raw items and compares it with the
   /// dataset's own totals and the PRD's fixed expectations.
@@ -130,7 +126,9 @@ class PlanDataset {
 
       for (final PlanItem item in day.items) {
         if (item.id.isEmpty) {
-          throw PlanDatasetException('day ${day.dayNumber} has an item without an id');
+          throw PlanDatasetException(
+            'day ${day.dayNumber} has an item without an id',
+          );
         }
         if (!ids.add(item.id)) {
           throw PlanDatasetException('duplicate item id ${item.id}');
@@ -171,13 +169,14 @@ class PlanDataset {
             ifAbsent: () => item.study!.minutes,
           );
         } else {
-          throw PlanDatasetException('item ${item.id} has unknown type ${item.type}');
+          throw PlanDatasetException(
+            'item ${item.id} has unknown type ${item.type}',
+          );
         }
       }
 
-      final int derived = day.attendanceMinutes +
-          day.studyMinutes +
-          day.questionMinutes;
+      final int derived =
+          day.attendanceMinutes + day.studyMinutes + day.questionMinutes;
       if (derived != day.statedStudyMinutes) {
         throw PlanDatasetException(
           'day ${day.dayNumber}: derived $derived min but the page states '
@@ -208,7 +207,9 @@ class PlanDataset {
     }
     if (meta.statedTotals.containsKey('courses') &&
         meta.statedTotals['courses'] != totalQuestions) {
-      throw const PlanDatasetException('course-question total does not reconcile');
+      throw const PlanDatasetException(
+        'course-question total does not reconcile',
+      );
     }
     if (meta.statedTotals.containsKey('all') &&
         meta.statedTotals['all'] != total) {
@@ -233,7 +234,8 @@ class PlanDataset {
       }
     }
 
-    if (meta.studyDays != days.where((PlanDay d) => d.type != PlanDayTypes.rest).length) {
+    if (meta.studyDays !=
+        days.where((PlanDay d) => d.type != PlanDayTypes.rest).length) {
       throw const PlanDatasetException('study day count does not match');
     }
   }
@@ -258,8 +260,10 @@ class PlanMeta {
       for (final Object? raw in _asList(json['subjects'], 'meta.subjects'))
         PlanSubject.fromJson(_asMap(raw, 'meta.subjects[]')),
     ];
-    final Map<String, dynamic> totals =
-        _asMap(json['statedTotals'], 'meta.statedTotals');
+    final Map<String, dynamic> totals = _asMap(
+      json['statedTotals'],
+      'meta.statedTotals',
+    );
 
     return PlanMeta(
       name: _asString(json['name'], 'meta.name'),
@@ -291,8 +295,9 @@ class PlanMeta {
   final Map<String, int> statedTotals;
   final List<PlanSubject> subjects;
 
-  Set<String> get subjectKeys =>
-      <String>{for (final PlanSubject subject in subjects) subject.key};
+  Set<String> get subjectKeys => <String>{
+    for (final PlanSubject subject in subjects) subject.key,
+  };
 }
 
 class PlanSubject {
@@ -348,7 +353,10 @@ class PlanDay {
 
   factory PlanDay.fromJson(Map<String, dynamic> json) {
     final List<PlanSection> sections = <PlanSection>[
-      for (final Object? raw in _asList(json['sections'] ?? const <Object?>[], 'day.sections'))
+      for (final Object? raw in _asList(
+        json['sections'] ?? const <Object?>[],
+        'day.sections',
+      ))
         PlanSection.fromJson(_asMap(raw, 'day.sections[]')),
     ];
     final List<PlanInterlude> interludes = <PlanInterlude>[
@@ -358,8 +366,9 @@ class PlanDay {
       ))
         PlanInterlude.fromJson(_asMap(raw, 'day.interludes[]')),
     ];
-    final Map<String, dynamic>? computed =
-        json['computed'] == null ? null : _asMap(json['computed'], 'day.computed');
+    final Map<String, dynamic>? computed = json['computed'] == null
+        ? null
+        : _asMap(json['computed'], 'day.computed');
 
     return PlanDay(
       id: _asString(json['id'], 'day.id'),
@@ -371,7 +380,10 @@ class PlanDay {
       headerTitle: _asStringOrNull(json['headerTitle']),
       title: _asStringOrNull(json['title']),
       note: _asStringOrNull(json['note']),
-      statedStudyMinutes: _asInt(json['statedStudyMinutes'], 'day.statedStudyMinutes'),
+      statedStudyMinutes: _asInt(
+        json['statedStudyMinutes'],
+        'day.statedStudyMinutes',
+      ),
       startClock: _asStringOrNull(json['start']),
       endClock: _asStringOrNull(json['end']),
       computedTotalMinutes: computed == null
@@ -403,22 +415,20 @@ class PlanDay {
   bool get isPractical => type == PlanDayTypes.practical;
 
   List<PlanItem> get items => <PlanItem>[
-        for (final PlanSection section in sections)
-          for (final PlanPeriod period in section.periods) ...period.items,
-      ];
+    for (final PlanSection section in sections)
+      for (final PlanPeriod period in section.periods) ...period.items,
+  ];
 
   int get attendanceMinutes => items.fold<int>(
-        0,
-        (int sum, PlanItem item) => sum + item.attendanceMinutes,
-      );
-  int get studyMinutes => items.fold<int>(
-        0,
-        (int sum, PlanItem item) => sum + item.studyMinutes,
-      );
+    0,
+    (int sum, PlanItem item) => sum + item.attendanceMinutes,
+  );
+  int get studyMinutes =>
+      items.fold<int>(0, (int sum, PlanItem item) => sum + item.studyMinutes);
   int get questionMinutes => items.fold<int>(
-        0,
-        (int sum, PlanItem item) => sum + item.questionMinutes,
-      );
+    0,
+    (int sum, PlanItem item) => sum + item.questionMinutes,
+  );
   int get totalMinutes => attendanceMinutes + studyMinutes + questionMinutes;
 }
 
@@ -432,7 +442,10 @@ class PlanSection {
 
   factory PlanSection.fromJson(Map<String, dynamic> json) {
     final String subjectName = _asString(json['subject'], 'section.subject');
-    final String subjectKey = _asString(json['subjectKey'], 'section.subjectKey');
+    final String subjectKey = _asString(
+      json['subjectKey'],
+      'section.subjectKey',
+    );
 
     return PlanSection(
       subjectName: subjectName,
@@ -625,7 +638,8 @@ String _asString(Object? value, String field) {
   throw PlanDatasetException('$field must be a non-empty string');
 }
 
-String? _asStringOrNull(Object? value) => value is String && value.isNotEmpty ? value : null;
+String? _asStringOrNull(Object? value) =>
+    value is String && value.isNotEmpty ? value : null;
 
 int _asInt(Object? value, String field) {
   if (value is int) return value;
@@ -641,7 +655,8 @@ int? _asIntOrNull(Object? value) {
 
 List<int> _asIntList(Object? value, String field) {
   return <int>[
-    for (final Object? entry in _asList(value, field)) _asInt(entry, '$field[]'),
+    for (final Object? entry in _asList(value, field))
+      _asInt(entry, '$field[]'),
   ];
 }
 
@@ -667,8 +682,8 @@ int _duration(Object? value, String field) {
   if (value is! String) {
     throw PlanDatasetException('$field must be a duration string');
   }
-  final Iterable<RegExpMatch> matches =
-      RegExp(r'(\d+)\s*([سد])').allMatches(value);
+  final Iterable<RegExpMatch> matches = RegExp(r'(\d+)\s*([سد])')
+      .allMatches(value);
   if (matches.isEmpty) {
     throw PlanDatasetException('$field is not a duration: $value');
   }
