@@ -8,7 +8,7 @@ import '../tokens.dart';
 enum KToastKind { success, error, info }
 
 /// A top-anchored confirmation card. It uses the app's own surface, accent and
-type tokens rather than the Material SnackBar, so feedback reads as part of
+/// type tokens rather than the Material SnackBar, so feedback reads as part of
 /// the product in both light and dark themes.
 void showKToast(
   BuildContext context,
