@@ -1,9 +1,12 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:khutati/core/utils/format.dart';
 import 'package:khutati/l10n/generated/app_localizations.dart';
 
 void main() {
-  final KhutatiFormat format = KhutatiFormat(AppLocalizationsAr());
+  final AppLocalizations l10n = lookupAppLocalizations(const Locale('ar'));
+  final KhutatiFormat format = KhutatiFormat(l10n);
 
   group('KhutatiFormat.duration', () {
     test('renders hours and minutes like the prototype', () {

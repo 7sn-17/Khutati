@@ -29,8 +29,8 @@ abstract final class KhutatiMotion {
 /// is on, the widget is returned untouched so nothing moves.
 extension KhutatiEntrance on Widget {
   Widget khutatiEntrance({int index = 0, BuildContext? context, bool enabled = true}) {
-    final bool animate = enabled && (context == null || !KhutatiMotion.reduced(context));
-    if (!animate) return this;
+    final bool shouldAnimate = enabled && (context == null || !KhutatiMotion.reduced(context));
+    if (!shouldAnimate) return this;
 
     final Duration delay = KhutatiMotion.stagger * index;
     return animate()
