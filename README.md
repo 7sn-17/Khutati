@@ -58,7 +58,8 @@ node tools/check_version.mjs
 ```
 
 طريقة نشر التحديثات وإعداد Supabase والبديل عبر GitHub موثّقة في
-[`docs/updates.md`](docs/updates.md).
+[`docs/updates.md`](docs/updates.md). وحجم APK قبل/بعد وضوابط منع
+تضخّمه موثّقة في [`docs/apk-size.md`](docs/apk-size.md).
 
 ## هيكل المشروع
 
