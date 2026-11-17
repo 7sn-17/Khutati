@@ -170,7 +170,7 @@ class UserStepStates extends Table {
   TextColumn get stepId => text()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
-  IntColumn get progress =
+  IntColumn get progress =>
       integer().withDefault(const Constant(StepProgress.notStarted.code))();
 
   @override

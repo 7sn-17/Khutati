@@ -665,7 +665,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
 }
 
 class StepChips extends ConsumerWidget {
-  const StepChips({required this.task, required this.format});
+  const StepChips({required this.task, required this.format, super.key});
 
   final PlanTask task;
   final KhutatiFormat format;

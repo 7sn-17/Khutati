@@ -44,13 +44,15 @@ class KChip extends StatelessWidget {
     final Color textColor = selected ? KColors.dark.bg : palette.mute;
     final Color titleColor = selected ? KColors.dark.bg : palette.tx;
     final Color accentColor = selected ? KColors.dark.bg : palette.redtx;
-    final BoxShadow? shadow = selected
+    final List<BoxShadow>? shadow = selected
         ? null
-        : BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          );
+        : <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ];
 
     return Semantics(
       button: true,
