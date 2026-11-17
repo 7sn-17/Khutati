@@ -205,7 +205,10 @@ class UpdateRepository {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw UpdateException('HTTP ${response.statusCode} from ${uri.host}');
     }
-    return jsonDecode(response.body);
+    // Decode explicitly as UTF-8: `response.body` decodes per the response's
+    // charset and defaults to Latin-1 when none is declared, which corrupts
+    // Arabic (and any non-ASCII) release notes into mojibake.
+    return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
   static void _requireHttps(String url, String source) {

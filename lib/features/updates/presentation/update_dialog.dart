@@ -199,15 +199,20 @@ class _UpdateDialog extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      notes == null || notes.isEmpty
-                          ? l10n.updateNoNotes
-                          : notes,
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: KTypography.muteSize,
-                        height: 1.6,
-                        color: palette.mute,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          notes == null || notes.isEmpty
+                              ? l10n.updateNoNotes
+                              : notes,
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: KTypography.muteSize,
+                            height: 1.6,
+                            color: palette.mute,
+                          ),
+                        ),
                       ),
                     ),
                   ],

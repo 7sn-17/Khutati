@@ -213,6 +213,8 @@ jobs:
       - name: Write the update manifest
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          LC_ALL: C.UTF-8
+          LANG: C.UTF-8
         run: |
           set -euo pipefail
           VERSION_LINE="$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')"
@@ -220,14 +222,16 @@ jobs:
           VERSION_CODE="${VERSION_LINE##*+}"
           APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Khutati.apk"
           PAGE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          # Read the notes straight from the file with --rawfile so UTF-8 Arabic
+          # text is never mangled by shell command substitution or jq's --arg.
           jq -n \
             --arg versionName "$VERSION_NAME" \
             --argjson versionCode "$VERSION_CODE" \
-            --arg notes "$(cat release_notes/ar.txt)" \
+            --rawfile notes release_notes/ar.txt \
             --arg apkUrl "$APK_URL" \
             --arg pageUrl "$PAGE_URL" \
             --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{versionName:$versionName,versionCode:$versionCode,notes:$notes,apkUrl:$apkUrl,pageUrl:$pageUrl,publishedAt:$publishedAt}' \
+            '{versionName:$versionName,versionCode:$versionCode,notes:($notes | rtrimstr("\n")),apkUrl:$apkUrl,pageUrl:$pageUrl,publishedAt:$publishedAt}' \
             > build/app/outputs/flutter-apk/update.json
           cat build/app/outputs/flutter-apk/update.json
 
