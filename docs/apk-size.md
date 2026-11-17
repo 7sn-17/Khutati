@@ -15,15 +15,21 @@ engine for `armeabi-v7a`, `arm64-v8a` and `x86_64`. The extracted APK was about
 
 ## After
 
-From run [44074164459](https://github.com/7sn-17/Khutati/actions/runs/44074164459)
-(commit `6286698`):
+From run [44079881006](https://github.com/7sn-17/Khutati/actions/runs/44079881006)
+(commit `e3cc590`, after the launcher-icon and font-registration fixes):
 
 | Artifact | Before | After |
 | --- | --- | --- |
-| Release `Khutati.apk` (arm64) | none (build failed) | 20,696,051 bytes (19.7 MiB) |
-| Debug `app-debug.apk` | universal, ~200 MB extracted | 91,109,098 bytes (86.9 MiB) |
-| Debug artifact (zipped) | 96,350,289 bytes (91.9 MiB) | 53,633,135 bytes (51.1 MiB) |
-| Release artifact (zipped) | none | 11,752,301 bytes (11.2 MiB) |
+| Release `Khutati.apk` (arm64) | none (build failed) | 20,078,660 bytes (19.1 MiB) |
+| Debug `app-debug.apk` | universal, ~200 MB extracted | 87,562,306 bytes (83.5 MiB) |
+| Debug artifact (zipped) | 96,350,289 bytes (91.9 MiB) | 50,408,977 bytes (48.1 MiB) |
+| Release artifact (zipped) | none | 11,017,790 bytes (10.5 MiB) |
+
+The first size-fix run (commit `6286698`) measured 20,696,051 bytes for the
+release APK and 91,109,098 bytes for the debug APK. Declaring the bundled fonts
+in `pubspec.yaml` and dropping the `google_fonts` runtime package removed its
+code and duplicate asset handling, saving about 0.6 MiB in release and 3.5 MiB
+in debug.
 
 The release APK is published as `Khutati.apk` with `update.json` on the
 `latest` GitHub release.
@@ -38,8 +44,9 @@ The release APK is published as `Khutati.apk` with `update.json` on the
 2. **One ABI.** Release was already arm64-only. The debug build now passes
    `--target-platform android-arm64`, dropping the two other debug engines
    (~half the artifact).
-3. **Existing trimming.** `resourceConfigurations += ["ar"]`, bundled-only
-   fonts, and no deferred components keep the release APK near 20 MiB.
+3. **Existing trimming.** `resourceConfigurations += ["ar"]`, no deferred
+   components, and fonts that are declared once (instead of both bundled as
+   assets and registered by `google_fonts`) keep the release APK near 20 MiB.
 
 ## Guards
 
