@@ -81,8 +81,24 @@ Tagged releases publish `vX.Y.Z`; pushes to `main` publish a rolling `latest`
 pre-release. The client reads `update.json` from the newest release and falls
 back to the release's `Khutati.apk` asset if the manifest is missing.
 
+## Release signing
+
+Android only installs an update over an existing app when both APKs share the
+same signing certificate. Configure the four `ANDROID_KEYSTORE_*` /
+`ANDROID_KEY_*` repository secrets described in the README, and keep the
+keystore backed up outside the repository. Losing it means every user has to
+uninstall the app once before installing a later build.
+
+Without the secrets CI still builds, but Flutter falls back to a machine-local
+debug key. That APK is fine for testing and not suitable for the update channel.
+
 ## Version discipline
 
 `lib/core/app_info.dart` must match `pubspec.yaml`. CI runs
 `node tools/check_version.mjs` and fails on any mismatch, because the check
 compares the installed build number with the manifest.
+
+Bump both the marketing version and the build number before publishing a new
+release (`flutter build` uses `version:` as `versionName+versionCode`). Merely
+pushing another commit does not create a newer update, because the build number
+stays the same.
