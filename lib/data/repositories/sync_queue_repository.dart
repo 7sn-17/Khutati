@@ -34,7 +34,7 @@ class SyncQueueRepository {
           // Drift would only handle a primary-key clash and a repeated edit
           // would throw on the unique index instead of replacing the snapshot.
           onConflict: DoUpdate(
-            (SyncQueueRow old) => SyncQueueCompanion(
+            ($SyncQueueTable old) => SyncQueueCompanion(
               payload: Value<String>(jsonEncode(payload)),
               enqueuedAt: Value<DateTime>(now),
               attempts: const Value<int>(0),
