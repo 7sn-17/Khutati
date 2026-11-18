@@ -310,7 +310,7 @@ class _PointsColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text(
+        Text(
           'إجمالي نقاطك',
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
@@ -325,7 +325,7 @@ class _PointsColumn extends StatelessWidget {
           child: Text(
             _fa(data.totalPoints),
             maxLines: 1,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: KTypography.displayFamily,
               fontSize: _bigSize,
               height: 1.1,
@@ -343,7 +343,7 @@ class _PointsColumn extends StatelessWidget {
           ),
           child: Text(
             '+${data.pointsToday} نقطة اليوم',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 13,
               color: palette.gold,
@@ -366,7 +366,7 @@ class _StreakColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text(
+        Text(
           'سلسلتك',
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
@@ -381,7 +381,7 @@ class _StreakColumn extends StatelessWidget {
           child: Text(
             _fa(data.streak),
             maxLines: 1,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: KTypography.displayFamily,
               fontSize: _bigSize,
               height: 1.1,
@@ -420,7 +420,7 @@ class _WeekStrip extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const Text(
+        Text(
           'آخر 7 أيام',
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
@@ -520,7 +520,7 @@ class _DayDot extends StatelessWidget {
               child: status == 'done'
                   ? const _CheckMark(size: 16)
                   : status == 'rest'
-                  ? const Text(
+                  ? Text(
                       '–',
                       style: TextStyle(
                         fontSize: 12,
@@ -551,7 +551,7 @@ class _DayDot extends StatelessWidget {
 }
 
 class _LegendDot extends StatelessWidget {
-  const _LegendDot({
+  _LegendDot({
     required this.label,
     this.color = _heroDotLine,
     this.dashed = false,
@@ -582,7 +582,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: KTypography.bodyFamily,
             fontSize: 12,
             color: palette.mute,
@@ -610,7 +610,7 @@ class _NextBadgeBlock extends StatelessWidget {
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: _heroLine)),
         ),
-        child: const Text(
+        child: Text(
           'أكملت كل الأوسمة. أحسنت!',
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
@@ -641,7 +641,7 @@ class _NextBadgeBlock extends StatelessWidget {
               Expanded(
                 child: Text(
                   'وسامك القادم: ${_tierNames[next.level]} في ${next.name}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: KTypography.bodyFamily,
                     fontSize: 14,
                     color: palette.tx,
@@ -652,7 +652,7 @@ class _NextBadgeBlock extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${_fa(next.current)} من ${_fa(nextThreshold)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: KTypography.bodyFamily,
                   fontSize: 14,
                   color: palette.mute,
@@ -670,7 +670,7 @@ class _NextBadgeBlock extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'يتبقّى ${_fa(remaining)} ${next.unit} فقط.',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 13,
               color: palette.mute,
@@ -732,7 +732,7 @@ class _HowItWorksState extends State<_HowItWorks> {
                         color: palette.tx.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: const _Chevron(size: 16, color: palette.tx),
+                      child: _Chevron(size: 16, color: palette.tx),
                     ),
                   ),
                 ],
@@ -791,7 +791,7 @@ class _Bullet extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: KTypography.bodyFamily,
                 fontSize: 14,
                 color: palette.mute,
@@ -2626,7 +2626,7 @@ class _CheckPainter extends CustomPainter {
 
 /// `<path d="m6 9 6 6 6-6"/>` — the details chevron.
 class _Chevron extends StatelessWidget {
-  const _Chevron({required this.size, required this.color});
+  _Chevron({required this.size, required this.color});
 
   final double size;
   final Color color;
