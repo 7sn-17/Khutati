@@ -1,158 +1,304 @@
 # خطتي (Khutati)
 
-تطبيق عربي أولاً، يعمل دون إنترنت، لخطة الدراسة المكوّنة من 68 يوماً
-للدكتور MedX. مبني بـ Flutter و Dart، وقاعدة بيانات SQLite عبر Drift،
-وتسجيل دخول جوجل لمرة واحدة عبر Supabase، وطبقة Kotlin أصلية لمؤقت
-التركيز في الخلفية.
+تطبيق عربي أولاً، يعمل دون إنترنت، لخطة دراسة من 68 يوماً. يُحفظ التقدّم محلياً في
+SQLite فوراً، ويُرفع إلى السحابة على دفعات، ويعمل مؤقّت التركيز في الخلفية عبر خدمة
+Kotlin أصلية. النموذج HTML (`خطتي اليومية، الإصدار 3.html`) هو المرجع البصري الوحيد،
+ومحتوى الخطة يأتي حصراً من `khutati_plan_data.json`.
 
-النموذج HTML المعتمد (`خطتي اليومية، الإصدار 3.html`) هو المرجع البصري
-الوحيد. ومحتوى الخطة يأتي حصراً من `khutati_plan_data.json`، ولا يُكتب
-داخل الشيفرة أبداً.
+> **للمطوّرين والوكلاء:** ابدأ بـ [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) ثم
+> [`ARCHITECTURE.md`](ARCHITECTURE.md). هذا الملف يشرح البناء والنشر فقط.
 
-## الحالة
+---
 
-اكتملت المرحلتان 0 و1، وأساس محرّك المرحلة 2 (الاستيراد والتواريخ
-والتقدم) جاهز:
+An Arabic-first, offline-first Android study-plan app for a fixed 68-day
+curriculum. Progress is written to SQLite immediately and uploaded to Supabase in
+batches; the focus timer runs in a native Kotlin foreground service with exact
+alarms. The UI is Arabic and RTL by design.
 
-- هيكل مشروع Flutter يتبع تقسيم الطبقات في القسم 7 من PRD.
-- رموز التصميم مستخرجة من النموذج آلياً إلى `design/tokens.json` ثم
-  مولّدة في `lib/core/design/tokens.dart`.
-- الخطوط العربية (IBM Plex Sans Arabic و Reem Kufi) مضمّنة للعمل دون
-  إنترنت، مع اتجاه RTL من أول إطار، وهيكل بخمسة تبويبات: اليوم، الخطة،
-  التركيز، الإنجازات، الإعدادات.
-- مخطط Drift يفصل بوضوح بين جداول القالب وجداول المستخدم.
-- استيراد بيانات الخطة والتحقق منها قبل أول إطار، وبشكل آمن قابل
-  للتكرار (`lib/data/import/plan_importer.dart`).
-- محرّكات التواريخ وحالة اليوم والتقدم والساعات مكتوبة بـ Dart خالص
-  (`lib/domain/plan/`). تاريخ الخطة ثابت، ويُحل «اليوم» من تاريخ الجهاز
-  المحلي وفق قاعدة واحدة موثقة في `docs/date-resolution.md`، مع اختبارات
-  للتحول عند منتصف الليل وتغيير المنطقة الزمنية.
-- تحديثات داخل التطبيق: Supabase أولاً ثم GitHub Releases كبديل، مع
-  فحص صامت محدود التكرار ولوحة في الإعدادات (`docs/updates.md`).
-- تقدّم الخطوات بنقرتين: النقرة الأولى «جزئياً» (نصف وقت الخطوة) والثانية
-  «مكتمل»، محفوظاً في `user_step_states.progress` (نسخة المخطط 2). يقرأ
-  تبويبا اليوم والخطة الحالة نفسها فلا يختلفان، وتُقرأ الصفوف القديمة
-  مكتملةً عند الترقية فلا يهبط تقدّم المستخدم.
-- شاشة إعدادات معاد تصميمها، وفيها نافذة «حول» تعرّف بالمطوّر وتفتح
-  محادثة تليجرام أو واتساب مباشرة، بعلامتين رسميتين ضمن نافذة واحدة.
-- خط GitHub Actions يتحقق من رموز التصميم والبيانات وتطابق الإصدار، ثم
-  يبني `Khutati.apk` للأجهزة الحديثة (arm64) وينشر `update.json`.
+| | |
+|---|---|
+| Package | `com.khutati.app` |
+| Current version | **0.8.1 (31)** |
+| Min Android | 8.0 (API 26) |
+| Stack | Flutter 3.29.3 · Riverpod · Drift · Supabase · Kotlin |
+| CI | GitHub Actions — `.github/workflows/android.yml` |
 
-## المتطلبات
+---
 
-- Flutter 3.29.x (Dart 3.7)
-- JDK 17
-- Node.js 18 أو أحدث (لأدوات التصميم والتحقق من البيانات فقط)
+## 1. Requirements
 
-## الأوامر
+- **Flutter 3.29.x** (Dart 3.7+) — CI pins `3.29.3`
+- **JDK 17** (Temurin in CI)
+- **Node.js 18+** — only for the scripts in `tools/`
+- **Android SDK** with build-tools (`apksigner` is used to verify releases)
+- On Linux, **`libsqlite3-dev`** for the Drift database tests
+
+## 2. Build and run locally
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs   # Drift codegen
+
+# Generated sources are NOT committed. Both steps are required.
+flutter gen-l10n
+dart run build_runner build --delete-conflicting-outputs
+
 flutter analyze
 flutter test
 flutter run
-
-# Rebuild the design tokens after editing the prototype
-node tools/extract_tokens.mjs
-node tools/extract_tokens.mjs --check   # CI guard: fails on drift
-
-# Re-validate the plan dataset against PRD section 3.1
-node tools/validate_plan_data.mjs
-node tools/validate_plan_data.mjs --self-test
-
-# The update checker reads AppInfo; keep it equal to pubspec.yaml
-node tools/check_version.mjs
-
-# Rebuild every Android launcher slot from icon.png (legacy + adaptive)
-node tools/generate_launcher_icons.mjs
 ```
 
-طريقة نشر التحديثات وإعداد Supabase والبديل عبر GitHub موثّقة في
-[`docs/updates.md`](docs/updates.md). وحجم APK قبل/بعد وضوابط منع
-تضخّمه موثّقة في [`docs/apk-size.md`](docs/apk-size.md).
+The app runs without Supabase credentials: it starts as a guest and the login
+button reports that sign-in is not configured for this build. To enable auth and
+sync locally:
 
-## هيكل المشروع
+```bash
+flutter run \
+  --dart-define=KHUTATI_SUPABASE_URL=https://<project>.supabase.co \
+  --dart-define=KHUTATI_SUPABASE_ANON_KEY=<anon-key>
+```
+
+Guards that also run in CI:
+
+```bash
+node tools/extract_tokens.mjs --check      # tokens match the HTML prototype
+node tools/check_version.mjs               # AppInfo matches pubspec.yaml
+node tools/validate_plan_data.mjs          # 21 dataset checks
+node tools/validate_plan_data.mjs --self-test
+```
+
+## 3. Project structure
 
 ```
 lib/
-  app/            هيكل التطبيق والموجّه والسمة
-  core/
-    design/       الرموز المولّدة (لا تُعدّل يدوياً)، محلل SVG، مجموعة الودجات
-    typography/   مداخل الخطوط
-    l10n/         النصوص العربية (ملفات ARB)
-    utils/        أدوات التنسيق (الأرقام، المدد، الأوقات العربية)
-    settings/     التفضيلات المحفوظة (وضع السمة)
-  data/           قاعدة بيانات Drift والمستودعات
-  domain/         محرّك الخطة، بلا اعتماد على Flutter (المرحلة 2)
-  features/       اليوم، الخطة، التركيز، الإنجازات، المعرض (للتطوير)
-tools/            استخراج الرموز والتحقق من البيانات
-design/           ملف tokens.json المولّد
-docs/             تقرير التحقق من البيانات والتوثيق
-android/          مضيف Kotlin وخدمة الخلفية (المرحلة 4.1)
+  app/        entry, router, shell, theme, transitions
+  core/       design system, device bridges, notifications, settings, sound
+  data/       Drift tables + repositories + plan import + cloud sync
+  domain/     pure Dart rules (calendar, progress, step state)
+  features/   today · plan · focus · achievements · settings · auth · updates
+android/      Kotlin: MainActivity, FocusTimerService, FocusAlarmReceiver, FocusEvents
+supabase/     SQL migrations (sync tables, update manifest)
+design/       tokens.json + HTML reference screens
+tools/        Node guards for tokens, dataset, version, launcher icons
+docs/         focused notes: date resolution, updates, APK size, signing
+test/         100 tests (domain, data, design parity, widgets)
 ```
 
-## نظام التصميم
+## 4. Design system
 
-كل عنصر هو نقل مباشر لقاعدة في النموذج، لا اجتهاد شخصي:
+Every widget is a direct transcription of a rule in the prototype — no personal
+interpretation. Tokens are generated, never typed by hand:
+`HTML → design/tokens.json → lib/core/design/tokens.dart`.
 
-| الودجة | مصدرها في النموذج |
-| --- | --- |
-| `KCard` | `.hero` / `.pd` — بطاقة بحد رفيع ونقشة سداسية ولون اختياري |
-| `KPill` | `.pill` — كبسولة 32dp بقيمة ذهبية |
-| `KTag` | `.tag` — لون المادة الصلب ونص داكن |
-| `KChip` | `.chip` — مفتاح خطوة 52dp على بطاقة ممتلئة، بأيقونة نوع الخطوة وشريط تقدّم رفيع بين الجزئي والمكتمل |
-| `KBrandMark` | علامتا تليجرام وواتساب من Simple Icons، داخل نافذة «حول» في الإعدادات |
-| `KButton` | `.btn` / `.btn2` — 44dp، تعبئة حمراء أو حد رفيع |
-| `KProgressBar` | `.bar` — 8dp، حواف دائرية، `--redtx` |
-| `KProgressRing` | `.ring` — 240dp، r104، سماكة 10px، نهاية دائرية، بداية -90° |
-| `KEcgLine` | `.ecg` — المسار نفسه، معكوساً، ويظهر خلال 600ms |
-| `KBreakDivider` | `.br` — عنوان في الوسط بين خطين رفيعين |
-| `KSectionHeader` | `h2` — هوامش 24/12 |
-| `KToast` / `KConfetti` | `#toast` / `.cf` — كبسولة معكوسة، وانفجار 26 قطعة |
+| Widget | Prototype source |
+|---|---|
+| `KCard` | `.hero` / `.pd` — thin border, hexagon pattern, optional accent |
+| `KPill` | `.pill` — 32dp capsule with a gold value |
+| `KTag` | `.tag` — solid subject colour, dark text |
+| `KChip` | `.chip` — 52dp step key, filled card, thin progress bar |
+| `KButton` | `.btn` / `.btn2` — 44dp, red fill or thin outline |
+| `KProgressBar` | `.bar` — 8dp, rounded, `--redtx` |
+| `KProgressRing` | `.ring` — 240dp, r104, 10px stroke, round cap, −90° start |
+| `KEcgLine` | `.ecg` — same path, mirrored, drawn in 600 ms |
+| `KBreakDivider` | `.br` — centred label between two hairlines |
+| `KSectionHeader` | `h2` — 24/12 margins |
+| `showKToast` / `KConfetti` | `#toast` / `.cf` — inverted capsule, 26-piece burst |
+| `KBrandMark` | Telegram/WhatsApp marks from Simple Icons, in the About modal |
+| `KDialog` | modal surface — blurred barrier, 28px radius, `KButton` actions |
 
-يعرض `/gallery` كل هذه العناصر بالسمة الحيّة (يُفتح من شاشة اليوم في
-نسخ التطوير). تقارن الاختبارات مسار ECG وهندسة الحلقة والبلاطة السداسية
-ورموز التنقل مع HTML، ليبقى النموذج هو المرجع.
+`/gallery` renders all of them against the live theme (opened from Today in debug
+builds). Tests compare the ECG path, ring geometry, hexagon tile and navigation
+icons against the HTML so the prototype stays authoritative.
 
-## التعريب
+## 5. CI/CD
 
-كل النصوص الظاهرة للمستخدم موجودة في `lib/l10n/app_ar.arb`، ويولّد
-`flutter gen-l10n` (عبر `l10n.yaml`) واجهات مطبوعة يُصل إليها بـ
-`context.l10n`. وإضافة الإنجليزية تعني إضافة `app_en.arb` فقط، دون أي
-تعديل على الودجات.
+Runs on every push to `main`, every `v*` tag, every pull request, and manually
+(`workflow_dispatch`). Concurrency cancels superseded runs on the same ref.
 
-## التكامل المستمر والتوقيع
+### Job 1 — `verify` (the gate)
 
-يعمل `.github/workflows/android.yml` عند كل دفعة:
+| Step | Fails when |
+|---|---|
+| `flutter pub get` | dependency resolution breaks |
+| `apt-get install libsqlite3-dev` | (setup) |
+| `flutter gen-l10n` | ARB keys are missing or duplicated |
+| `build_runner build` | Drift schema or generated code is broken |
+| `extract_tokens.mjs --check` | tokens drifted from the prototype |
+| `check_version.mjs` | `AppInfo` ≠ `pubspec.yaml` |
+| `validate_plan_data.mjs` | dataset no longer reconciles with the PDF |
+| `validate_plan_data.mjs --self-test` | the validator stopped catching corruption |
+| `flutter analyze --no-fatal-infos --no-fatal-warnings` | **errors** fail; warnings/infos are printed |
+| `flutter test --reporter expanded` | any failing test |
 
-1. `node tools/extract_tokens.mjs --check` — يجب أن تطابق السمة النموذج.
-2. `node tools/validate_plan_data.mjs` — يجب أن تتطابق البيانات مع 480 س 9 د.
-3. `flutter analyze` و`flutter test`.
-4. بناء APK للتطوير عند كل دفعة.
-5. بناء `Khutati.apk` للأجهزة الحديثة (arm64 فقط) باستخدام
-   `--split-per-abi`، ورفعه كأثر، ثم نشره في GitHub Releases مع
-   `update.json`: إصدار مرقّم عند وسوم `v*`، وإصدار `latest` متجدد عند
-   الدفع إلى `main`.
+### Job 2 — `build-release` (only after `verify` passes)
 
-يستخدم توقيع الإصدار أسرار المستودع التالية (مطلوبة في CI، وبدونها يفشل
-الإصدار بدل نشر APK بمفتاح التطوير):
+1. Checks `release_notes/ar.txt` contains Arabic characters.
+2. Decodes the keystore from secrets and opens it with `keytool` **before** the
+   long Gradle build, so a bad secret fails fast.
+3. Builds one arm64 APK, obfuscated, with split debug info:
+   ```bash
+   flutter build apk --release --split-per-abi \
+     --target-platform android-arm64 \
+     --obfuscate --split-debug-info=build/symbols \
+     --dart-define=KHUTATI_SUPABASE_URL=... \
+     --dart-define=KHUTATI_SUPABASE_ANON_KEY=...
+   ```
+4. Renames the output to `Khutati.apk`.
+5. Verifies the APK with `apksigner` and compares its SHA-256 fingerprint to the
+   keystore's. A debug-signed APK is refused.
+6. Fails if the APK exceeds **40 MiB** (currently ~21 MiB).
+7. Writes `update.json` from the pubspec version plus `release_notes/ar.txt`.
+8. Uploads the artifact and publishes a GitHub Release under `v<versionName>`.
 
-| السر | الغرض |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | نسخة Base64 من مخزن مفاتيح الإصدار |
-| `ANDROID_KEYSTORE_PASSWORD` | كلمة مرور مخزن المفاتيح |
-| `ANDROID_KEY_ALIAS` | اسم المفتاح داخل المخزن |
-| `ANDROID_KEY_PASSWORD` | كلمة مرور المفتاح |
+### Required GitHub secrets (names only — never commit values)
 
-يتحقق CI من توقيع `Khutati.apk` ويقارن بصمة SHA-256 بمخزن المفاتيح قبل
-النشر. تفاصيل الإنشاء والنسخ الاحتياطي وما يجب أن يحتفظ به الإنسان خارج
-المستودع في `docs/release-signing.md`.
+| Secret | Used for |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | base64 of the release `.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key password |
+| `KHUTATI_SUPABASE_URL` | injected with `--dart-define` |
+| `KHUTATI_SUPABASE_ANON_KEY` | injected with `--dart-define` (public by design, RLS-scoped) |
 
-## الاصطلاحات
+The service-role key is **never** used by the app and must never be added here.
 
-- لا ألوان أو أنصاف أقطار أو أحجام خطوط خارج `lib/core/design/tokens.dart`.
-- لا محتوى للخطة خارج `khutati_plan_data.json`.
-- لا نصوص عربية مكتوبة مباشرة داخل الشيفرة؛ استخدم `context.l10n`.
-- استخدم خصائص الاتجاه (`start`/`end`) ولا تستخدم `left`/`right`.
-- الأرقام غربية في كل مكان (القسم 13.1 من PRD).
+## 6. Supabase setup
+
+### 6.1 Database
+
+Create a project, then run both migrations in the SQL editor (or
+`supabase db push` with the CLI):
+
+```
+supabase/migrations/202611170001_app_updates.sql   -- public update manifest
+supabase/migrations/202611180001_sync_tables.sql   -- user_task_states, user_step_states, focus_sessions + RLS
+```
+
+Both are idempotent. After applying, confirm RLS is enabled on all three sync
+tables and the `*_owner` policies exist; `anon` must have no grants on them.
+
+### 6.2 Google sign-in
+
+1. **Google Cloud Console → Credentials:**
+   - **Web client** — its client id is the app's `serverClientId`, defined in
+     `lib/features/auth/data/supabase_auth.dart` as `googleWebClientId`. Replace
+     it there if you use your own project.
+   - **Android client** — package `com.khutati.app` plus the **release keystore
+     SHA-1** (and SHA-256). Without it Credential Manager returns no ID token.
+2. **Supabase Dashboard → Authentication → Providers → Google:** enable it and
+   paste the Web client id and secret.
+3. **Supabase Dashboard → Authentication → Providers → Google → Skip nonce
+   check: ON.**
+
+Step 3 is mandatory. The native Credential Manager does not mint a nonce, so
+Supabase's nonce verification must be disabled **on the server**
+(`external_google_skip_nonce_check = true`). It is not a Dart parameter and must
+never be emulated by weakening the client. If it is off, the Google picker
+succeeds and the token exchange fails.
+
+4. Authentication → URL configuration: no redirect URLs are needed for the native
+   flow, but keep the site URL set.
+
+### 6.3 Client configuration
+
+The URL and anon key are compile-time values:
+
+```dart
+String.fromEnvironment('KHUTATI_SUPABASE_URL')
+String.fromEnvironment('KHUTATI_SUPABASE_ANON_KEY')
+```
+
+If either is empty, `SupabaseConfig.isConfigured` is false, `SupabaseAuth` stays
+uninitialized, `CloudSyncService.syncNow` returns early, and the app works fully
+offline as a guest. This is intentional: a contributor build must not write to
+production.
+
+### 6.4 Update manifest
+
+`app_updates` is read with the anon key and is public by design. Add a row per
+release, or let the GitHub fallback handle it:
+
+```sql
+insert into public.app_updates
+  (platform, channel, version_name, version_code, apk_url, notes, published_at)
+values
+  ('android', 'stable', '0.8.1', 31,
+   'https://github.com/7sn-17/Khutati/releases/download/v0.8.1/Khutati.apk',
+   'إصلاحات وتحسينات…', now());
+```
+
+The client queries the newest row, races it against the GitHub Releases API and
+keeps the higher `versionCode`.
+
+## 7. Versioning and release notes
+
+Three places must agree; two are enforced by CI.
+
+| File | Field | Enforced by |
+|---|---|---|
+| `pubspec.yaml` | `version: 0.8.1+31` | source of truth for the build |
+| `lib/core/app_info.dart` | `versionName = '0.8.1'`, `buildNumber = 31` | `tools/check_version.mjs` |
+| `release_notes/ar.txt` | Arabic notes for this release | CI requires Arabic characters |
+
+Release procedure:
+
+1. Bump `versionName` **and** `buildNumber` in both files. The `+31` is the
+   Android `versionCode`; it must increase or the update checker will not see the
+   new build.
+2. Update `release_notes/ar.txt`: first line `إصدار X.Y.Z — …`, then bullets, then
+   a footer `• الإصدار: X.Y.Z (build). بياناتك المحلية وخطتك تبقى محفوظة…`.
+3. Run `node tools/check_version.mjs`.
+4. Commit and push to `main`; CI publishes `vX.Y.Z` automatically. Push a `v*`
+   tag only when you want to force a specific tag name.
+5. The release carries `Khutati.apk` and `update.json`. The in-app checker reads
+   the Supabase row first and falls back to the GitHub manifest.
+
+Never reuse a build number: the dialog compares `versionCode`, so re-publishing
+the same code hides the update from installed devices.
+
+## 8. Conventions
+
+- No colour, radius or font size outside `lib/core/design/tokens.dart`.
+- No plan content outside `khutati_plan_data.json`.
+- Shared user-facing strings live in `lib/l10n/app_ar.arb` and are read through
+  `context.l10n`; one-off copy may be an Arabic literal in the widget.
+- Use direction-aware properties (`start`/`end`), never `left`/`right`.
+- Numbers are Western Arabic digits everywhere (PRD §13.1); dates and durations
+  go through `core/utils/format.dart`.
+- Dialogs are `KDialog`; there is no `showDialog`/`AlertDialog` in `lib/`.
+
+## 9. Where to read more
+
+| Document | Contents |
+|---|---|
+| [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) | AI handoff: stack, features, hard rules, `bd` workflow, gotchas |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | write path, 4-tap state machine, native bridge, schema, sync semantics |
+| [`docs/date-resolution.md`](docs/date-resolution.md) | how "today" is resolved from the local clock |
+| [`docs/updates.md`](docs/updates.md) | update channels and manifest details |
+| [`docs/release-signing.md`](docs/release-signing.md) | keystore setup and fingerprint checks |
+| [`docs/apk-size.md`](docs/apk-size.md) | size budget and the 40 MiB guard |
+| [`docs/data-validation.md`](docs/data-validation.md) | the 21 dataset checks |
+| [`AGENTS.md`](AGENTS.md) · [`CLAUDE.md`](CLAUDE.md) | agent instructions and Beads integration |
+
+## 10. Troubleshooting
+
+**`Could not find org.jetbrains.kotlin:kotlin-stdlib:2.0.21` in the Gradle build.**
+Transient failure of `plugins.gradle.org`. Nothing in `android/` is wrong — re-run
+the failed job before touching Gradle files.
+
+**`Target of URI doesn't exist: 'app_database.g.dart'`.** Codegen has not run:
+`dart run build_runner build --delete-conflicting-outputs`.
+
+**`package:flutter_lints/flutter.yaml` cannot be resolved.** You are running
+`dart analyze` without a Flutter SDK. Use `flutter analyze` or CI.
+
+**Sign-in opens the account picker, then fails.** "Skip nonce check" is off in the
+Supabase Google provider, or the Android OAuth client lacks the release SHA-1.
+
+**Progress saves but never reaches another device.** The outbox is not draining:
+check the build has both `--dart-define` values and that the three sync tables
+have their RLS policies.
+
+**The alert does not fire with the screen off.** Exact alarms are denied. The app
+prompts on first launch and offers a shortcut in Settings; battery optimisation
+can also kill the service.

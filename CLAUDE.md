@@ -60,18 +60,42 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
+Read `PROJECT_CONTEXT.md` §7 first: CI is the only real gate. Locally:
 
 ```bash
-# Example:
-# npm install
-# npm test
+flutter pub get
+flutter gen-l10n
+dart run build_runner build --delete-conflicting-outputs
+flutter analyze && flutter test
+
+node tools/extract_tokens.mjs --check
+node tools/check_version.mjs
+node tools/validate_plan_data.mjs
+node tools/validate_plan_data.mjs --self-test
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+**Read `PROJECT_CONTEXT.md` before changing anything, then `ARCHITECTURE.md`.**
+
+- Layering: `features` → `data` → `domain`; `core` is a leaf. `domain/` is pure
+  Dart (no Flutter, no Drift).
+- Offline-first: user writes go to Drift **then** the `sync_queue` outbox;
+  `CloudSyncService` drains it every 5 minutes and on app pause. Never call
+  Supabase from a widget or controller.
+- The 4-tap step state machine lives in `lib/domain/plan/step_progress.dart`
+  (codes 0/1/2/3; the two halves are distinct so the cycle survives a restart).
+- Native bridge: `khutati/focus_timer` (methods) + `khutati/focus_events`
+  (notification actions) in `android/app/src/main/kotlin/com/khutati/app/`.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- The HTML prototype is the visual truth; design tokens are generated, never
+  hand-written. No colour/radius/font size outside `lib/core/design/tokens.dart`.
+- Dialogs are `KDialog` / `showKDialog`; there is no `showDialog` or `AlertDialog`
+  in `lib/`. A dialog shown from `MaterialApp.builder` must use
+  `rootNavigatorKey.currentContext`.
+- Arabic UI and forced RTL. Shared strings go through `context.l10n`; numbers use
+  Western digits via `core/utils/format.dart`.
+- Generated Drift code (`*.g.dart`) is git-ignored — never hand-edit it, and check
+  `@DataClassName` in `lib/data/database/tables.dart` before naming row types.
