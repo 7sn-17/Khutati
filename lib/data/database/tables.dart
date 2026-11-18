@@ -202,7 +202,6 @@ class UserAdditions extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
-@DataClassName('FocusSessionRow')
 @DataClassName('FocusSession')
 class FocusSessions extends Table {
   IntColumn get id => integer().autoIncrement()();

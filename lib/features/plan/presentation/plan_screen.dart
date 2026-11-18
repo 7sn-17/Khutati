@@ -13,6 +13,8 @@ import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_task.dart';
 import '../../../l10n/l10n.dart';
 import '../application/plan_browser_controller.dart';
+import '../../achievements/application/achievements_controller.dart';
+import '../../today/application/today_controller.dart';
 
 /// Plan (PRD 5.3) — the whole 68-day journey, browsable by week and day.
 ///
@@ -167,6 +169,25 @@ class _PlanBodyState extends ConsumerState<_PlanBody> {
             ],
           ),
           const SizedBox(height: 14),
+          Builder(
+            builder: (BuildContext context) {
+              final AchievementsData? ach = ref.watch(achievementsProvider).valueOrNull;
+              final TodayData? td = ref.watch(todayDataProvider).valueOrNull;
+              if (ach == null && td == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: <Widget>[
+                    if (ach != null)
+                      KPill(label: 'نقاطك', value: '${ach.totalPoints}'),
+                    if (ach != null && td != null) const SizedBox(width: 8),
+                    if (td != null)
+                      KPill(label: 'سلسلتك', value: '${td.streak}'),
+                  ],
+                ),
+              );
+            },
+          ),
           _OverallCard(
             data: data,
             completedDays: completedDays,
