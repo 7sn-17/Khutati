@@ -220,8 +220,8 @@ void main() {
         if (request.url.path.endsWith('releases.atom')) {
           return http.Response('down', 500);
         }
-        return http.Response(
-          '''
+        return http.Response.bytes(
+          utf8.encode('''
 [
   {
     "version": "0.9.0+40",
@@ -230,9 +230,11 @@ void main() {
     "created_at": "2026-12-01T10:00:00Z"
   }
 ]
-''',
+'''),
           200,
-          headers: <String, String>{'content-type': 'application/json'},
+          headers: <String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          },
         );
       });
 
@@ -278,7 +280,13 @@ void main() {
       final MockClient client = MockClient((http.Request request) async {
         hosts.add(request.url.host);
         if (request.url.host == 'api.github.com') {
-          return http.Response(releaseBody, 200);
+          return http.Response.bytes(
+            utf8.encode(releaseBody),
+            200,
+            headers: <String, String>{
+              'content-type': 'application/json; charset=utf-8',
+            },
+          );
         }
         return http.Response('should not be reached', 500);
       });
