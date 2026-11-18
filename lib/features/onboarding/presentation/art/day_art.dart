@@ -6,11 +6,15 @@ import 'package:flutter/material.dart';
 import 'onboarding_art.dart';
 
 /// Slide 2 — one study day: a live clock and three task rows ticking over.
+///
+/// Timings are the prototype's: the twelve ticks pop 0.1 s apart, the arc draws
+/// over 4.4 s from 1.0 s, the rows slide in at 1.0/1.5/2.0 and the halo starts
+/// at 5.2.
 class DayArt extends StatelessWidget {
-  const DayArt({required this.enter, required this.loop, super.key});
+  const DayArt({required this.enter, required this.ambient, super.key});
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +22,9 @@ class DayArt extends StatelessWidget {
       fit: StackFit.expand,
       children: <Widget>[
         const RepaintBoundary(child: CustomPaint(painter: _DayHills())),
-        RepaintBoundary(child: CustomPaint(painter: _DayPainter(enter, loop))),
+        RepaintBoundary(
+          child: CustomPaint(painter: _DayPainter(enter, ambient)),
+        ),
       ],
     );
   }
@@ -63,48 +69,55 @@ class _DayHills extends CustomPainter {
 }
 
 class _DayPainter extends CustomPainter {
-  _DayPainter(this.enter, this.loop)
-    : super(repaint: Listenable.merge(<Listenable>[enter, loop]));
+  _DayPainter(this.enter, this.ambient)
+    : super(repaint: Listenable.merge(<Listenable>[enter, ambient]));
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
-  static final List<_TaskRow> _rows = <_TaskRow>[
-    _TaskRow(250, KOnboarding.blue, 'حضور الفيديو', '13 د', true, 0.34),
-    _TaskRow(296, KOnboarding.blue, 'دراسة الفيديو', '13 د', true, 0.48),
-    _TaskRow(342, KOnboarding.teal, 'حل أسئلة الفصل', 'ساعة', false, 0.62),
+  static const List<_TaskRow> _rows = <_TaskRow>[
+    _TaskRow(250, KOnboarding.blue, 'حضور الفيديو', '13 د', true, 1.0),
+    _TaskRow(296, KOnboarding.blue, 'دراسة الفيديو', '13 د', true, 1.5),
+    _TaskRow(342, KOnboarding.teal, 'حل أسئلة الفصل', 'ساعة', false, 2.0),
   ];
+
+  static const List<(Offset, double, Color, double)> _sparks =
+      <(Offset, double, Color, double)>[
+        (Offset(52, 90), 0.8, KOnboarding.gold, 0),
+        (Offset(340, 70), 1, KOnboarding.teal, 2),
+      ];
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     enterDesignSpace(canvas, size);
-    final double t = enter.value;
-    final double l = loop.value;
+    final double t = enter.value * kEnterSeconds;
+    final double a = ambient.value * kAmbientSeconds;
 
-    _paintClock(canvas, t, l);
-
+    _paintClock(canvas, t, a);
     for (final _TaskRow row in _rows) {
-      _paintRow(canvas, row, t, l);
+      _paintRow(canvas, row, t, a);
     }
-
-    _paintSparks(canvas, t, l);
+    _paintSparks(canvas, t, a);
     canvas.restore();
   }
 
-  void _paintClock(Canvas canvas, double t, double l) {
+  void _paintClock(Canvas canvas, double t, double a) {
     canvas.save();
     canvas.translate(195, 150);
 
-    // Twelve ticks; the first eight are "spent" hours.
+    // Twelve ticks, 0.1 s apart; the first eight are "spent" hours.
     for (int i = 0; i < 12; i++) {
-      final double pop = elastic(segment(t, 0.05 + i * 0.02, 0.15 + i * 0.02));
+      final double pop = kPopCurve.transform(
+        stage(t, delay: i * 0.1, duration: 1.2),
+      );
       if (pop <= 0) continue;
       canvas.save();
       canvas.rotate(i * math.pi / 6);
+      canvas.scale(pop);
       canvas.drawLine(
-        Offset(0, -86 * pop),
-        Offset(0, -95 * pop),
+        const Offset(0, -86),
+        const Offset(0, -95),
         Paint()
           ..strokeWidth = 3.5
           ..strokeCap = StrokeCap.round
@@ -122,7 +135,10 @@ class _DayPainter extends CustomPainter {
         ..color = KOnboarding.line,
     );
 
-    final double arc = Curves.easeOutCubic.transform(segment(t, 0.2, 0.8));
+    // `.ar` draws 0 → 300 of a 402-long dash over 4.4 s, starting at 1 s.
+    final double arc = Curves.easeOut.transform(
+      stage(t, delay: 1.0, duration: 4.4),
+    );
     if (arc > 0) {
       canvas.drawArc(
         Rect.fromCircle(center: Offset.zero, radius: 64),
@@ -137,20 +153,24 @@ class _DayPainter extends CustomPainter {
       );
     }
 
-    // A slow halo so the dial feels alive after the entrance.
-    final double pulse = (l * 2) % 1;
-    canvas.drawCircle(
-      Offset.zero,
-      64 * (1 + 0.35 * pulse),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..color = KOnboarding.redSoft.withValues(
-          alpha: 0.5 * (1 - pulse) * segment(t, 0.5, 0.7),
-        ),
-    );
+    // `.pl` — a 5 s halo that begins at 5.2 s and never repeats its phase.
+    if (a >= 5.2) {
+      final double pulse = Curves.easeOut.transform(
+        cycle(a, period: 5, delay: 5.2),
+      );
+      canvas.drawCircle(
+        Offset.zero,
+        64 * (1 + 0.35 * pulse),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = KOnboarding.redSoft.withValues(alpha: 0.5 * (1 - pulse)),
+      );
+    }
 
-    final double textIn = segment(t, 0.25, 0.5);
+    final double textIn = Curves.easeOut.transform(
+      stage(t, delay: 0.9, duration: 0.8),
+    );
     if (textIn > 0) {
       paintText(
         canvas,
@@ -173,9 +193,10 @@ class _DayPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintRow(Canvas canvas, _TaskRow row, double t, double l) {
-    final double slide = Curves.easeOutCubic.transform(
-      segment(t, row.delay, row.delay + 0.22),
+  void _paintRow(Canvas canvas, _TaskRow row, double t, double a) {
+    // `.slx` — 1.4 s from +70 px with a fade.
+    final double slide = kSlideCurve.transform(
+      stage(t, delay: row.delay, duration: 1.4),
     );
     if (slide <= 0) return;
 
@@ -218,17 +239,22 @@ class _DayPainter extends CustomPainter {
           ..strokeWidth = 2.5
           ..color = KOnboarding.dim.withValues(alpha: slide),
       );
-      final double pulse = (l * 2.5 + 0.3) % 1;
-      canvas.drawCircle(
-        center,
-        10 * (1 + 0.9 * pulse),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = KOnboarding.teal.withValues(
-            alpha: 0.6 * (1 - pulse) * slide,
-          ),
-      );
+      // `.pl` on the pending row starts at 4 s.
+      if (a >= 4) {
+        final double pulse = Curves.easeOut.transform(
+          cycle(a, period: 5, delay: 4),
+        );
+        canvas.drawCircle(
+          center,
+          10 * (1 + 0.9 * pulse),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = KOnboarding.teal.withValues(
+              alpha: 0.6 * (1 - pulse) * slide,
+            ),
+        );
+      }
     }
 
     paintText(
@@ -256,10 +282,13 @@ class _DayPainter extends CustomPainter {
     Canvas canvas,
     Offset center,
     double t,
-    double delay,
+    double rowDelay,
     double alpha,
   ) {
-    final double reveal = segment(t, delay + 0.18, delay + 0.34);
+    // `.dr` — the check draws 0.4 s after its row starts, over 1 s.
+    final double reveal = Curves.easeOut.transform(
+      stage(t, delay: rowDelay + 0.4, duration: 1.0),
+    );
     if (reveal <= 0) return;
     final Path check = Path()
       ..moveTo(center.dx - 5, center.dy)
@@ -277,18 +306,15 @@ class _DayPainter extends CustomPainter {
     );
   }
 
-  static const List<(Offset, double, Color, double)> _sparks =
-      <(Offset, double, Color, double)>[
-        (Offset(52, 90), 0.8, KOnboarding.gold, 0),
-        (Offset(340, 70), 1, KOnboarding.teal, 0.5),
-      ];
-
-  void _paintSparks(Canvas canvas, double t, double l) {
-    final double alpha = segment(t, 0.1, 0.4);
+  void _paintSparks(Canvas canvas, double t, double a) {
+    final double alpha = Curves.easeOut.transform(
+      stage(t, delay: 0.1, duration: 1.2),
+    );
     if (alpha <= 0) return;
-    for (final (Offset position, double scale, Color color, double phase)
+    for (final (Offset position, double scale, Color color, double delay)
         in _sparks) {
-      final double bob = math.sin((l + phase) * math.pi * 2) * 8 * scale;
+      final double p = delayedCycle(a, period: 7, delay: delay);
+      final double bob = -8 * (1 - math.cos(p * math.pi * 2)) / 2 * scale;
       canvas.save();
       canvas.translate(position.dx, position.dy + bob);
       canvas.scale(scale);
@@ -302,7 +328,7 @@ class _DayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DayPainter oldDelegate) =>
-      oldDelegate.enter != enter || oldDelegate.loop != loop;
+      oldDelegate.enter != enter || oldDelegate.ambient != ambient;
 }
 
 class _TaskRow {
@@ -320,5 +346,7 @@ class _TaskRow {
   final String label;
   final String duration;
   final bool done;
+
+  /// Seconds before the row slides in.
   final double delay;
 }

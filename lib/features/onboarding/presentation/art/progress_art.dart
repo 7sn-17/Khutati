@@ -7,11 +7,15 @@ import 'onboarding_art.dart';
 
 /// Slide 3 — visible progress: a growing bar chart, a rising trend line and a
 /// star that keeps sparkling.
+///
+/// The bars are the entrance (0.3 s apart, 1.6 s each). The trend line, the
+/// star and the particles are a 12 s loop, exactly as in the prototype: the line
+/// draws for 6 s, holds, then fades; the star bursts at 48 % and fades at 88 %.
 class ProgressArt extends StatelessWidget {
-  const ProgressArt({required this.enter, required this.loop, super.key});
+  const ProgressArt({required this.enter, required this.ambient, super.key});
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +24,7 @@ class ProgressArt extends StatelessWidget {
       children: <Widget>[
         const RepaintBoundary(child: CustomPaint(painter: _ProgressHills())),
         RepaintBoundary(
-          child: CustomPaint(painter: _ProgressPainter(enter, loop)),
+          child: CustomPaint(painter: _ProgressPainter(enter, ambient)),
         ),
       ],
     );
@@ -74,11 +78,11 @@ class _ProgressHills extends CustomPainter {
 }
 
 class _ProgressPainter extends CustomPainter {
-  _ProgressPainter(this.enter, this.loop)
-    : super(repaint: Listenable.merge(<Listenable>[enter, loop]));
+  _ProgressPainter(this.enter, this.ambient)
+    : super(repaint: Listenable.merge(<Listenable>[enter, ambient]));
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
   static final Path _trend = Path()
     ..moveTo(356, 352)
@@ -94,33 +98,47 @@ class _ProgressPainter extends CustomPainter {
     ..lineTo(-8, 13)
     ..close();
 
-  static final List<_Bar> _bars = <_Bar>[
-    _Bar(300, 50, KOnboarding.blue, 0.10),
-    _Bar(236, 90, KOnboarding.teal, 0.18),
-    _Bar(172, 130, KOnboarding.pink, 0.26),
-    _Bar(108, 170, KOnboarding.redSoft, 0.34),
-    _Bar(44, 210, KOnboarding.gold, 0.42),
+  static const List<_Bar> _bars = <_Bar>[
+    _Bar(300, 50, KOnboarding.blue, 0.30),
+    _Bar(236, 90, KOnboarding.teal, 0.66),
+    _Bar(172, 130, KOnboarding.pink, 1.02),
+    _Bar(108, 170, KOnboarding.redSoft, 1.38),
+    _Bar(44, 210, KOnboarding.gold, 1.74),
+  ];
+
+  /// The eight particles around the star, as `--x`/`--y` in the prototype.
+  static const List<Offset> _particles = <Offset>[
+    Offset(0, -58),
+    Offset(40, -40),
+    Offset(58, 0),
+    Offset(40, 40),
+    Offset(0, 58),
+    Offset(-40, 40),
+    Offset(-58, 0),
+    Offset(-40, -40),
   ];
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     enterDesignSpace(canvas, size);
-    final double t = enter.value;
-    final double l = loop.value;
+    final double t = enter.value * kEnterSeconds;
+    final double a = ambient.value * kAmbientSeconds;
 
     _paintGrid(canvas, t);
     for (final _Bar bar in _bars) {
       _paintBar(canvas, bar, t);
     }
-    _paintTrend(canvas, t, l);
-    _paintStar(canvas, t, l);
-    _paintSparks(canvas, t, l);
+    _paintTrend(canvas, a);
+    _paintEndpoint(canvas, t);
+    _paintStar(canvas, a);
     canvas.restore();
   }
 
   void _paintGrid(Canvas canvas, double t) {
-    final double alpha = segment(t, 0, 0.3);
+    final double alpha = Curves.easeOut.transform(
+      stage(t, delay: 0, duration: 0.6),
+    );
     if (alpha <= 0) return;
     final Paint paint = Paint()
       ..strokeWidth = 1
@@ -140,8 +158,9 @@ class _ProgressPainter extends CustomPainter {
   }
 
   void _paintBar(Canvas canvas, _Bar bar, double t) {
-    final double grow = Curves.easeOutCubic.transform(
-      segment(t, bar.delay, bar.delay + 0.26),
+    // `.gr` — 1.6 s, scaleY from the baseline, staggered 0.36 s apart.
+    final double grow = kGrowCurve.transform(
+      stage(t, delay: bar.delay, duration: 1.6),
     );
     if (grow <= 0) return;
 
@@ -174,9 +193,13 @@ class _ProgressPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintTrend(Canvas canvas, double t, double l) {
-    final double reveal = Curves.easeOutCubic.transform(segment(t, 0.45, 0.95));
-    if (reveal <= 0) return;
+  /// `.ln` — a 12 s cycle: draw over 6 s, hold to 88 %, fade out.
+  void _paintTrend(Canvas canvas, double a) {
+    final double p = cycle(a, period: 12);
+    final double reveal = p < 0.5 ? p / 0.5 : 1.0;
+    final double alpha = p < 0.88 ? 1.0 : ((1 - p) / 0.12).clamp(0.0, 1.0);
+    if (reveal <= 0 || alpha <= 0) return;
+
     final ui.PathMetric metric = _trend.computeMetrics().first;
     final Path visible = metric.extractPath(0, metric.length * reveal);
 
@@ -187,7 +210,7 @@ class _ProgressPainter extends CustomPainter {
         ..strokeWidth = 18
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
-        ..color = KOnboarding.redSoft.withValues(alpha: 0.22),
+        ..color = KOnboarding.redSoft.withValues(alpha: 0.22 * alpha),
     );
     canvas.drawPath(
       visible,
@@ -199,16 +222,21 @@ class _ProgressPainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           const Offset(356, 352),
           const Offset(92, 170),
-          <Color>[KOnboarding.redSoft, KOnboarding.gold],
+          <Color>[
+            KOnboarding.redSoft.withValues(alpha: alpha),
+            KOnboarding.gold.withValues(alpha: alpha),
+          ],
         ),
     );
 
-    if (reveal < 1) return;
-
-    // A light that runs the line forever, like a live sparkline.
-    final ui.Tangent? tangent = metric.getTangentForOffset(metric.length * l);
+    // The arrow only exists once the line has been drawn.
+    if (p <= 0.52) return;
+    final double travel = ((p - 0.52) / 0.4).clamp(0.0, 1.0);
+    final ui.Tangent? tangent = metric.getTangentForOffset(
+      metric.length * travel,
+    );
     if (tangent == null) return;
-    final double fade = (1 - segment(l, 0.88, 1)).clamp(0.0, 1.0).toDouble();
+    final double fade = math.min(1.0, (p - 0.52) * 14) * alpha;
     canvas.save();
     canvas.translate(tangent.position.dx, tangent.position.dy);
     canvas.rotate(tangent.angle);
@@ -219,64 +247,75 @@ class _ProgressPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintStar(Canvas canvas, double t, double l) {
-    final double pop = elastic(segment(t, 0.5, 0.78));
+  /// `.pp` — the dot at the head of the line, at 5.2 s.
+  void _paintEndpoint(Canvas canvas, double t) {
+    final double pop = kPopCurve.transform(stage(t, delay: 5.2, duration: 1.2));
     if (pop <= 0) return;
-
     canvas.save();
-    canvas.translate(62, 128);
-    canvas.drawCircle(
-      Offset.zero,
-      46,
-      Paint()..color = KOnboarding.gold.withValues(alpha: 0.14 * pop),
-    );
-
-    // Eight particles drift outward and fade, on a continuous loop.
-    for (int i = 0; i < 8; i++) {
-      final double phase = (l * 2 + i / 8) % 1;
-      final double angle = i * math.pi / 4;
-      final double radius = 46 + 14 * phase;
-      canvas.drawCircle(
-        Offset(math.cos(angle) * radius, math.sin(angle) * radius),
-        4,
-        Paint()
-          ..color = (i.isEven ? KOnboarding.gold : KOnboarding.ink).withValues(
-            alpha: (1 - phase) * 0.8 * pop,
-          ),
-      );
-    }
-
+    canvas.translate(356, 352);
     canvas.scale(pop);
-    canvas.drawPath(starPath(), Paint()..color = KOnboarding.gold);
+    canvas.drawCircle(Offset.zero, 7, Paint()..color = KOnboarding.redSoft);
     canvas.restore();
   }
 
-  static const List<(Offset, double, Color, double)> _sparks =
-      <(Offset, double, Color, double)>[
-        (Offset(340, 150), 0.8, KOnboarding.ink, 0.2),
-        (Offset(200, 110), 0.6, KOnboarding.blue, 0.7),
-      ];
+  /// `.st` and `.pt` — a 12 s burst: the star scales in at 48 %, overshoots to
+  /// 1.3 at 58 %, settles by 66 % and fades out after 88 %; the particles fly
+  /// outward between 56 % and 82 %.
+  void _paintStar(Canvas canvas, double a) {
+    final double p = cycle(a, period: 12);
 
-  void _paintSparks(Canvas canvas, double t, double l) {
-    final double alpha = segment(t, 0.1, 0.4);
-    if (alpha <= 0) return;
-    for (final (Offset position, double scale, Color color, double phase)
-        in _sparks) {
-      final double bob = math.sin((l + phase) * math.pi * 2) * 8 * scale;
+    final double scale;
+    if (p <= 0.48) {
+      scale = 0;
+    } else if (p <= 0.58) {
+      scale = 1.3 * (p - 0.48) / 0.10;
+    } else if (p <= 0.66) {
+      scale = 1.3 - 0.3 * (p - 0.58) / 0.08;
+    } else {
+      scale = 1;
+    }
+    final double opacity = p <= 0.88 ? 1 : (1 - (p - 0.88) / 0.12);
+
+    canvas.save();
+    canvas.translate(62, 128);
+
+    if (scale > 0) {
+      canvas.drawCircle(
+        Offset.zero,
+        46,
+        Paint()..color = KOnboarding.gold.withValues(alpha: 0.14 * opacity),
+      );
       canvas.save();
-      canvas.translate(position.dx, position.dy + bob);
       canvas.scale(scale);
       canvas.drawPath(
-        sparklePath(12),
-        Paint()..color = color.withValues(alpha: alpha),
+        starPath(),
+        Paint()..color = KOnboarding.gold.withValues(alpha: opacity),
       );
       canvas.restore();
     }
+
+    if (p > 0.50 && p < 0.82) {
+      final double fly = ((p - 0.50) / 0.32).clamp(0.0, 1.0);
+      final double dotScale = p < 0.56 ? (p - 0.50) / 0.06 : 1 - 0.5 * fly;
+      final double dotAlpha = p < 0.56 ? 1.0 : 1 - fly;
+      for (int i = 0; i < _particles.length; i++) {
+        final Offset target = _particles[i];
+        canvas.drawCircle(
+          target * fly,
+          4 * dotScale,
+          Paint()
+            ..color = (i.isEven ? KOnboarding.gold : KOnboarding.ink)
+                .withValues(alpha: 0.8 * dotAlpha),
+        );
+      }
+    }
+
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _ProgressPainter oldDelegate) =>
-      oldDelegate.enter != enter || oldDelegate.loop != loop;
+      oldDelegate.enter != enter || oldDelegate.ambient != ambient;
 }
 
 class _Bar {
@@ -285,5 +324,7 @@ class _Bar {
   final double x;
   final double height;
   final Color color;
+
+  /// Seconds before the bar starts growing.
   final double delay;
 }

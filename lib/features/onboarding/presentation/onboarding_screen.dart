@@ -100,6 +100,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         active: index == _index,
                         reduceMotion: reduceMotion,
                         width: width,
+                        bottomInset: safe.bottom,
                       ),
                     );
                   },
@@ -108,9 +109,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Positioned(
                 // Matches the CSS `calc(14px + env(safe-area-inset-top))`.
                 top: 14 + safe.top,
-                // The prototype places it on the inline-end edge; the brief
-                // asked for the physical top-right corner in this RTL scene.
-                right: 16,
+                // The prototype places the pill on the inline-end edge; in RTL
+                // that is the visual left, which also keeps it clear of the
+                // red flag in the first illustration.
+                left: 16,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 300),
                   opacity: last ? 0 : 1,
@@ -139,7 +141,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         curve: Curves.easeOutCubic,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _PrimaryButton(
                       key: const ValueKey<String>('onboarding-primary'),
                       label: last ? 'ابدأ' : 'التالي',
@@ -182,16 +184,19 @@ class _ParallaxPage extends StatelessWidget {
             : index.toDouble();
         final double delta = index - page;
         final double distance = delta.abs().clamp(0.0, 1.0).toDouble();
+        // The depth cue is eased, the tracking is not: the page must still
+        // follow the finger one-to-one horizontally.
+        final double eased = Curves.easeOutCubic.transform(distance);
 
-        // The page's slot already travels one full width with the scroll. A
-        // counter-translation of 18% makes the outgoing page trail the finger
-        // (net 0.82 of a width) while the incoming page leads it (1.18), so the
-        // two layers separate in depth instead of sliding as one sheet.
+        // The slot already travels one full width with the scroll. A counter
+        // translation of 18% makes the outgoing page trail the finger (net 0.82
+        // of a width) while the incoming page leads it (1.18), so the layers
+        // separate in depth instead of sliding as one sheet.
         return Transform.translate(
           offset: Offset(-0.18 * delta * MediaQuery.sizeOf(context).width, 0),
           child: Opacity(
-            opacity: 1 - 0.9 * distance,
-            child: Transform.scale(scale: 1 - 0.05 * distance, child: child),
+            opacity: 1 - 0.75 * eased,
+            child: Transform.scale(scale: 1 - 0.10 * eased, child: child),
           ),
         );
       },
@@ -205,12 +210,14 @@ class _Slide extends StatefulWidget {
     required this.active,
     required this.reduceMotion,
     required this.width,
+    required this.bottomInset,
   });
 
   final int index;
   final bool active;
   final bool reduceMotion;
   final double width;
+  final double bottomInset;
 
   @override
   State<_Slide> createState() => _SlideState();
@@ -232,25 +239,30 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
     ),
   ];
 
+  /// Entrance timeline, in real seconds: the painters read
+  /// `value * kEnterSeconds` and each element applies its own CSS delay and
+  /// duration. It is deliberately linear — curving the master would warp every
+  /// ported timing at once.
   late final AnimationController _enter = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2400),
+    duration: const Duration(milliseconds: 7000),
   );
-  late final AnimationController _loop = AnimationController(
+
+  /// Ambient clock. Two hours, played once: long enough that no infinite
+  /// animation ever has to share a period with another one.
+  late final AnimationController _ambient = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 12),
-  );
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _enter,
-    curve: Curves.easeOutCubic,
+    duration: const Duration(hours: 2),
   );
 
   @override
   void initState() {
     super.initState();
     if (widget.reduceMotion) {
+      // A composed still, not an empty one: 7 s into the ambient cycle the line
+      // is drawn, the star has burst and the flag is up.
       _enter.value = 1;
-      _loop.value = 0.3;
+      _ambient.value = 7 / kAmbientSeconds;
     } else if (widget.active) {
       _play();
     }
@@ -261,7 +273,7 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
     super.didUpdateWidget(oldWidget);
     if (widget.reduceMotion) {
       _enter.value = 1;
-      _loop.value = 0.3;
+      _ambient.value = 7 / kAmbientSeconds;
       return;
     }
     if (widget.active == oldWidget.active) return;
@@ -269,21 +281,21 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
       // Replaying on arrival is what makes a swipe feel like a scene change.
       _play();
     } else {
+      // An inactive scene must not keep a ticker awake.
       _enter.stop();
-      _loop.stop();
+      _ambient.stop();
     }
   }
 
   void _play() {
     _enter.forward(from: 0);
-    _loop.repeat();
+    _ambient.forward(from: 0);
   }
 
   @override
   void dispose() {
-    _curve.dispose();
     _enter.dispose();
-    _loop.dispose();
+    _ambient.dispose();
     super.dispose();
   }
 
@@ -293,8 +305,11 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
     final double titleSize = (widget.width * 0.088).clamp(28.0, 36.0);
 
     return Padding(
-      // Room for the footer (dots + button + margins).
-      padding: const EdgeInsets.only(bottom: 132),
+      // Room for the footer (dots + button + margins) plus the system inset.
+      // Without the inset the body text collides with the dots on phones with
+      // a gesture bar — the footer is positioned from the safe area, the page
+      // was not.
+      padding: EdgeInsets.only(bottom: 148 + widget.bottomInset),
       child: Column(
         children: <Widget>[
           Expanded(child: _art()),
@@ -342,9 +357,9 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
 
   Widget _art() {
     return switch (widget.index) {
-      0 => RoadmapArt(enter: _curve, loop: _loop),
-      1 => DayArt(enter: _curve, loop: _loop),
-      _ => ProgressArt(enter: _curve, loop: _loop),
+      0 => RoadmapArt(enter: _enter, ambient: _ambient),
+      1 => DayArt(enter: _enter, ambient: _ambient),
+      _ => ProgressArt(enter: _enter, ambient: _ambient),
     };
   }
 }

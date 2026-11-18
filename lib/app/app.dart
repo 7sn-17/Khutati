@@ -13,6 +13,7 @@ import '../data/sync/sync_bootstrap.dart';
 import '../features/onboarding/application/onboarding_controller.dart';
 import '../features/updates/presentation/update_bootstrap.dart';
 import '../l10n/l10n.dart';
+import 'launch_gate.dart';
 import 'router.dart';
 import 'theme/khutati_theme.dart';
 
@@ -99,7 +100,9 @@ class _NotificationPermissionBootstrapState
 
   Future<void> _recheckAfterResume() async {
     if (!mounted) return;
-    // Never stack a permission flow on top of the welcome screens.
+    // Never stack a permission flow on top of the launch sequence or the
+    // welcome screens.
+    if (!ref.read(launchReadyProvider)) return;
     if (!ref.read(onboardingSeenProvider)) return;
     if (!await FocusNotifications.areEnabled()) return;
     if (!mounted) return;
@@ -108,9 +111,10 @@ class _NotificationPermissionBootstrapState
 
   Future<void> _request() async {
     if (_requested) return;
-    // A system permission dialog on top of the first welcome screen would
-    // derail the flow before the user knows what the app is. Wait for the
-    // onboarding to finish; the listener in build() calls us again.
+    // A system dialog over the splash or the first welcome screen would derail
+    // the flow before the user knows what the app is. Both listeners in build()
+    // call us again the moment those two phases end.
+    if (!ref.read(launchReadyProvider)) return;
     if (!ref.read(onboardingSeenProvider)) return;
     _requested = true;
 
@@ -186,6 +190,9 @@ class _NotificationPermissionBootstrapState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(launchReadyProvider, (bool? previous, bool next) {
+      if (next && previous != true) unawaited(_request());
+    });
     ref.listen<bool>(onboardingSeenProvider, (bool? previous, bool next) {
       if (next && previous != true) unawaited(_request());
     });

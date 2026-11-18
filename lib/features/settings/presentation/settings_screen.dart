@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/device/alarm_settings.dart';
 import '../../../core/device/battery_optimization.dart';
 import '../../../core/device/exact_alarm_prompt.dart';
 
@@ -131,6 +132,8 @@ class SettingsScreen extends ConsumerWidget {
                   }
                 },
               ),
+              const SizedBox(height: 6),
+              const _AlarmStatusRow(),
               const SizedBox(height: 6),
               _SettingsActionRow(
                 title: 'تحسين استخدام البطارية',
@@ -796,6 +799,141 @@ class _SettingsSwitchRow extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One row for the two grants a reminder needs, with the live state.
+///
+/// The state is read on mount and re-read every time the app resumes, because
+/// both permissions are granted in system settings and neither reaches Dart on
+/// its own. Tapping sends the user straight to whichever grant is missing.
+class _AlarmStatusRow extends ConsumerStatefulWidget {
+  const _AlarmStatusRow();
+
+  @override
+  ConsumerState<_AlarmStatusRow> createState() => _AlarmStatusRowState();
+}
+
+class _AlarmStatusRowState extends ConsumerState<_AlarmStatusRow>
+    with WidgetsBindingObserver {
+  AlarmPermissions? _permissions;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refresh());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    final AlarmPermissions next = await AlarmSettings.read();
+    if (!mounted) return;
+    setState(() => _permissions = next);
+  }
+
+  Future<void> _open() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final bool opened = await AlarmSettings.openMissing(
+      _permissions ?? const AlarmPermissions.unknown(),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!opened) {
+      showKToast(context, 'تعذّر فتح إعدادات النظام.', kind: KToastKind.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    final AlarmPermissions? permissions = _permissions;
+    final bool granted = permissions?.allGranted ?? false;
+
+    final Widget status;
+    if (permissions == null) {
+      status = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 2, color: palette.mute),
+      );
+    } else if (granted) {
+      status = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(Icons.check_circle_rounded, size: 16, color: palette.ok),
+          const SizedBox(width: 5),
+          Text(
+            'مفعل',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: palette.ok,
+            ),
+          ),
+        ],
+      );
+    } else {
+      status = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(Icons.error_outline_rounded, size: 16, color: palette.red),
+          const SizedBox(width: 5),
+          Text(
+            'غير مفعل',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: palette.red,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Semantics(
+      button: true,
+      child: KInkSurface(
+        onTap: _open,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: KMetrics.tapTarget),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.alarm_rounded, size: 20, color: palette.mute),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'المنبهات والمذكرات',
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.quoteSize,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+              status,
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_left_rounded, size: 20, color: palette.mute),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -438,19 +438,22 @@ path alone still works, which is why local builds update correctly.
 ## 9. Audio, motion and touch
 
 **Sounds.** `SoundEffects` owns one pre-loaded `AudioPlayer` per entry in the
-`KSound` enum (`PlayerMode.lowLatency`, `ReleaseMode.stop`, per-sound volume
-0.07–0.11). The assets peak near full scale, so the player volume is the only
-attenuation — the tap lands around -23 dBFS, low enough to sit under the content
-rather than on top of it. Preparation is shared through a single future, so the
-startup call in `main.dart` and the settings provider never configure the same
-player twice.
+`KSound` enum (`PlayerMode.lowLatency`, `ReleaseMode.stop`). Preparation is
+shared through a single future, so the startup call in `main.dart` and the
+settings provider never configure the same player twice.
 
-| `KSound` | Asset | Length | Used by |
+**The mix lives in the assets, not in Dart.** On Android the low-latency path
+(SoundPool) applies gain when a sample is loaded, so `AudioPlayer.setVolume`
+never reached the mix — two releases shipped a quieter constant and played
+exactly the same level. `tools/master_sounds.mjs` normalises each file to a fixed
+peak instead (`--apply`, idempotent), which no platform path can skip:
+
+| `KSound` | Asset | Peak | Used by |
 |---|---|---|---|
-| `tap` | `sounds/click.wav` | 45 ms | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
-| `toggle` | `sounds/toggle.wav` | 60 ms | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
-| `success` | `sounds/success.wav` | 0.9 s | A step reaching 100%, a focus session completing |
-| `timer` | `sounds/timer.wav` | 220 ms | Focus start/pause and end |
+| `tap` | `sounds/click.wav` | −24 dBFS | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
+| `toggle` | `sounds/toggle.wav` | −24 dBFS | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
+| `success` | `sounds/success.wav` | −21 dBFS | A step reaching 100%, a focus session completing |
+| `timer` | `sounds/timer.wav` | −26 dBFS | Focus start/pause and end |
 
 The sound fires inside `InkWell.onTap`, never on press-down, so a scroll that
 starts on a button stays silent. `SoundEffects.enabled` gates every call, which
@@ -477,7 +480,36 @@ for secondary routes.
 
 ---
 
-## 10. Onboarding (`lib/features/onboarding`)
+## 10. Launch and onboarding (`lib/features/onboarding`)
+
+The launch is one continuous dark surface in three phases: the native window, the
+Flutter splash, and the three welcome slides. Nothing in the sequence may show a
+lighter colour than `#0D1A2D`, or the hand-offs become visible seams.
+
+### 10.1 Native window
+
+`values/styles.xml` paints `windowBackground`, the status bar and the navigation
+bar in `launch_background` (`#0D1A2D`) for both the launch and normal themes.
+Android 12+ ignores `windowBackground` for its own splash and draws the launcher
+icon on a system-chosen surface instead, which is the blue tile users saw first;
+`values-v31/styles.xml` (and its `-night` twin) sets
+`windowSplashScreenBackground` and `windowSplashScreenAnimatedIcon` to the same
+colour, so the system phase is a blank dark screen and the Flutter splash picks
+up from exactly there.
+
+### 10.2 Splash
+
+`SplashScreen` draws three glowing waves from the inline-start edge plus a radial
+halo, then reveals the wordmark and the quote with `Curves.easeOutExpo`. It holds
+`SplashScreen.hold` (2500 ms) and then goes to `/onboarding` or `/today`
+depending on `onboarding_seen_v1`. Two app-level surfaces are gated on
+`launchReadyProvider` so they never interrupt it: the update dialog and the
+notification-permission prompt.
+
+`/splash` is the router's `initialLocation` and the only route `redirect` lets
+through unconditionally — it is the thing that reads the persisted state.
+
+### 10.3 Welcome slides
 
 Three slides, shown exactly once, before login. `khutati-onboarding.html` is the
 visual source; the Flutter version replaces its inline SVG and CSS keyframes with
@@ -486,11 +518,10 @@ canvas painting and tickers, so the same scene runs at 120 Hz without a
 
 **Gate.** `onboardingSeenProvider` (`OnboardingController`, `Notifier<bool>`)
 reads `onboarding_seen_v1` from `SharedPreferences` synchronously inside
-`build()`, so `initialLocation` can be computed before the first frame. While the
-flag is false, `redirect` sends every route except `/onboarding` to
-`/onboarding`; once `complete()` flips it, `/onboarding` resolves to `/today` or
-`/login` depending on the session. The flag is written on Skip or ابدأ only —
-never on a swipe.
+`build()`. While the flag is false, `redirect` sends every route except
+`/onboarding` to `/onboarding`; once `complete()` flips it, `/onboarding`
+resolves to `/today` or `/login` depending on the session. The flag is written on
+Skip or ابدأ only — never on a swipe.
 
 **Art.** Each slide is exactly two painters:
 
@@ -499,46 +530,68 @@ never on a swipe.
   `RepaintBoundary` and `shouldRepaint` returns `false`: rasterised once per
   size, never touched again.
 - the slide's foreground painter, constructed with
-  `super(repaint: Listenable.merge([enter, loop]))`.
+  `super(repaint: Listenable.merge([enter, ambient]))`.
 
 `enterDesignSpace(canvas, size)` reproduces the SVG's
 `preserveAspectRatio="xMidYMax meet"` for a 390×540 box, so every coordinate in
 the painters is the literal number from the HTML. The hills stretch full-bleed
 instead, so no aspect ratio leaves an unpainted edge.
 
-**Motion.** Two controllers per slide: `enter` (2400 ms, one shot, replayed when
-the slide becomes active again) and `loop` (12 s, repeating — flag wave, halos,
-star orbit). The reveal curve is `Curves.easeOutCubic`; `elastic(t)` in
-`onboarding_art.dart` is a clamped `Curves.elasticOut` for node pops. With
-reduced motion (`MediaQuery.maybeDisableAnimationsOf`), `enter` jumps to 1 and
-`loop` stays at rest.
+**Timing.** The master clock is real seconds, not a normalised 0→1: `enter` is a
+7 s linear controller replayed when a slide becomes active, and `ambient` is a
+2-hour controller played once. Every element then applies its own CSS delay and
+duration through `stage(elapsed, delay:, duration:)` and `cycle(elapsed, period:)`,
+which is what keeps the prototype's deliberate pacing:
 
-Shared helpers: `segment(t, start, end)` normalises a slice of the timeline,
-`dashPath` uses `PathMetric.extractPath` for the road's dashed centre line, and
-`paintText` lays Arabic out with `TextPainter` anchored by `maxIntrinsicWidth`
-(`width` is the layout constraint, not the ink extent).
+| Element | Delay | Duration / period |
+|---|---|---|
+| road draw | 0.4 s | 3.2 s, ease-out |
+| nodes (ring, dot) | 2.0 → 4.4 s, 0.6 apart | 1.2 s, `cubic-bezier(.3,1.6,.5,1)` |
+| node halos | 4.8 → 8.8 s | 5 s loop |
+| flag pole / banner | 3.8 s / 4.6 s | 1.6 s grow / 1.2 s pop |
+| banner wave | — | 4.6 s loop |
+| travelling light | 5.6 s | 14 s loop |
+| floating stars | 0 / 2.6 / 4 s | 7 s loop |
+| clock ticks / arc | 0.1 s apart / 1.0 s | 1.2 s / 4.4 s |
+| task rows / checks | 1.0 / 1.5 / 2.0 s | 1.4 s slide / 1.0 s draw |
+| bars | 0.3 → 1.74 s, 0.36 apart | 1.6 s grow |
+| trend line | — | 12 s: draw 6 s, hold, fade |
+| star + particles | — | 12 s burst |
+
+The ambient controller is two hours long on purpose: 4.6, 5, 7, 12 and 14 s have
+no common short multiple, so a shared 12 s loop would visibly jump. With a
+non-repeating clock each animation keeps its own period and no wrap is ever seen.
+Reduced motion parks the scene at `enter = 1`, `ambient = 7 s` — a composed still,
+not an empty one.
+
+Shared helpers: `dashPath` uses `PathMetric.extractPath` for the road's dashed
+centre line, and `paintText` lays Arabic out with `TextPainter` anchored by
+`maxIntrinsicWidth` (`width` is the layout constraint, not the ink extent).
 
 **Transitions.** `PageView` + `PageController`. `_ParallaxPage` wraps each slide
 in `AnimatedBuilder(animation: controller, child: slide)` — the `child` is passed
 through, so a drag never rebuilds the slide subtree. With the signed page delta
-`d = index - page`:
+`d = index - page` and `e = easeOutCubic(min(1, |d|))`:
 
 | Property | Formula |
 |---|---|
 | translate | `Offset(-0.18 * d * width, 0)` |
-| opacity | `1 - 0.9 * abs(d)` |
-| scale | `1 - 0.05 * abs(d)` |
+| opacity | `1 - 0.75 * e` |
+| scale | `1 - 0.10 * e` |
 
 A page's slot already travels one full width with the scroll, so the counter
 translation makes the outgoing page trail the finger (net 0.82 of a width) while
-the incoming page leads it (1.18). The incoming page enters at 0.95 and 10%
-opacity and settles at 1.0, so the layers separate in depth instead of sliding as
-one sheet.
+the incoming page leads it (1.18). The outgoing page shrinks to 0.9 and fades as
+it leaves; the incoming one grows back to 1.0. Only the transform is eased — the
+horizontal tracking stays linear so the page still follows the finger exactly.
 
-**Chrome.** The skip pill (`onboarding-skip`) fades out on the last page. `_Dots`
-animate 8→28 px, `redSoft` when active, and expose `Semantics(selected:, label:
-'الشاشة n')`. The primary button (`onboarding-primary`) reads التالي and becomes
-ابدأ on page 3.
+**Chrome.** The skip pill (`onboarding-skip`) sits at the visual top-left — the
+inline-end edge in RTL — which also keeps it clear of the red flag in the first
+illustration. `_Dots` animate 8→28 px, `redSoft` when active, and expose
+`Semantics(selected:, label: 'الشاشة n')`. The primary button
+(`onboarding-primary`) reads التالي and becomes ابدأ on page 3. The page reserves
+`148 + safe.bottom` so the body copy can never collide with the footer on phones
+with a gesture bar.
 
 ---
 
@@ -599,6 +652,7 @@ scrolling list items; they are rasterised per item per frame.
 | Formatting | `test/core/format_test.dart` | Arabic digits, durations |
 | Updates | `test/updates/update_repository_test.dart`, `update_controller_test.dart` | `If-None-Match`/304, 403 → Atom fallback, both-fail throws, 60-minute cooldown, silent background failure, honest manual failure, cached ETag |
 | Onboarding | `test/onboarding/onboarding_test.dart` | next→start, skip and start persist the flag, dot jump, `complete()` idempotence |
+| Launch | `test/onboarding/splash_test.dart` | wordmark and quote render, the 2.5 s hold, first run → onboarding, `launchReadyProvider` unlocks |
 | Widgets | `test/design/widgets_test.dart`, `test/today/task_card_layout_test.dart` | layout invariants |
 
 Rules for new tests: database tests use `AppDatabase.memory()` and close in

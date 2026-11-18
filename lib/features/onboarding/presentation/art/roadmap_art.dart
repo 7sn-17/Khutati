@@ -6,11 +6,15 @@ import 'package:flutter/material.dart';
 import 'onboarding_art.dart';
 
 /// Slide 1 — the 68-day roadmap: a winding road rising to a red flag.
+///
+/// Timings are the prototype's, in seconds: the road draws over 3.2 s starting
+/// at 0.4 s, the five nodes pop at 2.0/2.6/3.2/3.8/4.4, the pole grows at 3.8,
+/// the banner lands at 4.6 and the travelling light joins at 5.6.
 class RoadmapArt extends StatelessWidget {
-  const RoadmapArt({required this.enter, required this.loop, super.key});
+  const RoadmapArt({required this.enter, required this.ambient, super.key});
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +23,7 @@ class RoadmapArt extends StatelessWidget {
       children: <Widget>[
         const RepaintBoundary(child: CustomPaint(painter: _RoadmapHills())),
         RepaintBoundary(
-          child: CustomPaint(painter: _RoadmapPainter(enter, loop)),
+          child: CustomPaint(painter: _RoadmapPainter(enter, ambient)),
         ),
       ],
     );
@@ -63,11 +67,11 @@ class _RoadmapHills extends CustomPainter {
 }
 
 class _RoadmapPainter extends CustomPainter {
-  _RoadmapPainter(this.enter, this.loop)
-    : super(repaint: Listenable.merge(<Listenable>[enter, loop]));
+  _RoadmapPainter(this.enter, this.ambient)
+    : super(repaint: Listenable.merge(<Listenable>[enter, ambient]));
 
   final Animation<double> enter;
-  final Animation<double> loop;
+  final Animation<double> ambient;
 
   /// The road exactly as drawn in the prototype's SVG.
   static final Path _road = Path()
@@ -77,12 +81,18 @@ class _RoadmapPainter extends CustomPainter {
     ..cubicTo(118, 192, 250, 215, 265, 165)
     ..cubicTo(275, 132, 285, 118, 300, 100);
 
-  static final List<_Node> _nodes = <_Node>[
-    _Node(const Offset(133, 424), KOnboarding.blue, 0.50),
-    _Node(const Offset(217, 351), KOnboarding.teal, 0.60),
-    _Node(const Offset(114, 281), KOnboarding.pink, 0.68),
-    _Node(const Offset(165, 207), KOnboarding.gold, 0.76),
-    _Node(const Offset(265, 165), KOnboarding.redSoft, 0.84),
+  static const List<_Node> _nodes = <_Node>[
+    _Node(Offset(133, 424), KOnboarding.blue, 2.0, 4.8),
+    _Node(Offset(217, 351), KOnboarding.teal, 2.6, 5.8),
+    _Node(Offset(114, 281), KOnboarding.pink, 3.2, 6.8),
+    _Node(Offset(165, 207), KOnboarding.gold, 3.8, 7.8),
+    _Node(Offset(265, 165), KOnboarding.redSoft, 4.4, 8.8),
+  ];
+
+  static const List<_Spark> _sparks = <_Spark>[
+    _Spark(Offset(60, 110), 1, KOnboarding.gold, 0),
+    _Spark(Offset(340, 230), 0.7, KOnboarding.blue, 2.6),
+    _Spark(Offset(46, 330), 0.6, KOnboarding.ink, 4),
   ];
 
   static final Path _banner = Path()
@@ -97,35 +107,33 @@ class _RoadmapPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     enterDesignSpace(canvas, size);
-    final double t = enter.value;
-    final double l = loop.value;
+    final double t = enter.value * kEnterSeconds;
+    final double a = ambient.value * kAmbientSeconds;
 
     final ui.PathMetric metric = _road.computeMetrics().first;
-    final double reveal = Curves.easeOutCubic.transform(segment(t, 0, 0.62));
-    final Path visible = metric.extractPath(0, metric.length * reveal);
+    final double draw = Curves.easeOut.transform(
+      stage(t, delay: 0.4, duration: 3.2),
+    );
+    final Path visible = metric.extractPath(0, metric.length * draw);
 
     // The road itself: a thick rounded stroke, revealed from the start.
-    canvas.drawPath(
-      visible,
-      Paint()
-        ..color = KOnboarding.line
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 32
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // Dashed centre line, drawn once the road is mostly there.
-    final double dashAlpha = segment(t, 0.5, 0.72);
-    if (dashAlpha > 0) {
+    if (draw > 0) {
       canvas.drawPath(
-        dashPath(
-          metric.extractPath(0, metric.length * reveal),
-          dash: 1,
-          gap: 11,
-        ),
+        visible,
         Paint()
-          ..color = KOnboarding.ink.withValues(alpha: 0.3 * dashAlpha)
+          ..color = KOnboarding.line
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 32
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+
+      // Dashed centre line, riding the same reveal so it cannot appear before
+      // the road it belongs to.
+      canvas.drawPath(
+        dashPath(visible, dash: 1, gap: 11),
+        Paint()
+          ..color = KOnboarding.ink.withValues(alpha: 0.3)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round,
@@ -133,88 +141,99 @@ class _RoadmapPainter extends CustomPainter {
     }
 
     for (final _Node node in _nodes) {
-      final double pop = elastic(segment(t, node.delay, node.delay + 0.14));
-      if (pop <= 0) continue;
-      _paintNode(canvas, node, pop, l);
-    }
-
-    _paintFlag(canvas, t, l);
-
-    // The travelling light follows the road forever.
-    final double orbit = segment(t, 0.7, 0.85) * l;
-    if (t > 0.7) {
-      final ui.Tangent? tangent = metric.getTangentForOffset(
-        metric.length * orbit,
+      final double ring = kPopCurve.transform(
+        stage(t, delay: node.delay, duration: 1.2),
       );
-      if (tangent != null) {
-        final double fade = (math.sin(math.pi * orbit) * 1.6)
-            .clamp(0.0, 1.0)
-            .toDouble();
-        canvas.drawCircle(
-          tangent.position,
-          13,
-          Paint()..color = KOnboarding.gold.withValues(alpha: 0.25 * fade),
-        );
-        canvas.drawCircle(
-          tangent.position,
-          5,
-          Paint()..color = KOnboarding.ink.withValues(alpha: fade),
-        );
-      }
+      final double dot = kPopCurve.transform(
+        stage(t, delay: node.delay + 0.3, duration: 1.2),
+      );
+      _paintNode(canvas, node, ring, dot, a);
     }
 
-    _paintSparks(canvas, t, l);
+    _paintFlag(canvas, t, a);
+    _paintLight(canvas, metric, a);
+    _paintSparks(canvas, t, a);
     canvas.restore();
   }
 
-  void _paintNode(Canvas canvas, _Node node, double pop, double loopValue) {
+  void _paintNode(
+    Canvas canvas,
+    _Node node,
+    double ring,
+    double dot,
+    double a,
+  ) {
     canvas.save();
     canvas.translate(node.position.dx, node.position.dy);
 
-    // Expanding halo, phase-shifted per node so they never pulse in unison.
-    final double pulse = (loopValue * 1.6 + node.delay) % 1;
-    canvas.drawCircle(
-      Offset.zero,
-      17 * (1 + 0.9 * pulse),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..color = node.color.withValues(alpha: 0.55 * (1 - pulse) * pop),
-    );
+    // A 5 s halo that starts only after this node's own delay, so the five
+    // never pulse in unison.
+    if (a >= node.pulse) {
+      final double p = Curves.easeOut.transform(
+        cycle(a, period: 5, delay: node.pulse),
+      );
+      canvas.drawCircle(
+        Offset.zero,
+        17 * (1 + 0.9 * p),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = node.color.withValues(alpha: 0.55 * (1 - p)),
+      );
+    }
 
-    canvas.scale(pop);
-    canvas.drawCircle(Offset.zero, 17, Paint()..color = KOnboarding.bg);
-    canvas.drawCircle(
-      Offset.zero,
-      17,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.5
-        ..color = node.color,
-    );
-    canvas.drawCircle(Offset.zero, 6.5, Paint()..color = node.color);
+    if (ring > 0) {
+      canvas.save();
+      canvas.scale(ring);
+      canvas.drawCircle(Offset.zero, 17, Paint()..color = KOnboarding.bg);
+      canvas.drawCircle(
+        Offset.zero,
+        17,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..color = node.color,
+      );
+      canvas.restore();
+    }
+
+    if (dot > 0) {
+      canvas.save();
+      canvas.scale(dot);
+      canvas.drawCircle(Offset.zero, 6.5, Paint()..color = node.color);
+      canvas.restore();
+    }
     canvas.restore();
   }
 
-  void _paintFlag(Canvas canvas, double t, double loopValue) {
-    final double pole = Curves.easeOutCubic.transform(segment(t, 0.74, 0.9));
+  void _paintFlag(Canvas canvas, double t, double a) {
+    final double pole = kGrowCurve.transform(
+      stage(t, delay: 3.8, duration: 1.6),
+    );
     if (pole > 0) {
-      final double bottom = 102;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(298, bottom - 62 * pole, 4, 62 * pole),
+          Rect.fromLTWH(298, 102 - 62 * pole, 4, 62 * pole),
           const Radius.circular(2),
         ),
         Paint()..color = KOnboarding.ink,
       );
     }
 
-    final double banner = elastic(segment(t, 0.8, 0.96));
+    final double banner = kPopCurve.transform(
+      stage(t, delay: 4.6, duration: 1.2),
+    );
     if (banner <= 0) return;
+
+    // `.wv` is a 4.6 s ease-in-out scaleX between 1 and 0.8, pivoting on the
+    // banner's start edge.
+    final double wave =
+        1 -
+        0.2 * (1 - math.cos(delayedCycle(a, period: 4.6) * math.pi * 2)) / 2;
+
     canvas.save();
     canvas.translate(302, 58);
-    // A slow horizontal "wave" so the flag reads as cloth, not a sticker.
-    canvas.scale(0.92 + 0.08 * math.sin(loopValue * math.pi * 2), banner);
+    canvas.scale(wave, banner);
     canvas.translate(-302, -58);
     canvas.drawPath(_banner, Paint()..color = KOnboarding.red);
     paintText(
@@ -230,19 +249,40 @@ class _RoadmapPainter extends CustomPainter {
     canvas.restore();
   }
 
-  static const List<_Spark> _sparks = <_Spark>[
-    _Spark(Offset(60, 110), 1, KOnboarding.gold, 0),
-    _Spark(Offset(340, 230), 0.7, KOnboarding.blue, 0.33),
-    _Spark(Offset(46, 330), 0.6, KOnboarding.ink, 0.66),
-  ];
+  /// The gold light that runs the road forever, after a 5.6 s delay, on a 14 s
+  /// cycle.
+  void _paintLight(Canvas canvas, ui.PathMetric metric, double a) {
+    const double begin = 5.6;
+    if (a < begin) return;
+    final double p = cycle(a, period: 14, delay: begin);
+    final ui.Tangent? tangent = metric.getTangentForOffset(metric.length * p);
+    if (tangent == null) return;
 
-  void _paintSparks(Canvas canvas, double t, double l) {
-    final double alpha = segment(t, 0.1, 0.4);
+    // No hard cut-in at the start of the path: fade over the first and last
+    // tenth of the lap.
+    final double fade = math.min(1.0, math.min(p * 10, (1 - p) * 10));
+    canvas.drawCircle(
+      tangent.position,
+      13,
+      Paint()..color = KOnboarding.gold.withValues(alpha: 0.25 * fade),
+    );
+    canvas.drawCircle(
+      tangent.position,
+      5,
+      Paint()..color = KOnboarding.ink.withValues(alpha: fade),
+    );
+  }
+
+  void _paintSparks(Canvas canvas, double t, double a) {
+    // The stars fade in with the road and then float on a 7 s cycle.
+    final double alpha = Curves.easeOut.transform(
+      stage(t, delay: 0.1, duration: 1.2),
+    );
     if (alpha <= 0) return;
 
     for (final _Spark spark in _sparks) {
-      final double bob =
-          math.sin((l + spark.phase) * math.pi * 2) * 8 * spark.scale;
+      final double p = delayedCycle(a, period: 7, delay: spark.delay);
+      final double bob = -8 * (1 - math.cos(p * math.pi * 2)) / 2 * spark.scale;
       canvas.save();
       canvas.translate(spark.position.dx, spark.position.dy + bob);
       canvas.scale(spark.scale);
@@ -256,22 +296,27 @@ class _RoadmapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RoadmapPainter oldDelegate) =>
-      oldDelegate.enter != enter || oldDelegate.loop != loop;
+      oldDelegate.enter != enter || oldDelegate.ambient != ambient;
 }
 
 class _Node {
-  const _Node(this.position, this.color, this.delay);
+  const _Node(this.position, this.color, this.delay, this.pulse);
 
   final Offset position;
   final Color color;
+
+  /// Seconds before the node pops.
   final double delay;
+
+  /// Seconds before the halo starts pulsing.
+  final double pulse;
 }
 
 class _Spark {
-  const _Spark(this.position, this.scale, this.color, this.phase);
+  const _Spark(this.position, this.scale, this.color, this.delay);
 
   final Offset position;
   final double scale;
   final Color color;
-  final double phase;
+  final double delay;
 }

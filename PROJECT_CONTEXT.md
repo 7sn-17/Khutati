@@ -126,11 +126,13 @@ bootstrap asks for `POST_NOTIFICATIONS`, and the instant it is granted it checks
 onboarding is finished: asking for a permission on top of the first slide is the
 worst possible moment.
 
-Router start location: `/onboarding` while `onboarding_seen_v1` is false;
-otherwise `/login` when there is no Supabase session **and** no persisted guest
-choice, otherwise `/today`. `redirect` re-runs on every auth event, so signing in
-or out clears the stack in both directions, and the onboarding gate is evaluated
-first so a fresh install can never land on a login screen behind the slides.
+Router start location: `/splash` on every cold start. The splash holds for 2.5 s
+and then goes to `/onboarding` while `onboarding_seen_v1` is false, otherwise to
+`/today` (or `/login` when there is no session and no persisted guest choice).
+`redirect` lets `/splash` through unconditionally, evaluates the onboarding gate
+next, and re-runs on every auth event, so signing in or out clears the stack in
+both directions. `launchReadyProvider` flips when the splash hands over; the
+update dialog and the notification prompt wait for it instead of a timer.
 
 ---
 
@@ -234,26 +236,37 @@ that. Widgets: `KButton`, `KChip`, `KCard`, `KPill`, `KTag`, `KSectionHeader`,
 `KBrandMark`, `KDialog`/`showKDialog`, `showKToast`, `KPressable`/`KInkSurface`
 (the tactile layer), plus `KhutatiPalette` for colours. Motion primitives live in
 `core/motion` (press scale, haptics, shared durations). Sounds live in
-`core/sound` — four pre-loaded `KSound` entries.
+`core/sound` — four pre-loaded `KSound` entries whose gain is mastered into the
+WAV files (`tools/master_sounds.mjs`), because Android's low-latency path ignores
+`setVolume`.
 
 ### 5.11 Settings
 
 Theme (light/dark/system), UI sound toggle, four notification toggles, battery
 optimisation row, update panel, About and Developer modals. Every modal closes
-with a `KButton`, not an unlabeled icon.
+with a `KButton`, not an unlabeled icon. The «المنبهات والمذكرات» row reports the
+live state of both grants — green check when notifications **and** exact alarms
+are allowed, «غير مفعل» otherwise — re-reads them on every resume, and deep-links
+to whichever one is missing (`ACTION_APP_NOTIFICATION_SETTINGS` /
+`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`).
 
-### 5.12 Onboarding (`lib/features/onboarding`)
+### 5.12 Launch and onboarding (`lib/features/onboarding`)
 
-Three slides ("منهاجك كله في 68 يوماً" / "يوم واحد في كل مرة" / "شاهد نفسك
-تتقدم"), shown once on first launch and never again. Everything is painted with
-`CustomPainter` — no SVG library — so the road, nodes, clock, task rows, bars and
-trend line animate at frame rate. A static `HillsPainter` per slide lives in its
-own `RepaintBoundary` and never repaints; only the foreground scene is driven by
-two tickers (a 2400 ms `enter` that replays when a slide becomes active, and a
-12 s `loop` for the ambient motion). Swiping applies parallax + fade + scale via
-`AnimatedBuilder` with the slide passed as `child`, so a drag rebuilds only the
-transform. `onboarding_seen_v1` is written on Skip/ابدأ, and the router gate plus
-the notification-permission bootstrap both key off it. Details: ARCHITECTURE §10.
+The native window paints `#0D1A2D` everywhere, including Android 12's own splash
+(`values-v31`), so there is no light flash before Flutter starts. `SplashScreen`
+then draws three glowing waves and reveals «خطتي» plus a short quote with
+`Curves.easeOutExpo`, holds 2.5 s, and hands over to the welcome flow or Today.
+Three welcome slides follow ("منهاجك كله في 68 يوماً" / "يوم واحد في كل مرة" /
+"شاهد نفسك تتقدم"), shown once and never again. Everything is painted with
+`CustomPainter` — no SVG library — with the prototype's exact CSS delays and
+durations (road 3.2 s from 0.4 s, stars on a 7 s float, trend line on a 12 s
+draw/hold/fade). A static `HillsPainter` per slide lives in its own
+`RepaintBoundary` and never repaints; the foreground is driven by a 7 s entrance
+clock and a 2-hour ambient clock, so no two infinite animations share a period.
+Swiping applies parallax + fade + scale (0.9 → 1.0) via `AnimatedBuilder` with the
+slide passed as `child`, so a drag rebuilds only the transform.
+`onboarding_seen_v1` is written on Skip/ابدأ, and both the router gate and the
+notification bootstrap key off it. Details: ARCHITECTURE §10.
 
 ---
 

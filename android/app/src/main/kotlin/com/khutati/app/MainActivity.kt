@@ -174,6 +174,9 @@ class MainActivity : FlutterActivity() {
                     "openExactAlarmSettings" -> {
                         result.success(openExactAlarmSettings())
                     }
+                    "openNotificationSettings" -> {
+                        result.success(openNotificationSettings())
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -236,6 +239,38 @@ class MainActivity : FlutterActivity() {
         }
 
         // 3. The app's own settings page, where battery usage is one tap away.
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
+        return false
+    }
+
+    /**
+     * Opens this app's notification screen, where the user can re-enable
+     * `POST_NOTIFICATIONS` (and the four channels) without hunting through the
+     * app list. Falls back to the app's own details page on OEM skins that
+     * block the direct intent.
+     */
+    private fun openNotificationSettings(): Boolean {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
         try {
             startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

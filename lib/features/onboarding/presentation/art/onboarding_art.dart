@@ -158,17 +158,50 @@ Path starPath({double outer = 30, double inner = 20}) {
   return path..close();
 }
 
-/// `Curves.elasticOut` overshoots below zero, which `Transform.scale` and
-/// opacity cannot take; clamp it once so every caller stays safe.
-double elastic(double t) =>
-    Curves.elasticOut.transform(t.clamp(0.0, 1.0).toDouble());
+/// The prototype's CSS easing curves, so the ported timings keep their feel.
+///
+/// `pp` is `cubic-bezier(.3,1.6,.5,1)` — a single overshoot, not a wobble, which
+/// is why this is a [Cubic] and not `Curves.elasticOut`.
+const Curve kPopCurve = Cubic(0.3, 1.6, 0.5, 1);
 
-/// Local progress of a sub-animation that starts at [start] and ends at [end]
-/// of the master entrance timeline.
-double segment(double t, double start, double end) {
-  if (end <= start) return t >= end ? 1 : 0;
-  return ((t - start) / (end - start)).clamp(0.0, 1.0).toDouble();
+/// `gr` — `cubic-bezier(.2,.9,.3,1.08)`.
+const Curve kGrowCurve = Cubic(0.2, 0.9, 0.3, 1.08);
+
+/// `slx` — `cubic-bezier(.2,.8,.2,1)`.
+const Curve kSlideCurve = Cubic(0.2, 0.8, 0.2, 1);
+
+/// Length of the entrance timeline in seconds. The prototype's last entrance
+/// element (the progress dot) starts at 5.2 s and runs for 1.2 s.
+const double kEnterSeconds = 7;
+
+/// The ambient controller runs for two hours without repeating, so every
+/// infinite animation keeps its own period (4.6 s, 5 s, 7 s, 12 s, 14 s) instead
+/// of being squashed into a shared loop.
+const double kAmbientSeconds = 7200;
+
+/// Progress of a stage that starts at [delay] and runs for [duration], both in
+/// seconds, against a clock reading [elapsed] seconds.
+double stage(
+  double elapsed, {
+  required double delay,
+  required double duration,
+}) {
+  if (elapsed <= delay) return 0;
+  return ((elapsed - delay) / duration).clamp(0.0, 1.0).toDouble();
 }
+
+/// Phase 0..1 of a looping animation with [period] seconds. Dart's `%` returns a
+/// non-negative result for a positive divisor, so the offset is always safe.
+double cycle(double elapsed, {required double period, double delay = 0}) =>
+    ((elapsed - delay) / period) % 1;
+
+/// A CSS `animation-delay` holds the first frame until the delay has passed;
+/// this returns `0` before it and the running phase after it.
+double delayedCycle(
+  double elapsed, {
+  required double period,
+  double delay = 0,
+}) => elapsed < delay ? 0 : cycle(elapsed, period: period, delay: delay);
 
 /// Dashes a path by sampling its metrics — Flutter has no dash pattern.
 Path dashPath(Path source, {required double dash, required double gap}) {

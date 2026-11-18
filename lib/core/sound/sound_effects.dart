@@ -33,33 +33,35 @@ class SoundEffectsController extends Notifier<bool> {
 
 /// The four UI sounds, each with its own pre-loaded player.
 ///
-/// These multipliers are deliberately low: the tap fires on every press, so it
-/// has to sit under the content instead of competing with it. On a phone at
-/// normal media volume they read as texture, not as a click track.
+/// The loudness lives in the WAV files, not here. On Android the low-latency
+/// path (SoundPool) applies gain when a sample is loaded, so
+/// `AudioPlayer.setVolume` never reached the mix — two releases shipped a
+/// quieter constant and played exactly the same level. `tools/master_sounds.mjs`
+/// normalises the assets to a fixed peak instead, which no platform path can
+/// skip.
 enum KSound {
   /// Soft wooden click: buttons, list rows, modal actions.
-  tap('sounds/click.wav', 0.08),
+  tap('sounds/click.wav'),
 
   /// Short "tock": switches and the 4-tap step cycle.
-  toggle('sounds/toggle.wav', 0.10),
+  toggle('sounds/toggle.wav'),
 
   /// Gentle chime: a step or a focus session is completed.
-  success('sounds/success.wav', 0.11),
+  success('sounds/success.wav'),
 
   /// Soft whoosh: starting or stopping a focus session.
-  timer('sounds/timer.wav', 0.07);
+  timer('sounds/timer.wav');
 
-  const KSound(this.asset, this.volume);
+  const KSound(this.asset);
 
   final String asset;
-  final double volume;
 }
 
 /// Small, bundled sounds played through one pre-loaded player each.
 ///
 /// All four are prepared once at startup so a tap never waits on decoding. The
-/// files themselves peak at about -1.4 dBFS, so the player volume carries the
-/// whole attenuation — one place to change when the mix needs to move.
+/// mix is mastered into the assets (−24 dBFS for taps, −21 for the chime,
+/// −26 for the timer) rather than set at runtime; see [KSound].
 abstract final class SoundEffects {
   static const String storageKey = 'sound_effects_enabled';
 
@@ -86,10 +88,10 @@ abstract final class SoundEffects {
       _players[sound] = player;
       try {
         // Low-latency mode uses Android's SoundPool: the sample is decoded once
-        // and replayed without touching the media pipeline.
+        // and replayed without touching the media pipeline. No `setVolume`
+        // here on purpose — see [KSound]: the gain is in the file.
         await player.setPlayerMode(PlayerMode.lowLatency);
         await player.setReleaseMode(ReleaseMode.stop);
-        await player.setVolume(sound.volume);
         await player.setSource(AssetSource(sound.asset));
         _ready.add(sound);
       } catch (_) {

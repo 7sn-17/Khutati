@@ -13,6 +13,7 @@ import '../features/focus/presentation/focus_screen.dart';
 import '../features/gallery/presentation/widget_gallery_screen.dart';
 import '../features/onboarding/application/onboarding_controller.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
+import '../features/onboarding/presentation/splash_screen.dart';
 import '../features/plan/presentation/plan_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/today/presentation/past_tasks_screen.dart';
@@ -27,28 +28,24 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 /// Application routes. The five sections live in a stateful shell so each tab
 /// keeps its own stack, matching the prototype's persistent bottom navigation.
 ///
-/// Authentication is a hard gate: a persisted Supabase session or a persisted
-/// guest choice starts the app on Today (fully offline), and the login route is
-/// the only way in without one. Signing in or out emits an auth event which
-/// re-runs [GoRouter.redirect], clearing the navigation stack in both
-/// directions.
+/// Every launch starts on `/splash`. From there the gate order is fixed:
+/// welcome screens on a first run, then authentication (a persisted Supabase
+/// session or a persisted guest choice opens Today fully offline), then the
+/// shell. Signing in or out emits an auth event which re-runs
+/// [GoRouter.redirect], clearing the navigation stack in both directions.
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
   final _AuthRefresh refresh = _AuthRefresh();
-  final bool guestAtLaunch = ref.read(guestModeProvider);
-  final bool onboardingSeen = ref.read(onboardingSeenProvider);
-  final String initialLocation;
-  if (!onboardingSeen) {
-    initialLocation = '/onboarding';
-  } else if (SupabaseAuth.currentSession == null && !guestAtLaunch) {
-    initialLocation = '/login';
-  } else {
-    initialLocation = '/today';
-  }
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: initialLocation,
+    // Every cold start begins on the splash; it decides where to go once the
+    // wordmark has landed, so the launch sequence is never skipped by a
+    // restored location.
+    initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (BuildContext context, GoRouterState state) {
+      // The splash is the one route that is always reachable: it is the thing
+      // that reads the persisted state.
+      if (state.matchedLocation == '/splash') return null;
       final bool onOnboarding = state.matchedLocation == '/onboarding';
       // First launch is a hard gate: nothing else is reachable until the user
       // has been through the welcome screens.
@@ -71,6 +68,12 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
       return null;
     },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (BuildContext context, GoRouterState state) =>
+            const SplashScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         name: 'onboarding',

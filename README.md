@@ -80,7 +80,7 @@ supabase/     SQL migrations (sync tables, update manifest)
 design/       tokens.json + HTML reference screens
 tools/        Node guards for tokens, dataset, version, launcher icons
 docs/         focused notes: date resolution, updates, APK size, signing
-test/         122 tests (domain, data, design parity, updates, onboarding, widgets)
+test/         126 tests (domain, data, design parity, updates, launch, widgets)
 ```
 
 ## 4. Design system

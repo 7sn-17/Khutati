@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/launch_gate.dart';
 import '../../../app/router.dart';
 import '../application/update_controller.dart';
 import 'update_dialog.dart';
@@ -50,6 +51,9 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
   }
 
   Future<void> _present(UpdateState state) async {
+    // The launch sequence owns the first 2.5 seconds. `build()` re-presents the
+    // same state the moment the splash hands over, so nothing is lost.
+    if (!ref.read(launchReadyProvider)) return;
     // A silent release is presented once per version. A manual Settings check
     // bumps `requestId`, which is allowed to re-open the same release.
     final bool manual = state.requestId != _lastRequestId;
@@ -92,6 +96,14 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
           if (mounted) unawaited(_present(next));
         });
       }
+    });
+    ref.listen<bool>(launchReadyProvider, (bool? previous, bool next) {
+      if (!next || previous == true) return;
+      final UpdateState state = ref.read(updateControllerProvider);
+      if (!state.hasUpdate) return;
+      WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+        if (mounted) unawaited(_present(state));
+      });
     });
     return widget.child;
   }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Android 12+ splash icon. It is a solid rectangle in the splash colour, so
+  the system phase is a clean dark screen: the app's own splash draws the brand
+  a frame later, and a large launcher icon here would break that continuity.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/launch_background" />
+</shape>
