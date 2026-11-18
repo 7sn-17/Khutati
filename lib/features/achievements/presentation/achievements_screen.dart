@@ -27,48 +27,48 @@ import '../application/achievements_controller.dart';
 
 /// `.hero { background:#0D1A2D; color:#EAE5DA; border-radius:28px;
 ///          padding:22px 20px 18px; gap:16px }`
-Color _heroBg = Color(0xFF0D1A2D);
-Color _heroText = Color(0xFFEAE5DA);
-Color _heroMute = Color(0xFFA9B6CB);
-Color _heroGold = Color(0xFFE8B65A);
-Color _heroLine = Color(0xFF26395A);
-Color _heroDotLine = Color(0xFF34496B);
-Color _heroCard2 = Color(0xFF1C3150);
-Color _heroOk = Color(0xFF7CCBB0);
+const Color _heroBg = Color(0xFF0D1A2D);
+const Color _heroText = Color(0xFFEAE5DA);
+const Color _heroMute = Color(0xFFA9B6CB);
+const Color _heroGold = Color(0xFFE8B65A);
+const Color _heroLine = Color(0xFF26395A);
+const Color _heroDotLine = Color(0xFF34496B);
+const Color _heroCard2 = Color(0xFF1C3150);
+const Color _heroOk = Color(0xFF7CCBB0);
 
 /// `.wrap { padding:16px 16px 120px; gap:30px }`
-EdgeInsets _wrapPadding = EdgeInsets.fromLTRB(16, 16, 16, 120);
-double _sectionGap = 30;
+const EdgeInsets _wrapPadding = EdgeInsets.fromLTRB(16, 16, 16, 120);
+const double _sectionGap = 30;
 
 /// `.hero .trk { background:#26395A }`, `.trk { height:8px; border-radius:4px }`
-double _trackHeight = 8;
-double _trackRadius = 4;
+const double _trackHeight = 8;
+const double _trackRadius = 4;
 
 /// `h1 { font-size:30px }`, `h2 { font-size:21px }`, `h3 { font-size:18px }`
-double _h1Size = 30;
-double _h2Size = 21;
-double _h3Size = 18;
+const double _h1Size = 30;
+const double _h2Size = 21;
+const double _h3Size = 18;
 
 /// `.big { font-size:60px; line-height:1.1 }`
-double _bigSize = 60;
+const double _bigSize = 60;
 
 /// `.cat { border-radius:22px; padding:14px; grid-template-columns:84px 1fr;
 ///         gap:4px 14px }`
-double _badgeRadius = 22;
-double _medalWidth = 84;
+const double _badgeRadius = 22;
+const double _medalWidth = 84;
 
 /// `.surf { border-radius:22px; padding:16px }`
-double _surfaceRadius = 22;
+const double _surfaceRadius = 22;
 
 /// Medals: five tiers, metals and progress thresholds exactly as the reference.
-List<String> _tierNames = <String>[
+const List<String> _tierNames = <String>[
   'برونزي',
   'فضي',
   'ذهبي',
   'زمردي',
   'ماسي',
 ];
-List<List<Color>> _tierColors = <List<Color>>[
+const List<List<Color>> _tierColors = <List<Color>>[
   <Color>[Color(0xFFB9753F), Color(0xFFE8BE92)],
   <Color>[Color(0xFF8E9BAD), Color(0xFFE6EBF2)],
   <Color>[Color(0xFFD9A441), Color(0xFFF8E3A6)],
@@ -77,7 +77,7 @@ List<List<Color>> _tierColors = <List<Color>>[
 ];
 
 /// `WD=[...]`, `WS=[...]`, `MO=[...]` from the reference.
-List<String> _weekdayFull = <String>[
+const List<String> _weekdayFull = <String>[
   'الأحد',
   'الاثنين',
   'الثلاثاء',
@@ -86,7 +86,7 @@ List<String> _weekdayFull = <String>[
   'الجمعة',
   'السبت',
 ];
-List<String> _weekdayShort = <String>[
+const List<String> _weekdayShort = <String>[
   'أحد',
   'اثنين',
   'ثلاثاء',
@@ -95,7 +95,7 @@ List<String> _weekdayShort = <String>[
   'جمعة',
   'سبت',
 ];
-List<String> _months = <String>[
+const List<String> _months = <String>[
   'يناير',
   'فبراير',
   'مارس',
@@ -153,7 +153,7 @@ String _fullDate(DateTime date) =>
 // ---------------------------------------------------------------------------
 
 class AchievementsScreen extends ConsumerWidget {
-  AchievementsScreen({super.key});
+  const AchievementsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -551,7 +551,7 @@ class _DayDot extends StatelessWidget {
 }
 
 class _LegendDot extends StatelessWidget {
-  _LegendDot({
+  const _LegendDot({
     required this.label,
     this.color = _heroDotLine,
     this.dashed = false,
@@ -2581,7 +2581,7 @@ class _HexPattern extends CustomPainter {
 
 /// `m5 12.5 4.5 4.5L19 7.5` with `stroke-width="3"`, 16x16.
 class _CheckMark extends StatelessWidget {
-  _CheckMark({required this.size, this.color = _heroBg});
+  const _CheckMark({required this.size, this.color = _heroBg});
 
   final double size;
   final Color color;
