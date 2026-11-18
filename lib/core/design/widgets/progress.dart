@@ -131,7 +131,7 @@ class _RingPainter extends CustomPainter {
 /// The path is the prototype's own `d` attribute; [progress] (0..1) reveals it
 /// progressively, mirroring `stroke-dashoffset: 100 -> 0` over 600ms. The whole
 /// trace is mirrored horizontally, as `transform: scaleX(-1)` does in the HTML.
-class KEcgLine extends StatefulWidget {
+class KEcgLine extends StatelessWidget {
   const KEcgLine({
     required this.progress,
     this.color,
@@ -144,30 +144,11 @@ class KEcgLine extends StatefulWidget {
   final double height;
 
   @override
-  State<KEcgLine> createState() => _KEcgLineState();
-}
-
-class _KEcgLineState extends State<KEcgLine>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 5000),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(
-        begin: 0,
-        end: widget.progress.clamp(0.0, 1.0).toDouble(),
-      ),
+      tween: Tween<double>(begin: 0, end: progress.clamp(0.0, 1.0).toDouble()),
       duration: Duration(milliseconds: KMotion.ecgMs),
       curve: Curves.ease,
       builder: (BuildContext context, double value, Widget? child) {
@@ -175,19 +156,13 @@ class _KEcgLineState extends State<KEcgLine>
           flipX: true,
           child: SizedBox(
             width: double.infinity,
-            height: widget.height,
-            child: AnimatedBuilder(
-              animation: _pulse,
-              builder: (BuildContext context, Widget? child) {
-                return CustomPaint(
-                  painter: _EcgPainter(
-                    progress: value,
-                    pulse: _pulse.value,
-                    trackColor: palette.line,
-                    valueColor: widget.color ?? palette.redtx,
-                  ),
-                );
-              },
+            height: height,
+            child: CustomPaint(
+              painter: _EcgPainter(
+                progress: value,
+                trackColor: palette.line,
+                valueColor: color ?? palette.redtx,
+              ),
             ),
           ),
         );
@@ -199,13 +174,11 @@ class _KEcgLineState extends State<KEcgLine>
 class _EcgPainter extends CustomPainter {
   const _EcgPainter({
     required this.progress,
-    required this.pulse,
     required this.trackColor,
     required this.valueColor,
   });
 
   final double progress;
-  final double pulse;
   final Color trackColor;
   final Color valueColor;
 
@@ -213,110 +186,47 @@ class _EcgPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Strict bounds: the waveform must never escape its container.
-    canvas.save();
-    canvas.clipRect(Offset.zero & size);
-
+    // The SVG uses preserveAspectRatio="xMidYMid meet": uniform scale, centred.
     final double scale = math.min(
       size.width / KArtwork.ecgViewWidth,
       size.height / KArtwork.ecgViewHeight,
     );
-    final double tileWidth = KArtwork.ecgViewWidth * scale;
-    final double tileHeight = KArtwork.ecgViewHeight * scale;
-    final double dy = (size.height - tileHeight) / 2;
-
-    // Sweep head travels left-to-right over the full duration.
-    final double headX = pulse * size.width;
-    // Trail length behind the head (the part still visible).
-    final double trail = size.width * 0.34;
-
-    // Faint phosphor track across the whole width (static structure).
-    final Paint trackPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = KArtwork.ecgStrokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = trackColor.withValues(alpha: 0.18);
+    final double dx = (size.width - KArtwork.ecgViewWidth * scale) / 2;
+    final double dy = (size.height - KArtwork.ecgViewHeight * scale) / 2;
 
     canvas.save();
-    canvas.translate(0, dy);
+    canvas.translate(dx, dy);
     canvas.scale(scale);
-    final int trackTiles = (size.width / tileWidth).ceil() + 2;
-    for (int i = -1; i < trackTiles; i++) {
-      canvas.save();
-      canvas.translate(i * KArtwork.ecgViewWidth, 0);
-      canvas.drawPath(_path, trackPaint);
-      canvas.restore();
-    }
-    canvas.restore();
 
-    // Sweep: draw the waveform only within the trail behind the head, with a
-    // smooth fade from the head backwards (comet tail). Distance behind head
-    // wraps around the container so the loop is seamless.
-    final Paint valuePaint = Paint()
+    final Paint base = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = KArtwork.ecgStrokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = valueColor;
+      ..color = trackColor;
+    canvas.drawPath(_path, base);
 
-    final int tileCount = (size.width / tileWidth).ceil() + 2;
-    const double chunk = 6.0; // view units per segment
-    for (int t = -1; t < tileCount; t++) {
-      canvas.save();
-      canvas.translate(t * tileWidth, dy);
-      canvas.scale(scale);
+    if (progress > 0) {
+      final Paint reveal = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = KArtwork.ecgStrokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = valueColor;
+
       for (final PathMetric metric in _path.computeMetrics()) {
-        double s = 0;
-        while (s < metric.length) {
-          final double e = (s + chunk).clamp(0.0, metric.length);
-          final double midView = (s + e) / 2;
-          final double midCanvas = t * tileWidth + midView * scale;
-          // Distance behind the head, wrapped.
-          double d = headX - midCanvas;
-          if (d < 0) d += size.width;
-          if (d <= trail) {
-            final double tt = (d / trail).clamp(0.0, 1.0);
-            // smoothstep fade: full at the head, zero at the trail end.
-            final double fade = 1.0 - (tt * tt * (3 - 2 * tt));
-            valuePaint.color = valueColor.withValues(alpha: fade);
-            canvas.drawPath(metric.extractPath(s, e), valuePaint);
-          }
-          s = e;
-        }
+        final double length = metric.length * progress;
+        if (length <= 0) continue;
+        canvas.drawPath(metric.extractPath(0, length), reveal);
       }
-      canvas.restore();
     }
 
-    // Premium glowing sweep head (vertical line + soft glow).
-    final Paint glowPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = KArtwork.ecgStrokeWidth * 4
-      ..strokeCap = StrokeCap.round
-      ..color = valueColor.withValues(alpha: 0.22);
-    final Paint headPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = KArtwork.ecgStrokeWidth * 1.6
-      ..strokeCap = StrokeCap.round
-      ..color = valueColor;
-    canvas.drawLine(
-      Offset(headX, dy),
-      Offset(headX, dy + tileHeight),
-      glowPaint,
-    );
-    canvas.drawLine(
-      Offset(headX, dy),
-      Offset(headX, dy + tileHeight),
-      headPaint,
-    );
-
-    canvas.restore(); // bounds clip
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _EcgPainter oldDelegate) {
     return oldDelegate.progress != progress ||
-        oldDelegate.pulse != pulse ||
         oldDelegate.trackColor != trackColor ||
         oldDelegate.valueColor != valueColor;
   }

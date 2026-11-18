@@ -122,6 +122,13 @@
   "planLoadError": "تعذّر تحميل الخطة.",
   "planRetry": "إعادة المحاولة",
   "focusPlaceholder": "المؤقت يُبنى في المرحلة 4",
+  "focusPause": "إيقاف مؤقت",
+  "focusResume": "استئناف",
+  "focusEnd": "إنهاء",
+  "focusSessionComplete": "اكتملت جلسة التركيز",
+  "focusMarkCompletePrompt": "هل تريد تعليم الخطوة/المهمة كمكتملة (100٪)؟",
+  "focusConfirm": "تأكيد",
+  "focusCancel": "إلغاء",
   "achievementsPlaceholder": "الإنجازات تُبنى في المرحلة 6",
 
   "galleryTitle": "معرض المكوّنات",

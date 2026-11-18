@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -37,9 +38,68 @@ class KhutatiApp extends ConsumerWidget {
       builder: (BuildContext context, Widget? child) {
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: UpdateBootstrap(child: child ?? const SizedBox.shrink()),
+          child: UpdateBootstrap(
+            child: _NotificationPermissionBootstrap(
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
         );
       },
     );
   }
+}
+
+class _NotificationPermissionBootstrap extends StatefulWidget {
+  const _NotificationPermissionBootstrap({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_NotificationPermissionBootstrap> createState() =>
+      _NotificationPermissionBootstrapState();
+}
+
+class _NotificationPermissionBootstrapState
+    extends State<_NotificationPermissionBootstrap> {
+  bool _requested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _request());
+  }
+
+  Future<void> _request() async {
+    if (_requested) return;
+    _requested = true;
+    final FlutterLocalNotificationsPlugin plugin =
+        FlutterLocalNotificationsPlugin();
+    final AndroidFlutterLocalNotificationsPlugin? android = plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) return;
+    final bool? granted = await android.requestNotificationsPermission();
+    if (granted == false && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext ctx) => AlertDialog(
+          title: const Text('إذن الإشعارات'),
+          content: const Text(
+            'نحتاج إلى إذن الإشعارات لتشغيل مؤقت التركيز في الخلفية '
+            'وتنبيهك عند انتهاء الجلسة. بدونه قد لا يعمل المؤقت بشكل موثوق.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

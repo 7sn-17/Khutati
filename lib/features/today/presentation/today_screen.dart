@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/tokens.dart';
+import '../../../features/focus/application/focus_controller.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
@@ -303,8 +304,9 @@ class _Quote extends StatelessWidget {
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
 
-    final BorderRadius borderRadius =
-        BorderRadius.circular(KMetrics.quoteRadius);
+    final BorderRadius borderRadius = BorderRadius.circular(
+      KMetrics.quoteRadius,
+    );
     return ClipRRect(
       borderRadius: borderRadius,
       child: Stack(
@@ -433,7 +435,23 @@ class _Hero extends ConsumerWidget {
               KButton(
                 label: l10n.todayStartFocus,
                 expand: true,
-                onPressed: () => context.go('/focus'),
+                onPressed: () {
+                  final PlanStep? step = next.nextStep;
+                  final int planned =
+                      (step?.minutes ?? next.plannedMinutes) * 60;
+                  ref
+                      .read(focusControllerProvider.notifier)
+                      .start(
+                        plannedSeconds: planned > 0 ? planned : 25 * 60,
+                        taskId: next.id,
+                        stepId: step?.id,
+                        taskTitle: next.title,
+                        subjectName:
+                            next.subjectName ??
+                            data.subjectNames[next.subjectKey],
+                      );
+                  context.go('/focus');
+                },
               ),
             ],
           ],
@@ -714,17 +732,16 @@ class StepChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = context.l10n;
-    final List<PlanStep> steps = task.stepsInOrder;    // A task marked complete (e.g. from the Plan tab) counts all its steps as
+    final List<PlanStep> steps = task.stepsInOrder; // A task marked complete (e.g. from the Plan tab) counts all its steps as
     // done without rewriting the user's step rows, so render them as completed
     // here. A step that was explicitly touched keeps its own progress.
-    final bool taskCompleted =
-        task.status == PlanTaskStatus.completed;
+    final bool taskCompleted = task.status == PlanTaskStatus.completed;
 
     final List<Widget> chips = <Widget>[
       for (final PlanStep step in steps)
         () {
-          final StepProgress effective = taskCompleted &&
-                  step.progress == StepProgress.notStarted
+          final StepProgress effective =
+              taskCompleted && step.progress == StepProgress.notStarted
               ? StepProgress.completed
               : step.progress;
           return KChip(
@@ -736,7 +753,8 @@ class StepChips extends ConsumerWidget {
             subtitle:
                 format.tryRange(step.suggestedStart, step.suggestedEnd) ??
                 format.duration(step.minutes),
-            fraction: effective == StepProgress.partial ||
+            fraction:
+                effective == StepProgress.partial ||
                     effective == StepProgress.partialDown
                 ? 0.5
                 : 0.0,
@@ -787,8 +805,7 @@ class StepChips extends ConsumerWidget {
     await ref.read(todayActionsProvider).setStepCompleted(step.id, next);
 
     if (!context.mounted) return;
-    if (next == StepProgress.partial ||
-        next == StepProgress.partialDown) {
+    if (next == StepProgress.partial || next == StepProgress.partialDown) {
       showKToast(context, l10n.todayStepPartialToast);
     } else if (next == StepProgress.completed) {
       showKToast(context, l10n.todayStepCompleteToast);

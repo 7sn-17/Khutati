@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,16 @@ Future<void> main() async {
   // Arabic month names are needed before the first frame (Plan and Today both
   // print real dates).
   await initializeDateFormatting('ar');
+  // Initialise local notifications so permission requests and the focus service
+  // notification channel are available from the first frame.
+  final FlutterLocalNotificationsPlugin notifications =
+      FlutterLocalNotificationsPlugin();
+  const AndroidInitializationSettings androidInit =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  await notifications.initialize(
+    const InitializationSettings(android: androidInit),
+  );
+
   // Read the stored theme before the first frame so there is no flash.
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   // The template import is idempotent: the first launch writes the 68 days,
