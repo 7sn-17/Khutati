@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:drift/drift.dart';
 
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
@@ -14,126 +13,207 @@ import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/step_progress.dart';
+import '../domain/focus_setup.dart';
 
-enum FocusStatus { idle, running, paused, completed }
-
+/// Immutable snapshot of the focus state machine.
+///
+/// The machine has exactly four stages ([FocusStage]); the UI renders one
+/// screen per stage and never has to infer anything from a set of booleans.
 class FocusSessionState {
   const FocusSessionState({
-    this.status = FocusStatus.idle,
-    this.phase = FocusPhases.focus,
+    this.stage = FocusStage.idle,
+    this.phase = FocusPhase.focus,
+    this.mode = FocusMode.pomodoro,
     this.taskId,
-    this.stepId,
     this.taskTitle,
     this.subjectName,
+    this.steps = const <FocusStepRef>[],
+    this.stepIndex = 0,
     this.plannedSeconds = 0,
-    this.startedAt,
-    this.targetEndAt,
     this.remainingSeconds = 0,
-    this.awaitingCompletion = false,
-    this.awaitingResume = false,
-    this.nextStepId,
-    this.nextStepTitle,
-    this.nextStepPlannedSeconds,
+    this.startedAt,
+    this.endsAt,
+    this.breakMinutes = 0,
+    this.autoBreak = false,
+    this.recordedSeconds = 0,
+    this.reason,
+    this.rounds = 0,
   });
 
-  final FocusStatus status;
-  final String phase;
+  final FocusStage stage;
+  final FocusPhase phase;
+  final FocusMode mode;
+
   final String? taskId;
-  final String? stepId;
   final String? taskTitle;
   final String? subjectName;
-  final int plannedSeconds;
-  final DateTime? startedAt;
-  final DateTime? targetEndAt;
-  final int remainingSeconds;
-  final bool awaitingCompletion;
-  final bool awaitingResume;
-  final String? nextStepId;
-  final String? nextStepTitle;
-  final int? nextStepPlannedSeconds;
 
-  bool get isRunning => status == FocusStatus.running;
-  bool get isPaused => status == FocusStatus.paused;
-  bool get isBreak => phase == FocusPhases.breakTime;
+  /// The remaining step chain of a linked task, so "next step" stays correct
+  /// for two- and three-step tasks without another database read.
+  final List<FocusStepRef> steps;
+  final int stepIndex;
+
+  final int plannedSeconds;
+  final int remainingSeconds;
+  final DateTime? startedAt;
+  final DateTime? endsAt;
+
+  final int breakMinutes;
+  final bool autoBreak;
+
+  /// Seconds actually spent, captured when the session reaches `finished`.
+  final int recordedSeconds;
+
+  /// Why the session finished; `null` while it is still running.
+  final FocusEndReason? reason;
+
+  /// Completed focus rounds since the machine last left idle.
+  final int rounds;
+
+  bool get isIdle => stage == FocusStage.idle;
+  bool get isRunning => stage == FocusStage.running;
+  bool get isPaused => stage == FocusStage.paused;
+  bool get isFinished => stage == FocusStage.finished;
+  bool get isBreak => phase.isBreak;
+
+  FocusStepRef? get currentStep =>
+      steps.isEmpty ? null : steps[stepIndex.clamp(0, steps.length - 1)];
+
+  FocusStepRef? get nextStep =>
+      steps.isEmpty || stepIndex + 1 >= steps.length
+      ? null
+      : steps[stepIndex + 1];
+
+  bool get hasNextStep => nextStep != null;
+
+  /// 1 → full arc (just started), 0 → empty arc.
+  double get progress =>
+      plannedSeconds <= 0 ? 0 : remainingSeconds / plannedSeconds;
+
+  bool get recordedStepAsDone =>
+      mode == FocusMode.linked &&
+      currentStep != null &&
+      reason != FocusEndReason.skipped;
 
   FocusSessionState copyWith({
-    FocusStatus? status,
-    String? phase,
+    FocusStage? stage,
+    FocusPhase? phase,
+    FocusMode? mode,
     String? taskId,
-    String? stepId,
     String? taskTitle,
     String? subjectName,
+    List<FocusStepRef>? steps,
+    int? stepIndex,
     int? plannedSeconds,
-    DateTime? startedAt,
-    DateTime? targetEndAt,
     int? remainingSeconds,
-    bool? awaitingCompletion,
-    bool? awaitingResume,
-    String? nextStepId,
-    String? nextStepTitle,
-    int? nextStepPlannedSeconds,
+    DateTime? startedAt,
+    DateTime? endsAt,
+    int? breakMinutes,
+    bool? autoBreak,
+    int? recordedSeconds,
+    FocusEndReason? reason,
+    int? rounds,
   }) {
     return FocusSessionState(
-      status: status ?? this.status,
+      stage: stage ?? this.stage,
       phase: phase ?? this.phase,
+      mode: mode ?? this.mode,
       taskId: taskId ?? this.taskId,
-      stepId: stepId ?? this.stepId,
       taskTitle: taskTitle ?? this.taskTitle,
       subjectName: subjectName ?? this.subjectName,
+      steps: steps ?? this.steps,
+      stepIndex: stepIndex ?? this.stepIndex,
       plannedSeconds: plannedSeconds ?? this.plannedSeconds,
-      startedAt: startedAt ?? this.startedAt,
-      targetEndAt: targetEndAt ?? this.targetEndAt,
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
-      awaitingCompletion: awaitingCompletion ?? this.awaitingCompletion,
-      awaitingResume: awaitingResume ?? this.awaitingResume,
-      nextStepId: nextStepId ?? this.nextStepId,
-      nextStepTitle: nextStepTitle ?? this.nextStepTitle,
-      nextStepPlannedSeconds:
-          nextStepPlannedSeconds ?? this.nextStepPlannedSeconds,
+      startedAt: startedAt ?? this.startedAt,
+      endsAt: endsAt ?? this.endsAt,
+      breakMinutes: breakMinutes ?? this.breakMinutes,
+      autoBreak: autoBreak ?? this.autoBreak,
+      recordedSeconds: recordedSeconds ?? this.recordedSeconds,
+      reason: reason ?? this.reason,
+      rounds: rounds ?? this.rounds,
+    );
+  }
+
+  /// Rebuilds the full snapshot for a terminal state, dropping timing fields
+  /// that no longer apply. Keeping this explicit is what guarantees the UI can
+  /// never render a half-finished session.
+  FocusSessionState finish({
+    required FocusEndReason reason,
+    required int recordedSeconds,
+  }) {
+    return FocusSessionState(
+      stage: FocusStage.finished,
+      phase: phase,
+      mode: mode,
+      taskId: taskId,
+      taskTitle: taskTitle,
+      subjectName: subjectName,
+      steps: steps,
+      stepIndex: stepIndex,
+      plannedSeconds: plannedSeconds,
+      remainingSeconds: 0,
+      breakMinutes: breakMinutes,
+      autoBreak: autoBreak,
+      recordedSeconds: recordedSeconds,
+      reason: reason,
+      rounds: rounds + (phase == FocusPhase.focus ? 1 : 0),
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'status': status.name,
-    'phase': phase,
+    'stage': stage.name,
+    'phase': phase.wire,
+    'mode': mode.name,
     'taskId': taskId,
-    'stepId': stepId,
     'taskTitle': taskTitle,
     'subjectName': subjectName,
+    'steps': <Map<String, dynamic>>[
+      for (final FocusStepRef step in steps) step.toJson(),
+    ],
+    'stepIndex': stepIndex,
     'plannedSeconds': plannedSeconds,
-    'startedAt': startedAt?.toIso8601String(),
-    'targetEndAt': targetEndAt?.toIso8601String(),
     'remainingSeconds': remainingSeconds,
-    'awaitingCompletion': awaitingCompletion,
-    'awaitingResume': awaitingResume,
-    'nextStepId': nextStepId,
-    'nextStepTitle': nextStepTitle,
-    'nextStepPlannedSeconds': nextStepPlannedSeconds,
+    'startedAt': startedAt?.toIso8601String(),
+    'endsAt': endsAt?.toIso8601String(),
+    'breakMinutes': breakMinutes,
+    'autoBreak': autoBreak,
+    'rounds': rounds,
   };
 
+  /// Returns `null` for anything that must not survive a restart (idle or a
+  /// completion screen), so reopening the app can never land on a dead session.
   static FocusSessionState? fromJson(Map<String, dynamic> json) {
-    final String? statusName = json['status'] as String?;
-    final FocusStatus status = FocusStatus.values.firstWhere(
-      (FocusStatus value) => value.name == statusName,
-      orElse: () => FocusStatus.idle,
-    );
-    if (status == FocusStatus.idle) return null;
+    FocusStage stage = FocusStage.idle;
+    for (final FocusStage value in FocusStage.values) {
+      if (value.name == json['stage']) stage = value;
+    }
+    if (stage != FocusStage.running && stage != FocusStage.paused) return null;
+
+    FocusMode mode = FocusMode.pomodoro;
+    for (final FocusMode value in FocusMode.values) {
+      if (value.name == json['mode']) mode = value;
+    }
+
+    int intOf(Object? raw, [int fallback = 0]) =>
+        (raw as num?)?.toInt() ?? fallback;
+
     return FocusSessionState(
-      status: status,
-      phase: (json['phase'] as String?) ?? FocusPhases.focus,
+      stage: stage,
+      phase: FocusPhase.parse(json['phase'] as String?),
+      mode: mode,
       taskId: json['taskId'] as String?,
-      stepId: json['stepId'] as String?,
       taskTitle: json['taskTitle'] as String?,
       subjectName: json['subjectName'] as String?,
-      plannedSeconds: (json['plannedSeconds'] as num?)?.toInt() ?? 0,
+      steps: FocusStepRef.listFromJson(json['steps']),
+      stepIndex: intOf(json['stepIndex']),
+      plannedSeconds: intOf(json['plannedSeconds']),
+      remainingSeconds: intOf(json['remainingSeconds']),
       startedAt: _parseDate(json['startedAt']),
-      targetEndAt: _parseDate(json['targetEndAt']),
-      remainingSeconds: (json['remainingSeconds'] as num?)?.toInt() ?? 0,
-      awaitingCompletion: json['awaitingCompletion'] == true,
-      awaitingResume: json['awaitingResume'] == true,
-      nextStepId: json['nextStepId'] as String?,
-      nextStepTitle: json['nextStepTitle'] as String?,
-      nextStepPlannedSeconds: (json['nextStepPlannedSeconds'] as num?)?.toInt(),
+      endsAt: _parseDate(json['endsAt']),
+      breakMinutes: intOf(json['breakMinutes']),
+      autoBreak: json['autoBreak'] == true,
+      rounds: intOf(json['rounds']),
     );
   }
 
@@ -143,19 +223,25 @@ class FocusSessionState {
   }
 }
 
-// Back-compat alias for the pure domain phase constants.
-abstract final class FocusPhases {
-  static const String focus = 'focus';
-  static const String breakTime = 'break';
-}
-
+/// The focus state machine.
+///
+/// Rules the implementation guarantees:
+/// * `idle` is the only entry point; every terminal path ends in `finished`,
+///   and `finished` can only be dismissed back to `idle`.
+/// * Ending a step (button or timer) always records the step as 100% complete;
+///   skipping never touches progress.
+/// * The in-app ticker is the single source of truth while the app is alive;
+///   the Kotlin service is a mirror plus the source of truth after process
+///   death.
 class FocusController extends Notifier<FocusSessionState> {
-  static const _channel = MethodChannel('khutati/focus_timer');
-  static const _sessionKey = 'focus_session_v1';
+  static const MethodChannel _channel = MethodChannel('khutati/focus_timer');
+  static const String sessionKey = 'focus_session_v2';
+  static const String pendingActionKey = 'pending_focus_action';
 
   Timer? _ticker;
-  int _pausedRemaining = 0;
   bool _restored = false;
+  bool _busy = false;
+  int _pausedRemaining = 0;
 
   @override
   FocusSessionState build() {
@@ -164,515 +250,481 @@ class FocusController extends Notifier<FocusSessionState> {
     return const FocusSessionState();
   }
 
+  // ---------------------------------------------------------------- lifecycle
+
+  /// Starts an idle-state session. [draft] is only meaningful for
+  /// [FocusMode.linked]; the other modes run a bare countdown.
   Future<void> start({
-    required int plannedSeconds,
-    String phase = FocusPhases.focus,
-    String? taskId,
-    String? stepId,
-    String? taskTitle,
-    String? subjectName,
-    String? nextStepId,
-    String? nextStepTitle,
-    int? nextStepPlannedSeconds,
+    required FocusMode mode,
+    required int minutes,
+    int breakMinutes = 0,
+    bool autoBreak = false,
+    FocusTaskDraft? draft,
   }) async {
+    if (minutes <= 0) return;
     _ticker?.cancel();
-    final now = DateTime.now();
-    final target = now.add(Duration(seconds: plannedSeconds));
+    _busy = false;
     _pausedRemaining = 0;
+
+    final DateTime now = DateTime.now();
+    final int seconds = minutes * 60;
     state = FocusSessionState(
-      status: FocusStatus.running,
-      phase: phase,
-      taskId: taskId,
-      stepId: stepId,
-      taskTitle: taskTitle,
-      subjectName: subjectName,
-      plannedSeconds: plannedSeconds,
+      stage: FocusStage.running,
+      phase: FocusPhase.focus,
+      mode: mode,
+      taskId: draft?.taskId,
+      taskTitle: draft?.taskTitle,
+      subjectName: draft?.subjectName,
+      steps: draft?.steps ?? const <FocusStepRef>[],
+      stepIndex: draft?.startIndex ?? 0,
+      plannedSeconds: seconds,
+      remainingSeconds: seconds,
       startedAt: now,
-      targetEndAt: target,
-      remainingSeconds: plannedSeconds,
-      awaitingCompletion: false,
-      awaitingResume: false,
-      nextStepId: nextStepId,
-      nextStepTitle: nextStepTitle,
-      nextStepPlannedSeconds: nextStepPlannedSeconds,
+      endsAt: now.add(Duration(seconds: seconds)),
+      breakMinutes: breakMinutes,
+      autoBreak: autoBreak,
     );
     _startTicker();
-    await _nativeStart(
-      plannedSeconds,
-      taskId,
-      stepId,
-      phase,
-      taskTitle,
-      nextStepId != null || (nextStepPlannedSeconds ?? 0) > 0,
-    );
-    if (taskId != null) {
-      try {
-        await ref
-            .read(userStateRepositoryProvider)
-            .setTaskStatus(taskId, 'in_progress');
-      } catch (_) {}
-    }
+    await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+    await _markTaskInProgress();
     _persist();
   }
 
   void pause() {
-    if (state.status != FocusStatus.running) return;
+    if (!state.isRunning) return;
     _ticker?.cancel();
     _pausedRemaining = state.remainingSeconds;
-    state = state.copyWith(status: FocusStatus.paused);
-    _nativePause();
+    state = state.copyWith(stage: FocusStage.paused);
+    unawaited(_nativePause());
     _persist();
   }
 
   Future<void> resume() async {
-    if (state.status != FocusStatus.paused) return;
-    final now = DateTime.now();
-    final target = now.add(Duration(seconds: _pausedRemaining));
+    if (!state.isPaused) return;
+    final int seconds = _pausedRemaining > 0
+        ? _pausedRemaining
+        : state.remainingSeconds;
+    if (seconds <= 0) {
+      // Paused right on zero (for example by the notification button): resolve
+      // the phase instead of parking the machine on a dead timer.
+      state = state.copyWith(stage: FocusStage.running, remainingSeconds: 0);
+      await _onTimerComplete();
+      return;
+    }
+    final DateTime now = DateTime.now();
     state = state.copyWith(
-      status: FocusStatus.running,
-      targetEndAt: target,
-      remainingSeconds: _pausedRemaining,
+      stage: FocusStage.running,
+      remainingSeconds: seconds,
+      endsAt: now.add(Duration(seconds: seconds)),
     );
     _startTicker();
-    await _nativeResume(_pausedRemaining);
+    await _nativeResume(seconds);
     _persist();
   }
 
-  /// Ends the current step early: marks it completed when the timer finished,
-  /// otherwise partial, logs the real elapsed time, then moves immediately to
-  /// the next step when one exists.
-  Future<void> end() => endSession();
-
-  Future<void> endSession() async {
-    _ticker?.cancel();
-    final bool finished = state.remainingSeconds <= 0;
-    final int actual = _elapsed();
-    await _logSession(completed: finished, actualSeconds: actual);
-
-    final String? stepId = state.stepId;
-    final String? taskId = state.taskId;
-    if (stepId != null) {
-      try {
-        await ref.read(userStateRepositoryProvider).setStepCompleted(
-          stepId,
-          finished ? StepProgress.completed : StepProgress.partial,
-        );
-      } catch (_) {}
+  /// "End": finish the current step now, record the real elapsed time and mark
+  /// the step 100% complete (never a partial 50% write), then land on the
+  /// completion screen where the next step can be started.
+  Future<void> endStep() async {
+    if (_busy || !(state.isRunning || state.isPaused)) return;
+    _busy = true;
+    try {
+      _ticker?.cancel();
+      final int recorded = _elapsedSeconds();
+      final FocusPhase phase = state.phase;
+      if (phase == FocusPhase.focus) {
+        await _markCurrentStepComplete();
+      }
+      await _recordSession(completed: false, actualSeconds: recorded);
+      _finish(FocusEndReason.ended, recorded);
+    } finally {
+      _busy = false;
     }
-    if (taskId != null && state.nextStepPlannedSeconds == null) {
-      try {
-        await ref.read(userStateRepositoryProvider).setTaskStatus(taskId, 'completed');
-      } catch (_) {}
-    } else if (taskId != null) {
-      try {
-        await ref.read(userStateRepositoryProvider).setTaskStatus(taskId, 'in_progress');
-      } catch (_) {}
-    }
-
-    await _nativeStop();
-    final int? nextSeconds = state.nextStepPlannedSeconds;
-    if (nextSeconds != null && nextSeconds > 0) {
-      await start(
-        plannedSeconds: nextSeconds,
-        phase: FocusPhases.focus,
-        taskId: taskId,
-        stepId: state.nextStepId,
-        taskTitle: state.taskTitle,
-        subjectName: state.subjectName,
-      );
-      return;
-    }
-    state = state.copyWith(
-      status: FocusStatus.completed,
-      remainingSeconds: 0,
-      awaitingCompletion: taskId != null,
-      awaitingResume: false,
-    );
-    _persist();
   }
 
-  /// Skips the current step without marking it complete, logs the elapsed time,
-  /// then moves immediately to the next step when one exists.
+  /// "Skip": leave the step untouched and move straight to the completion
+  /// screen (which offers the next step).
   Future<void> skipStep() async {
-    _ticker?.cancel();
-    final int actual = _elapsed();
-    await _logSession(completed: false, actualSeconds: actual);
-    await _nativeStop();
-    final int? nextSeconds = state.nextStepPlannedSeconds;
-    final String? taskId = state.taskId;
-    if (nextSeconds != null && nextSeconds > 0) {
-      await start(
-        plannedSeconds: nextSeconds,
-        phase: FocusPhases.focus,
-        taskId: taskId,
-        stepId: state.nextStepId,
-        taskTitle: state.taskTitle,
-        subjectName: state.subjectName,
-      );
-      return;
+    if (_busy || !(state.isRunning || state.isPaused)) return;
+    _busy = true;
+    try {
+      _ticker?.cancel();
+      final int recorded = _elapsedSeconds();
+      await _recordSession(completed: false, actualSeconds: recorded);
+      _finish(FocusEndReason.skipped, recorded);
+    } finally {
+      _busy = false;
     }
-    state = const FocusSessionState();
-    _persist();
   }
 
-  Future<void> complete() async {
-    _ticker?.cancel();
-    final int actual =
-        state.plannedSeconds > 0 ? state.plannedSeconds : _elapsed();
-    await _logSession(completed: true, actualSeconds: actual);
-    if (state.phase == FocusPhases.focus) {
-      state = state.copyWith(
-        status: FocusStatus.completed,
-        remainingSeconds: 0,
-        awaitingCompletion: state.taskId != null,
-        awaitingResume: false,
-      );
-    } else {
-      state = state.copyWith(
-        status: FocusStatus.completed,
-        remainingSeconds: 0,
-        awaitingCompletion: false,
-        awaitingResume: true,
-      );
+  /// Starts the break immediately, for the notification action and the UI.
+  Future<void> startBreakNow() async {
+    if (_busy || !(state.isRunning || state.isPaused)) return;
+    _busy = true;
+    try {
+      _ticker?.cancel();
+      final int recorded = _elapsedSeconds();
+      if (state.phase == FocusPhase.focus) {
+        await _markCurrentStepComplete();
+      }
+      await _recordSession(completed: false, actualSeconds: recorded);
+      await _beginBreak();
+    } finally {
+      _busy = false;
     }
-    _persist();
-    await _syncNativeRemaining();
   }
 
-  Future<void> markTaskCompleted() async {
-    final String? taskId = state.taskId;
-    final String? stepId = state.stepId;
-    if (taskId == null) return;
-    final UserStateRepository repo = ref.read(userStateRepositoryProvider);
-    if (stepId != null) {
-      await repo.setStepCompleted(stepId, StepProgress.completed);
-    }
-    await repo.setTaskStatus(taskId, 'completed');
-    state = state.copyWith(awaitingCompletion: false);
-    _persist();
-  }
-
+  /// Continues the linked task with the next step after a completion screen.
   Future<void> startNextStep() async {
-    final int? seconds = state.nextStepPlannedSeconds;
-    if (seconds == null || seconds <= 0) return;
-    final String? taskId = state.taskId;
-    final String? currentStepId = state.stepId;
-    if (taskId != null && currentStepId != null) {
-      try {
-        await ref
-            .read(userStateRepositoryProvider)
-            .setStepCompleted(currentStepId, StepProgress.completed);
-      } catch (_) {}
-    }
-    await start(
-      plannedSeconds: seconds,
-      phase: FocusPhases.focus,
-      taskId: taskId,
-      stepId: state.nextStepId,
-      taskTitle: state.taskTitle,
-      subjectName: state.subjectName,
-    );
-  }
-
-  Future<void> resumeFromBreak() async {
-    state = state.copyWith(awaitingResume: false);
-    final int? seconds = state.nextStepPlannedSeconds;
-    if (seconds != null && seconds > 0) {
-      await start(
-        plannedSeconds: seconds,
-        phase: FocusPhases.focus,
-        taskId: state.taskId,
-        stepId: state.nextStepId,
-        taskTitle: state.taskTitle,
-        subjectName: state.subjectName,
-      );
+    final FocusStepRef? next = state.nextStep;
+    if (next == null || next.minutes <= 0) {
+      reset();
       return;
     }
-    await start(
-      plannedSeconds: 25 * 60,
-      phase: FocusPhases.focus,
-      taskId: state.taskId,
-      taskTitle: state.taskTitle ?? 'تركيز',
+    final FocusTaskDraft draft = FocusTaskDraft(
+      taskId: state.taskId ?? '',
+      taskTitle: state.taskTitle ?? '',
       subjectName: state.subjectName,
+      steps: state.steps,
+      startIndex: state.stepIndex + 1,
+    );
+    await start(
+      mode: FocusMode.linked,
+      minutes: next.minutes,
+      draft: draft,
     );
   }
 
+  /// Leaves the completion screen and returns to the setup screen.
+  ///
+  /// The Today draft follows the session: a completed step advances it to the
+  /// next one (or clears it when the task is done), while a skipped step leaves
+  /// it untouched so it can be started again. This is what stops the setup
+  /// screen from re-offering a step that is already 100%.
+  void dismissFinished() {
+    _ticker?.cancel();
+    _busy = false;
+    _pausedRemaining = 0;
+    final bool linked = state.mode == FocusMode.linked;
+    final bool stepDone =
+        linked &&
+        state.phase == FocusPhase.focus &&
+        state.reason != FocusEndReason.skipped;
+    final bool hasNext = state.nextStep != null;
+    final FocusTaskDraft? nextDraft = stepDone && hasNext
+        ? FocusTaskDraft(
+            taskId: state.taskId ?? '',
+            taskTitle: state.taskTitle ?? '',
+            subjectName: state.subjectName,
+            steps: state.steps,
+            startIndex: state.stepIndex + 1,
+          )
+        : null;
+    state = const FocusSessionState();
+    if (stepDone) {
+      ref.read(focusDraftProvider.notifier).state = nextDraft;
+    }
+    _persist();
+  }
+
+  /// Hard reset, also stopping the native timer.
+  void reset() {
+    _ticker?.cancel();
+    _busy = false;
+    _pausedRemaining = 0;
+    state = const FocusSessionState();
+    unawaited(_nativeStop());
+    _persist();
+  }
+
+  /// Applies an action chosen from the notification while the app was closed.
   Future<void> consumePendingAction() async {
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
-      final String? action = prefs.getString('pending_focus_action');
+      final String? action = prefs.getString(pendingActionKey);
       if (action == null || action.isEmpty) return;
-      await prefs.remove('pending_focus_action');
-      if (action == 'skip_step') {
-        await skipStep();
-      } else if (action == 'start_break') {
-        // Native already handles the transition; refresh state.
-        await _syncNativeRemaining();
+      // Keep the action until a session exists; a cold start may still be
+      // restoring the running session when this is first called.
+      if (!(state.isRunning || state.isPaused)) return;
+      await prefs.remove(pendingActionKey);
+      switch (action) {
+        case 'skip_step':
+          await skipStep();
+        case 'start_break':
+          await startBreakNow();
       }
-    } catch (_) {}
+    } catch (_) {
+      // A missing preference simply means there is nothing to consume.
+    }
   }
 
-  bool get hasNextStep =>
-      state.nextStepId != null || (state.nextStepPlannedSeconds ?? 0) > 0;
+  // ------------------------------------------------------------- transitions
 
-  void dismissCompletion() {
-    state = state.copyWith(awaitingCompletion: false);
-    _persist();
-  }
-
-  void dismissResume() {
-    state = state.copyWith(awaitingResume: false);
-    _persist();
-  }
-
-  void reset() {
-    _ticker?.cancel();
-    state = const FocusSessionState();
-    _persist();
-  }
-
-  void skipBreak() {
-    _ticker?.cancel();
-    _nativeStop();
+  Future<void> _beginBreak() async {
+    final int minutes = state.breakMinutes > 0 ? state.breakMinutes : 5;
+    final DateTime now = DateTime.now();
     state = state.copyWith(
-      status: FocusStatus.completed,
-      phase: FocusPhases.focus,
-      remainingSeconds: 0,
-      awaitingResume: true,
+      stage: FocusStage.running,
+      phase: FocusPhase.breakTime,
+      plannedSeconds: minutes * 60,
+      remainingSeconds: minutes * 60,
+      startedAt: now,
+      endsAt: now.add(Duration(minutes: minutes)),
     );
+    _startTicker();
+    await _nativeStart(phase: FocusPhase.breakTime, seconds: minutes * 60);
     _persist();
   }
 
-  int _elapsed() {
-    if (state.startedAt == null) return 0;
-    final int planned = state.plannedSeconds;
-    final int remaining = state.remainingSeconds;
-    final int elapsed = planned - remaining;
-    return elapsed.clamp(0, planned);
+  /// Guards against the ticker and the native mirror both reporting the end of
+  /// the same phase.
+  Future<void> _onTimerComplete() async {
+    if (_busy || !state.isRunning) return;
+    _busy = true;
+    try {
+      _ticker?.cancel();
+      final FocusPhase phase = state.phase;
+      final int planned = state.plannedSeconds;
+      if (phase == FocusPhase.focus) {
+        await _markCurrentStepComplete();
+      }
+      await _recordSession(completed: true, actualSeconds: planned);
+      final bool wantsBreak =
+          phase == FocusPhase.focus && state.autoBreak && state.breakMinutes > 0;
+      if (wantsBreak) {
+        await _beginBreak();
+        return;
+      }
+      _finish(FocusEndReason.completed, planned);
+    } finally {
+      _busy = false;
+    }
   }
+
+  void _finish(FocusEndReason reason, int recorded) {
+    _ticker?.cancel();
+    unawaited(_nativeStop());
+    state = state.finish(reason: reason, recordedSeconds: recorded);
+    _persist();
+  }
+
+  // ------------------------------------------------------------------- timers
 
   void _startTicker() {
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      final DateTime? target = state.targetEndAt;
-      if (target == null || state.status != FocusStatus.running) return;
-      final int remaining = target.difference(DateTime.now()).inSeconds;
+    int ticks = 0;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
+      if (!state.isRunning) return;
+      final DateTime? endsAt = state.endsAt;
+      if (endsAt == null) return;
+      final int remaining = endsAt.difference(DateTime.now()).inSeconds;
       if (remaining <= 0) {
         state = state.copyWith(remainingSeconds: 0);
-        complete();
-      } else {
-        state = state.copyWith(remainingSeconds: remaining);
+        unawaited(_onTimerComplete());
+        return;
       }
-      _syncNativeRemaining();
+      state = state.copyWith(remainingSeconds: remaining);
+      ticks += 1;
+      if (ticks % 5 == 0) {
+        unawaited(_adoptNotificationPause());
+      }
     });
   }
 
-  Future<void> _syncNativeRemaining() async {
-    try {
-      final Map<dynamic, dynamic>? native = await _channel
-          .invokeMethod<Map<dynamic, dynamic>>('getState');
-      if (native == null) return;
-      final bool paused = native['paused'] == true;
-      final int remainingMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
-      final String nativePhase =
-          (native['phase'] as String?) ?? state.phase;
-
-      if (paused && state.status == FocusStatus.running) {
-        pause();
-      }
-
-      if (remainingMs > 0) {
-        if (nativePhase != state.phase &&
-            state.status != FocusStatus.idle) {
-          if (nativePhase == FocusPhases.breakTime &&
-              state.phase == FocusPhases.focus) {
-            if (state.status == FocusStatus.running) {
-              await _logSession(
-                completed: true,
-                actualSeconds: state.plannedSeconds,
-              );
-            }
-            state = state.copyWith(
-              status: FocusStatus.running,
-              phase: FocusPhases.breakTime,
-              remainingSeconds: (remainingMs / 1000).ceil(),
-              targetEndAt: DateTime.now().add(
-                Duration(milliseconds: remainingMs),
-              ),
-              awaitingCompletion: state.taskId != null,
-              awaitingResume: false,
-            );
-            _persist();
-            return;
-          }
-          if (nativePhase == FocusPhases.focus &&
-              state.phase == FocusPhases.breakTime) {
-            state = state.copyWith(
-              status: FocusStatus.running,
-              phase: FocusPhases.focus,
-              remainingSeconds: (remainingMs / 1000).ceil(),
-              targetEndAt: DateTime.now().add(
-                Duration(milliseconds: remainingMs),
-              ),
-            );
-            _persist();
-            return;
-          }
-        }
-        state = state.copyWith(
-          remainingSeconds: (remainingMs / 1000).ceil(),
-          phase: nativePhase,
-          targetEndAt: state.status == FocusStatus.running
-              ? DateTime.now().add(Duration(milliseconds: remainingMs))
-              : state.targetEndAt,
-        );
-        _persist();
-      } else if (state.status == FocusStatus.running) {
-        if (state.phase == FocusPhases.focus) {
-          await _logSession(
-            completed: true,
-            actualSeconds: state.plannedSeconds,
-          );
-          state = state.copyWith(
-            status: FocusStatus.completed,
-            remainingSeconds: 0,
-            awaitingCompletion: state.taskId != null,
-          );
-        } else {
-          await _logSession(
-            completed: true,
-            actualSeconds: state.plannedSeconds,
-          );
-          state = state.copyWith(
-            status: FocusStatus.completed,
-            remainingSeconds: 0,
-            awaitingResume: true,
-          );
-        }
-        _persist();
-      }
-      if (state.status == FocusStatus.paused) {
-        _pausedRemaining = state.remainingSeconds;
-      }
-    } catch (_) {}
+  /// The notification's Pause button drives the native service; adopting that
+  /// here keeps the in-app UI in sync without polling every second.
+  Future<void> _adoptNotificationPause() async {
+    if (!state.isRunning) return;
+    final Map<dynamic, dynamic> native = await _nativeGetState();
+    if (native['paused'] != true) return;
+    final int remainingMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+    if (remainingMs > 0) {
+      _pausedRemaining = (remainingMs / 1000).ceil();
+    }
+    if (state.isRunning) pause();
   }
+
+  int _elapsedSeconds() {
+    if (state.isPaused) {
+      final int elapsed = state.plannedSeconds - _pausedRemaining;
+      return elapsed.clamp(0, state.plannedSeconds);
+    }
+    final int elapsed = state.plannedSeconds - state.remainingSeconds;
+    return elapsed.clamp(0, state.plannedSeconds);
+  }
+
+  // ----------------------------------------------------------------- persistence
 
   Future<void> _restore() async {
     if (_restored) return;
     _restored = true;
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
-      final String? raw = prefs.getString(_sessionKey);
+      final String? raw = prefs.getString(sessionKey);
       if (raw == null || raw.isEmpty) return;
-      final Map<String, dynamic> json = (jsonDecode(raw) as Map)
-          .cast<String, dynamic>();
-      final FocusSessionState? saved = FocusSessionState.fromJson(json);
-      if (saved == null) return;
-
-      final Map<dynamic, dynamic> native = await _nativeGetState();
-      final bool nativePaused = native['paused'] == true;
-      final int nativeRemainingMs =
-          (native['remainingMs'] as num?)?.toInt() ?? 0;
-      final String nativePhase = (native['phase'] as String?) ?? saved.phase;
-
-      // If the native timer expired and advanced the phase (for example focus ->
-      // break while the app was killed), log the completed phase first.
-      if (saved.status == FocusStatus.running &&
-          saved.phase == FocusPhases.focus &&
-          nativePhase == FocusPhases.breakTime &&
-          nativeRemainingMs > 0) {
-        await _logState(saved, completed: true);
-      }
-
-      int remaining = saved.remainingSeconds;
-      if (nativeRemainingMs > 0) {
-        remaining = (nativeRemainingMs / 1000).ceil();
-      }
-
-      if (saved.status == FocusStatus.running && nativeRemainingMs <= 0) {
-        // The phase finished while we were away.
-        if (saved.phase == FocusPhases.focus) {
-          await _logState(saved, completed: true);
-          state = FocusSessionState(
-            status: FocusStatus.completed,
-            phase: FocusPhases.focus,
-            taskId: saved.taskId,
-            stepId: saved.stepId,
-            taskTitle: saved.taskTitle,
-            subjectName: saved.subjectName,
-            plannedSeconds: saved.plannedSeconds,
-            startedAt: saved.startedAt,
-            remainingSeconds: 0,
-            awaitingCompletion: saved.taskId != null,
-            awaitingResume: false,
-            nextStepId: saved.nextStepId,
-            nextStepTitle: saved.nextStepTitle,
-            nextStepPlannedSeconds: saved.nextStepPlannedSeconds,
-          );
-          _persist();
-          return;
-        }
-        await _logState(saved, completed: true);
-        state = const FocusSessionState(
-          status: FocusStatus.completed,
-          phase: FocusPhases.focus,
-          awaitingResume: true,
-        );
-        _persist();
+      final FocusSessionState? saved = FocusSessionState.fromJson(
+        (jsonDecode(raw) as Map).cast<String, dynamic>(),
+      );
+      if (saved == null) {
+        await prefs.remove(sessionKey);
         return;
       }
 
-      final FocusStatus status = nativePaused
-          ? FocusStatus.paused
-          : (remaining > 0 ? FocusStatus.running : saved.status);
-      if (status == FocusStatus.paused) {
-        _pausedRemaining = remaining > 0 ? remaining : saved.remainingSeconds;
+      final Map<dynamic, dynamic> native = await _nativeGetState();
+      final bool nativePaused = native['paused'] == true;
+      final int nativeMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+
+      if (nativeMs > 0) {
+        final int seconds = (nativeMs / 1000).ceil();
+        _pausedRemaining = seconds;
+        state = saved.copyWith(
+          stage: nativePaused ? FocusStage.paused : FocusStage.running,
+          remainingSeconds: seconds,
+          endsAt: DateTime.now().add(Duration(milliseconds: nativeMs)),
+        );
+        if (state.isRunning) _startTicker();
+        _persist();
+        unawaited(consumePendingAction());
+        return;
+      }
+
+      // No native timer: either the user paused and the service died, or the
+      // phase ran out while the app was gone.
+      if (saved.isPaused && saved.remainingSeconds > 0) {
+        _pausedRemaining = saved.remainingSeconds;
+        state = saved.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: saved.remainingSeconds,
+        );
+        _persist();
+        unawaited(consumePendingAction());
+        return;
       }
 
       state = saved.copyWith(
-        status: status,
-        phase: nativeRemainingMs > 0 ? nativePhase : saved.phase,
-        remainingSeconds: remaining > 0 ? remaining : saved.remainingSeconds,
-        targetEndAt: status == FocusStatus.running
-            ? DateTime.now().add(
-                Duration(
-                  seconds: remaining > 0 ? remaining : saved.remainingSeconds,
-                ),
-              )
-            : saved.targetEndAt,
+        stage: FocusStage.running,
+        remainingSeconds: 0,
       );
-
-      if (status == FocusStatus.running) {
-        _startTicker();
-      }
-      _persist();
+      await _completeExpiredPhase();
     } catch (_) {
-      // Leave the app in a safe idle state if restoration fails.
+      state = const FocusSessionState();
     }
   }
 
-  Future<void> _nativeStart(
-    int seconds,
-    String? taskId,
-    String? stepId,
-    String phase,
-    String? taskTitle,
-    bool hasNextStep,
-  ) async {
+  /// A phase that ended while the app was closed always resolves to the
+  /// completion screen — never to a stuck "paused at 00:00" UI.
+  Future<void> _completeExpiredPhase() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      final FocusPhase phase = state.phase;
+      if (phase == FocusPhase.focus) {
+        await _markCurrentStepComplete();
+      }
+      await _recordSession(
+        completed: true,
+        actualSeconds: state.plannedSeconds,
+      );
+      _finish(FocusEndReason.completed, state.plannedSeconds);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  void _persist() {
+    try {
+      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
+      if (!state.isRunning && !state.isPaused) {
+        unawaited(prefs.remove(sessionKey));
+        return;
+      }
+      unawaited(prefs.setString(sessionKey, jsonEncode(state.toJson())));
+    } catch (_) {
+      // Persistence is best-effort; the in-memory machine stays correct.
+    }
+  }
+
+  // ------------------------------------------------------------------- effects
+
+  Future<void> _markCurrentStepComplete() async {
+    final FocusStepRef? step = state.currentStep;
+    if (step == null) return;
+    final UserStateRepository repo = ref.read(userStateRepositoryProvider);
+    try {
+      await repo.setStepCompleted(step.id, StepProgress.completed);
+    } catch (_) {
+      return;
+    }
+    // The task rolls up from its steps: only close it when this was the last
+    // one, otherwise the card would read "complete" while steps remain.
+    final String? taskId = state.taskId;
+    if (taskId != null && state.nextStep == null) {
+      try {
+        await repo.setTaskStatus(taskId, 'completed');
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _markTaskInProgress() async {
+    final String? taskId = state.taskId;
+    if (taskId == null) return;
+    try {
+      await ref
+          .read(userStateRepositoryProvider)
+          .setTaskStatus(taskId, 'in_progress');
+    } catch (_) {}
+  }
+
+  Future<void> _recordSession({
+    required bool completed,
+    required int actualSeconds,
+  }) async {
+    final DateTime? startedAt = state.startedAt;
+    if (startedAt == null) return;
+    try {
+      final AppDatabase db = ref.read(appDatabaseProvider);
+      await db
+          .into(db.focusSessions)
+          .insert(
+            FocusSessionsCompanion.insert(
+              taskId: Value<String?>(state.taskId),
+              stepId: Value<String?>(state.currentStep?.id),
+              phase: state.phase.wire,
+              plannedSeconds: state.plannedSeconds,
+              actualSeconds: actualSeconds.clamp(0, state.plannedSeconds),
+              startedAt: startedAt,
+              endedAt: Value<DateTime>(DateTime.now()),
+              completed: Value<bool>(completed),
+            ),
+          );
+    } catch (_) {
+      // Analytics must never block the user's session.
+    }
+  }
+
+  // -------------------------------------------------------------------- native
+
+  Future<void> _nativeStart({
+    required FocusPhase phase,
+    required int seconds,
+  }) async {
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
       await _channel.invokeMethod<void>('start', <String, dynamic>{
         'durationMs': seconds * 1000,
-        'taskId': taskId,
-        'stepId': stepId,
-        'phase': phase,
-        'taskTitle': taskTitle,
-        'hasNextStep': hasNextStep,
-        'breakEnabled': prefs.getBool('focus_break_enabled') ?? true,
-        'breakMinutes': prefs.getInt('focus_break_minutes') ?? 5,
+        'taskId': state.taskId,
+        'stepId': state.currentStep?.id,
+        'phase': phase.wire,
+        'taskTitle': state.taskTitle,
+        'hasNextStep': state.hasNextStep,
+        'breakEnabled': state.autoBreak && state.breakMinutes > 0,
+        'breakMinutes': state.breakMinutes > 0 ? state.breakMinutes : 5,
+        'notificationsEnabled':
+            prefs.getBool('notif_timer_enabled') ?? true,
       });
     } catch (_) {
-      // Native service unavailable; in-app timer still runs.
+      // No foreground service (for example a desktop test): the in-app ticker
+      // still runs the session.
     }
   }
 
@@ -705,69 +757,18 @@ class FocusController extends Notifier<FocusSessionState> {
       return <dynamic, dynamic>{};
     }
   }
-
-  Future<void> _logSession({
-    required bool completed,
-    required int actualSeconds,
-  }) async {
-    final DateTime started = state.startedAt ?? DateTime.now();
-    final AppDatabase db = ref.read(appDatabaseProvider);
-    await db
-        .into(db.focusSessions)
-        .insert(
-          FocusSessionsCompanion.insert(
-            taskId: Value<String?>(state.taskId),
-            stepId: Value<String?>(state.stepId),
-            phase: state.phase,
-            plannedSeconds: state.plannedSeconds,
-            actualSeconds: actualSeconds,
-            startedAt: started,
-            endedAt: Value<DateTime>(DateTime.now()),
-            completed: Value<bool>(completed),
-          ),
-        );
-  }
-
-  Future<void> _logState(
-    FocusSessionState saved, {
-    required bool completed,
-  }) async {
-    final DateTime started = saved.startedAt ?? DateTime.now();
-    final AppDatabase db = ref.read(appDatabaseProvider);
-    await db
-        .into(db.focusSessions)
-        .insert(
-          FocusSessionsCompanion.insert(
-            taskId: Value<String?>(saved.taskId),
-            stepId: Value<String?>(saved.stepId),
-            phase: saved.phase,
-            plannedSeconds: saved.plannedSeconds,
-            actualSeconds: saved.plannedSeconds,
-            startedAt: started,
-            endedAt: Value<DateTime>(DateTime.now()),
-            completed: Value<bool>(completed),
-          ),
-        );
-  }
-
-
-  void _persist() {
-    try {
-      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
-      if (state.status == FocusStatus.idle) {
-        prefs.remove(_sessionKey);
-        return;
-      }
-      prefs.setString(_sessionKey, jsonEncode(state.toJson()));
-    } catch (_) {}
-  }
 }
 
-final focusControllerProvider =
+final NotifierProvider<FocusController, FocusSessionState>
+focusControllerProvider =
     NotifierProvider<FocusController, FocusSessionState>(FocusController.new);
 
-/// Whether the Focus screen is currently in user-controlled immersive mode.
-/// Watched by [AppShell] so the bottom navigation bar disappears only when the
-/// user opts in, never automatically when a session starts.
-final StateProvider<bool> focusImmersiveProvider =
-    StateProvider<bool>((Ref ref) => false);
+/// User-controlled immersive mode. Watched by the shell so the bottom
+/// navigation bar only disappears when the user asks for full screen.
+final StateProvider<bool> focusImmersiveProvider = StateProvider<bool>(
+  (Ref ref) => false,
+);
+
+/// The plan task Today hands to the setup screen, if any.
+final StateProvider<FocusTaskDraft?> focusDraftProvider =
+    StateProvider<FocusTaskDraft?>((Ref ref) => null);

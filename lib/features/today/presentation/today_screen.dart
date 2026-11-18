@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design/tokens.dart';
 import '../../../features/focus/application/focus_controller.dart';
+import '../../../features/focus/application/focus_setup_controller.dart';
+import '../../../features/focus/domain/focus_setup.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
@@ -436,39 +438,34 @@ class _Hero extends ConsumerWidget {
                 label: l10n.todayStartFocus,
                 expand: true,
                 onPressed: () {
-                  final PlanStep? step = next.nextStep;
-                  final int planned =
-                      (step?.minutes ?? next.plannedMinutes) * 60;
                   final List<PlanStep> steps = next.stepsInOrder;
+                  final PlanStep? step = next.nextStep;
                   final int currentIndex = step == null
-                      ? -1
+                      ? 0
                       : steps.indexWhere((PlanStep s) => s.id == step.id);
-                  final PlanStep? following =
-                      currentIndex >= 0 && currentIndex + 1 < steps.length
-                      ? steps[currentIndex + 1]
-                      : null;
+                  final FocusTaskDraft draft = FocusTaskDraft(
+                    taskId: next.id,
+                    taskTitle: next.title,
+                    subjectName:
+                        next.subjectName ?? data.subjectNames[next.subjectKey],
+                    startIndex: currentIndex < 0 ? 0 : currentIndex,
+                    steps: <FocusStepRef>[
+                      for (final PlanStep s in steps)
+                        FocusStepRef(
+                          id: s.id,
+                          label: s.isAttendance
+                              ? l10n.galleryAttend
+                              : s.isStudy
+                              ? l10n.galleryStudy
+                              : l10n.gallerySolve,
+                          minutes: s.minutes > 0 ? s.minutes : 25,
+                        ),
+                    ],
+                  );
+                  ref.read(focusDraftProvider.notifier).state = draft;
                   ref
-                      .read(focusControllerProvider.notifier)
-                      .start(
-                        plannedSeconds: planned > 0 ? planned : 25 * 60,
-                        taskId: next.id,
-                        stepId: step?.id,
-                        taskTitle: next.title,
-                        subjectName:
-                            next.subjectName ??
-                            data.subjectNames[next.subjectKey],
-                        nextStepId: following?.id,
-                        nextStepTitle: following == null
-                            ? null
-                            : (following.isAttendance
-                                  ? l10n.galleryAttend
-                                  : following.isStudy
-                                  ? l10n.galleryStudy
-                                  : following.kind),
-                        nextStepPlannedSeconds: following == null
-                            ? null
-                            : following.minutes * 60,
-                      );
+                      .read(focusSetupProvider.notifier)
+                      .setMode(FocusMode.linked);
                   context.go('/focus');
                 },
               ),

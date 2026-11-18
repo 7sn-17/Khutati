@@ -298,5 +298,56 @@
   "focusStartBreak": "بدء الراحة",
   "focusExitImmersive": "خروج من وضع ملء الشاشة",
   "focusPhaseFocus": "تركيز",
-  "focusPhaseBreak": "استراحة"
+  "focusPhaseBreak": "استراحة",
+  "focusSetupSubtitle": "اختر نمط الجلسة ثم ابدأ",
+  "focusModeLinked": "مهمة",
+  "focusModePomodoro": "بومودورو",
+  "focusModeFree": "مؤقت حر",
+  "focusNoTaskTitle": "لا توجد مهمة جاهزة",
+  "focusNoTaskBody": "ابدأ من المهمة التالية في شاشة اليوم، أو اختر بومودورو أو مؤقتاً حراً.",
+  "focusGoToday": "الذهاب إلى اليوم",
+  "focusPresetClassic": "25 / 5",
+  "focusPresetDeep": "50 / 10",
+  "focusPresetCustom": "مخصص",
+  "focusFocusLength": "مدة التركيز",
+  "focusBreakLength": "مدة الاستراحة",
+  "focusAutoBreak": "استراحة تلقائية بعد الجلسة",
+  "focusFreeLength": "مدة الجلسة",
+  "focusStartWithDuration": "ابدأ التركيز · {minutes} د",
+  "@focusStartWithDuration": {
+    "description": "Primary button on the pre-session setup screen",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "focusNextStepWithDuration": "الخطوة التالية · {minutes} د",
+  "@focusNextStepWithDuration": {
+    "description": "Continue with the next plan step after a completion",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "focusRecorded": "الوقت المسجل",
+  "focusPlanned": "المدة المخططة",
+  "focusStepMarkedDone": "سُجّلت الخطوة مكتملة",
+  "focusStepSkippedTitle": "تم تخطي الخطوة",
+  "focusBackToSetup": "تم",
+  "focusAnotherRound": "جلسة أخرى",
+  "focusBreakFinished": "انتهت الاستراحة",
+  "focusStartFocusNow": "ابدأ التركيز",
+  "focusBreakHint": "خذ نفساً عميقاً ثم عد بتركيز كامل.",
+  "focusRemainingSteps": "باقي {count} خطوات",
+  "@focusRemainingSteps": {
+    "description": "How many steps are left in the linked task",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "focusFinishHint": "يمكنك بدء جلسة جديدة في أي وقت"
 }
