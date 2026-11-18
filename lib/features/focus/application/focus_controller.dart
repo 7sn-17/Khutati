@@ -957,8 +957,6 @@ final StreamProvider<List<FocusSession>> focusHistoryProvider =
     StreamProvider<List<FocusSession>>((Ref ref) {
   final AppDatabase db = ref.watch(appDatabaseProvider);
   return (db.select(db.focusSessions)
-        ..orderBy(<OrderingTerm Function(FocusSessions)>[
-          (FocusSessions t) => OrderingTerm.desc(t.startedAt),
-        ]))
+        ..orderBy([(t) => OrderingTerm.desc(t.startedAt)]))
       .watch();
 });
