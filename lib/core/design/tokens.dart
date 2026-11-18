@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Source: خطتي اليومية، الإصدار 3.html (sha256 09c8d9e3a847)
+// Source: خطتي اليومية، الإصدار 3.html (sha256 a2822e82314e)
 // Regenerate with: node tools/extract_tokens.mjs
 //
 // Every colour, radius, size and duration in the app comes from here so the
@@ -58,16 +58,16 @@ abstract final class KColors {
   );
 
   static const KhutatiPalette light = KhutatiPalette(
-    bg: Color(0xFFF1EDE4),
-    card: Color(0xFFFFFFFF),
-    card2: Color(0xFFF6F2EA),
-    line: Color(0xFFD9D2C3),
-    tx: Color(0xFF0D1A2D),
-    mute: Color(0xFF5B6A80),
+    bg: Color(0xFFF3EEE5),
+    card: Color(0xFFFFFCF6),
+    card2: Color(0xFFF8F2E7),
+    line: Color(0xFFE2D9C8),
+    tx: Color(0xFF16233A),
+    mute: Color(0xFF55637A),
     red: Color(0xFFB52A20),
     redtx: Color(0xFFA8241B),
     ok: Color(0xFF1F7A5F),
-    gold: Color(0xFF9A6A12),
+    gold: Color(0xFF8F6210),
   );
 
   static const Map<String, SubjectAccent> subjects = <String, SubjectAccent>{

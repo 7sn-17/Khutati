@@ -9,10 +9,12 @@ import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "khutati/focus_timer"
+    private val eventsChannelName = "khutati/focus_events"
 
     override fun getInitialRoute(): String? {
         if (intent?.getStringExtra("route") == "/focus") return "/focus"
@@ -51,8 +53,16 @@ class MainActivity : FlutterActivity() {
         persistPendingAction(intent)
     }
 
+    /**
+     * Notification actions that open the app (skip step, start break). A live
+     * engine gets the action immediately through [FocusEvents]; only a cold
+     * start has to wait for Dart to read the persisted value.
+     */
     private fun persistPendingAction(intent: Intent?) {
         val action = intent?.getStringExtra("focus_action") ?: return
+        // Consume the extra so a recreated activity cannot replay it.
+        intent.removeExtra("focus_action")
+        if (FocusEvents.emit(action)) return
         getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             .edit()
             .putString("flutter.pending_focus_action", action)
@@ -61,6 +71,21 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventsChannelName)
+            .setStreamHandler(
+                object : EventChannel.StreamHandler {
+                    override fun onListen(
+                        arguments: Any?,
+                        events: EventChannel.EventSink?,
+                    ) {
+                        FocusEvents.attach(events)
+                    }
+
+                    override fun onCancel(arguments: Any?) {
+                        FocusEvents.detach()
+                    }
+                },
+            )
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -89,18 +114,14 @@ class MainActivity : FlutterActivity() {
                             putExtra(FocusTimerService.EXTRA_BREAK_MINUTES, breakMinutes)
                             putExtra(FocusTimerService.EXTRA_NOTIFY, notificationsEnabled)
                         }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(intent)
-                        } else {
-                            startService(intent)
-                        }
+                        forwardToService(intent, foreground = true)
                         result.success(null)
                     }
                     "pause" -> {
                         val intent = Intent(this, FocusTimerService::class.java).apply {
                             action = FocusTimerService.ACTION_PAUSE
                         }
-                        startService(intent)
+                        forwardToService(intent)
                         result.success(null)
                     }
                     "resume" -> {
@@ -111,14 +132,14 @@ class MainActivity : FlutterActivity() {
                             action = FocusTimerService.ACTION_RESUME
                             putExtra(FocusTimerService.EXTRA_DURATION, duration.toLong())
                         }
-                        startService(intent)
+                        forwardToService(intent)
                         result.success(null)
                     }
                     "stop" -> {
                         val intent = Intent(this, FocusTimerService::class.java).apply {
                             action = FocusTimerService.ACTION_STOP
                         }
-                        startService(intent)
+                        forwardToService(intent)
                         result.success(null)
                     }
                     "getRemaining" -> {
@@ -151,6 +172,30 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Hands an intent to [FocusTimerService] without ever crashing the app.
+     *
+     * A notification action can now be applied while the app sits in the
+     * background (the event reaches a live Dart isolate), and Android 8+ blocks
+     * background service starts. The native side has already applied the
+     * change in that case, and Dart reconciles on the next resume, so failing
+     * quietly is the correct behaviour.
+     */
+    private fun forwardToService(intent: Intent, foreground: Boolean = false) {
+        if (foreground && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                startForegroundService(intent)
+                return
+            } catch (_: Exception) {
+                // Fall through to a plain start.
+            }
+        }
+        try {
+            startService(intent)
+        } catch (_: Exception) {
+        }
     }
 
     /**

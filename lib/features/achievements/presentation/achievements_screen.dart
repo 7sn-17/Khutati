@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
+import '../../../core/design/widgets/surfaces.dart';
 import '../../../l10n/l10n.dart';
 import '../application/achievements_controller.dart';
 
@@ -32,6 +33,10 @@ import '../application/achievements_controller.dart';
 /// inside the hero comes from the theme palette, because the reference is
 /// dark-only and a light-mode build needs dark text on the cream surface.
 const Color _heroBg = Color(0xFF0D1A2D);
+
+/// `.hero > .pat` opacity. Kept exactly as the reference; only the line colour
+/// follows the theme.
+const double _hexAlpha = 0.13;
 
 /// `.wrap { padding:16px 16px 120px; gap:30px }`
 const EdgeInsets _wrapPadding = EdgeInsets.fromLTRB(16, 16, 16, 120);
@@ -257,51 +262,61 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // The hero follows the theme: the reference's navy card in dark mode, a
-    // raised cream surface in light mode. Painting the navy card in light mode
-    // is what made the themed (dark) hero text unreadable.
+    // warm raised card in light mode. Painting the navy card in light mode is
+    // what made the themed (dark) hero text unreadable.
     final KhutatiPalette palette = context.palette;
     final bool dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: Stack(
-        children: <Widget>[
-          Container(
-            decoration: BoxDecoration(
-              color: dark ? _heroBg : palette.card2,
-              borderRadius: BorderRadius.circular(28),
-              border: dark ? null : Border.all(color: palette.line),
-            ),
-          ),
-          // `.hero > .pat { position:absolute; inset:0 }`
-          Positioned.fill(
-            child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(painter: _HexPattern()),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: kCardShadow(context),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: <Widget>[
+            Container(
+              decoration: BoxDecoration(
+                color: dark ? _heroBg : palette.card,
+                borderRadius: BorderRadius.circular(28),
+                border: dark ? null : Border.all(color: palette.line),
               ),
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(20, 22, 20, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(flex: 12, child: _PointsColumn(data: data)),
-                    SizedBox(width: 16),
-                    Expanded(flex: 10, child: _StreakColumn(data: data)),
-                  ],
+            // `.hero > .pat { position:absolute; inset:0 }`
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _HexPattern(
+                      palette.mute.withValues(alpha: _hexAlpha),
+                    ),
+                  ),
                 ),
-                SizedBox(height: 16),
-                _WeekStrip(data: data),
-                SizedBox(height: 16),
-                _NextBadgeBlock(data: data),
-                _HowItWorks(),
-              ],
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 22, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(flex: 12, child: _PointsColumn(data: data)),
+                      SizedBox(width: 16),
+                      Expanded(flex: 10, child: _StreakColumn(data: data)),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  _WeekStrip(data: data),
+                  SizedBox(height: 16),
+                  _NextBadgeBlock(data: data),
+                  _HowItWorks(),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -881,153 +896,159 @@ class _BadgeCard extends StatelessWidget {
     final int level = badge.level;
     final int? next = badge.nextThreshold;
 
-    return Material(
-      color: palette.card,
-      shape: RoundedRectangleBorder(
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(_badgeRadius),
-        side: BorderSide(color: palette.line),
+        boxShadow: kCardShadow(context),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(_badgeRadius),
-        onTap: () => _openBadgeSheet(context, badge),
-        child: Padding(
-          padding: EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  SizedBox(
-                    width: _medalWidth,
-                    child: _Medal(icon: badge.icon, level: level),
-                  ),
-                  SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Text(
-                          badge.name,
-                          style: TextStyle(
-                            fontFamily: KTypography.displayFamily,
-                            fontSize: _h3Size,
-                            fontWeight: FontWeight.w700,
-                            color: palette.tx,
-                            height: 1.4,
-                          ),
-                        ),
-                        level == 0
-                            ? Text(
-                                'لم تبدأ بعد',
-                                style: TextStyle(
-                                  fontFamily: KTypography.bodyFamily,
-                                  fontSize: 13,
-                                  color: palette.mute,
-                                  height: 1.6,
-                                ),
-                              )
-                            : Text.rich(
-                                TextSpan(
-                                  children: <InlineSpan>[
-                                    TextSpan(text: 'المستوى '),
-                                    TextSpan(
-                                      text: _tierNames[level - 1],
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: palette.tx,
-                                      ),
-                                    ),
-                                    TextSpan(text: ' ($level من 5)'),
-                                  ],
-                                ),
-                                style: TextStyle(
-                                  fontFamily: KTypography.bodyFamily,
-                                  fontSize: 13,
-                                  color: palette.mute,
-                                  height: 1.6,
-                                ),
-                              ),
-                        SizedBox(height: 6),
-                        if (next == null)
+      child: Material(
+        color: palette.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_badgeRadius),
+          side: BorderSide(color: palette.line),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(_badgeRadius),
+          onTap: () => _openBadgeSheet(context, badge),
+          child: Padding(
+            padding: EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    SizedBox(
+                      width: _medalWidth,
+                      child: _Medal(icon: badge.icon, level: level),
+                    ),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
                           Text(
-                            'أنهيت كل المستويات. أحسنت!',
+                            badge.name,
                             style: TextStyle(
-                              fontFamily: KTypography.bodyFamily,
-                              fontSize: 13,
-                              color: palette.ok,
-                              height: 1.6,
+                              fontFamily: KTypography.displayFamily,
+                              fontSize: _h3Size,
+                              fontWeight: FontWeight.w700,
+                              color: palette.tx,
+                              height: 1.4,
                             ),
-                          )
-                        else ...<Widget>[
-                          _Track(
-                            fraction: badge.fraction,
-                            background: palette.line,
-                            fill: palette.gold,
-                            minFraction: 0.03,
                           ),
-                          SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              Text(
-                                '${_fa(badge.current)} من ${_fa(next)} ${badge.unit}',
-                                style: TextStyle(
-                                  fontFamily: KTypography.bodyFamily,
-                                  fontSize: 12,
-                                  color: palette.mute,
-                                  height: 1.6,
+                          level == 0
+                              ? Text(
+                                  'لم تبدأ بعد',
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 13,
+                                    color: palette.mute,
+                                    height: 1.6,
+                                  ),
+                                )
+                              : Text.rich(
+                                  TextSpan(
+                                    children: <InlineSpan>[
+                                      TextSpan(text: 'المستوى '),
+                                      TextSpan(
+                                        text: _tierNames[level - 1],
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: palette.tx,
+                                        ),
+                                      ),
+                                      TextSpan(text: ' ($level من 5)'),
+                                    ],
+                                  ),
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 13,
+                                    color: palette.mute,
+                                    height: 1.6,
+                                  ),
                                 ),
+                          SizedBox(height: 6),
+                          if (next == null)
+                            Text(
+                              'أنهيت كل المستويات. أحسنت!',
+                              style: TextStyle(
+                                fontFamily: KTypography.bodyFamily,
+                                fontSize: 13,
+                                color: palette.ok,
+                                height: 1.6,
                               ),
+                            )
+                          else ...<Widget>[
+                            _Track(
+                              fraction: badge.fraction,
+                              background: palette.line,
+                              fill: palette.gold,
+                              minFraction: 0.03,
+                            ),
+                            SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: <Widget>[
+                                Text(
+                                  '${_fa(badge.current)} من ${_fa(next)} ${badge.unit}',
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 12,
+                                    color: palette.mute,
+                                    height: 1.6,
+                                  ),
+                                ),
+                                Text(
+                                  'التالي: ${_tierNames[level]}',
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 12,
+                                    color: palette.mute,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                // `.lad { grid-column:1/-1; border-top:1px solid var(--line);
+                //         margin-top:8px; padding-top:12px }`
+                Container(
+                  margin: EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.only(top: 12),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: palette.line)),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      for (int i = 0; i < badge.thresholds.length; i++)
+                        Expanded(
+                          child: Column(
+                            children: <Widget>[
+                              _Pip(index: i, earned: i < level),
+                              SizedBox(height: 4),
                               Text(
-                                'التالي: ${_tierNames[level]}',
+                                _fa(badge.thresholds[i]),
                                 style: TextStyle(
                                   fontFamily: KTypography.bodyFamily,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   color: palette.mute,
-                                  height: 1.6,
+                                  height: 1.4,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              // `.lad { grid-column:1/-1; border-top:1px solid var(--line);
-              //         margin-top:8px; padding-top:12px }`
-              Container(
-                margin: EdgeInsets.only(top: 8),
-                padding: EdgeInsets.only(top: 12),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: palette.line)),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    for (int i = 0; i < badge.thresholds.length; i++)
-                      Expanded(
-                        child: Column(
-                          children: <Widget>[
-                            _Pip(index: i, earned: i < level),
-                            SizedBox(height: 4),
-                            Text(
-                              _fa(badge.thresholds[i]),
-                              style: TextStyle(
-                                fontFamily: KTypography.bodyFamily,
-                                fontSize: 11,
-                                color: palette.mute,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1393,14 +1414,7 @@ class _MedalPainter extends CustomPainter {
           ? Colors.white.withValues(alpha: 0.55)
           : mute.withValues(alpha: 0.55);
     if (tier == null) {
-      _drawDashedCircle(
-        canvas,
-        Offset(50, 48),
-        35,
-        inner,
-        dash: 4,
-        gap: 4,
-      );
+      _drawDashedCircle(canvas, Offset(50, 48), 35, inner, dash: 4, gap: 4);
     } else {
       canvas.drawCircle(Offset(50, 48), 35, inner);
     }
@@ -2524,7 +2538,11 @@ class _CellPainter extends CustomPainter {
 /// The hero texture: `<pattern id="pt" width="56" height="96">` with five
 /// `<use>` calls of `M28 0 56 16V48L28 64 0 48V16z`, stroked #93A1B8 at 13%.
 class _HexPattern extends CustomPainter {
-  const _HexPattern();
+  const _HexPattern(this.color);
+
+  /// Reference opacity, unchanged. Only the hue follows the theme so the
+  /// texture stays visible on the warm light card instead of washing out.
+  final Color color;
 
   static double _tileWidth = 56;
   static double _tileHeight = 96;
@@ -2534,7 +2552,7 @@ class _HexPattern extends CustomPainter {
     final Paint stroke = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Color(0xFF93A1B8).withValues(alpha: 0.13);
+      ..color = color;
 
     final Path hex = Path()
       ..moveTo(28, 0)
@@ -2572,7 +2590,7 @@ class _HexPattern extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_HexPattern oldDelegate) => false;
+  bool shouldRepaint(_HexPattern oldDelegate) => oldDelegate.color != color;
 }
 
 /// `m5 12.5 4.5 4.5L19 7.5` with `stroke-width="3"`, 16x16.

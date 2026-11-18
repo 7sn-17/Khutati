@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show OrderingTerm, Value;
-import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/services.dart' show EventChannel, MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -252,9 +252,16 @@ class FocusSessionState {
 ///   death.
 class FocusController extends Notifier<FocusSessionState> {
   static const MethodChannel _channel = MethodChannel('khutati/focus_timer');
+
+  /// Real-time pushes from the Kotlin foreground service ("end", "pause",
+  /// "resume", "skip_step", "start_break"). Without it, notification buttons
+  /// tapped while the app is already open only wrote a preference that nobody
+  /// read until the next resume.
+  static const EventChannel _events = EventChannel('khutati/focus_events');
   static const String sessionKey = 'focus_session_v2';
   static const String pendingActionKey = 'pending_focus_action';
 
+  StreamSubscription<dynamic>? _nativeEvents;
   Timer? _ticker;
   bool _restored = false;
   bool _restoring = false;
@@ -263,7 +270,15 @@ class FocusController extends Notifier<FocusSessionState> {
 
   @override
   FocusSessionState build() {
-    ref.onDispose(() => _ticker?.cancel());
+    ref.onDispose(() {
+      _ticker?.cancel();
+      unawaited(_nativeEvents?.cancel());
+      _nativeEvents = null;
+    });
+    _nativeEvents = _events.receiveBroadcastStream().listen(
+      _onNativeEvent,
+      onError: (Object _) {},
+    );
     Future<void>.microtask(_restore);
     return const FocusSessionState();
   }
@@ -616,6 +631,71 @@ class FocusController extends Notifier<FocusSessionState> {
     }
   }
 
+  /// Notification actions pushed while the app is alive.
+  ///
+  /// This is the foreground half of the sync: Kotlin owns the notification, so
+  /// the moment the user taps End/Pause/Resume the native side pushes the event
+  /// and this handler mutates the in-app state immediately. A killed process
+  /// still goes through [consumePendingAction].
+  void _onNativeEvent(dynamic raw) {
+    if (raw is! Map) return;
+    final Object? event = raw['event'];
+
+    switch (event) {
+      case 'end':
+        if (_busy || !(state.isRunning || state.isPaused)) return;
+        unawaited(_applyLiveAction('end', endStep));
+      case 'pause':
+        if (!state.isRunning) return;
+        final int ms = (raw['remainingMs'] as num?)?.toInt() ?? 0;
+        _ticker?.cancel();
+        _pausedRemaining = ms > 0 ? (ms / 1000).ceil() : state.remainingSeconds;
+        state = state.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: _pausedRemaining,
+        );
+        _persist();
+      case 'resume':
+        if (!state.isPaused) return;
+        final int ms = (raw['remainingMs'] as num?)?.toInt() ?? 0;
+        final int seconds = ms > 0 ? (ms / 1000).ceil() : _pausedRemaining;
+        if (seconds <= 0) return;
+        final DateTime now = DateTime.now();
+        _pausedRemaining = seconds;
+        state = state.copyWith(
+          stage: FocusStage.running,
+          remainingSeconds: seconds,
+          endsAt: now.add(Duration(seconds: seconds)),
+        );
+        _startTicker();
+        _persist();
+      case 'skip_step':
+        if (_busy || !(state.isRunning || state.isPaused)) return;
+        unawaited(_applyLiveAction('skip_step', skipPhase));
+      case 'start_break':
+        if (_busy || !(state.isRunning || state.isPaused)) return;
+        unawaited(_applyLiveAction('start_break', startBreakNow));
+    }
+  }
+
+  /// Runs a notification action and drops the matching cold-start fallback.
+  ///
+  /// Kotlin also writes the persisted fallback for "end" (a killed process
+  /// never receives the push), so the live path drops it before applying —
+  /// replaying "end" a second time would advance two steps.
+  Future<void> _applyLiveAction(
+    String action,
+    Future<void> Function() apply,
+  ) async {
+    try {
+      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
+      if (prefs.getString(pendingActionKey) == action) {
+        await prefs.remove(pendingActionKey);
+      }
+    } catch (_) {}
+    await apply();
+  }
+
   // ------------------------------------------------------------- transitions
 
   Future<void> _beginBreak() async {
@@ -767,16 +847,33 @@ class FocusController extends Notifier<FocusSessionState> {
         (native['plannedSeconds'] as num?)?.toInt() ?? 0;
     final int nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // A stale `endsAt` on a paused session must never be used as a deadline.
+    // A native pause wins before any deadline math. Pausing from the
+    // notification zeroes `targetEndMs`, so the in-app `endsAt` is stale the
+    // moment it happens: treating it as the deadline made a paused session look
+    // expired and complete itself as soon as the app came back.
+    if (nativePaused) {
+      final int pausedMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+      final int pausedSeconds = pausedMs > 0
+          ? (pausedMs / 1000).ceil()
+          : (state.isPaused ? _pausedRemaining : state.remainingSeconds);
+      _ticker?.cancel();
+      _pausedRemaining = pausedSeconds;
+      state = state.copyWith(
+        stage: FocusStage.paused,
+        remainingSeconds: pausedSeconds,
+      );
+      _persist();
+      return;
+    }
+
+    // No absolute deadline: a free (count-up) session, or a session whose
+    // service is gone. Never invent an ending from a missing service.
     final int deadline = targetEndMs > 0
         ? targetEndMs
         : (state.isRunning ? (state.endsAt?.millisecondsSinceEpoch ?? 0) : 0);
 
-    // No absolute deadline: a free (count-up) session, or a paused session
-    // whose service is gone. Adopt a native pause, but never invent an ending.
     if (deadline <= 0) {
       if (state.isRunning &&
-          !nativePaused &&
           state.mode != FocusMode.free &&
           state.remainingSeconds > 0) {
         // The service was killed (or never started) while a countdown is still
@@ -784,19 +881,6 @@ class FocusController extends Notifier<FocusSessionState> {
         // lost, then pick the new deadline up on the next reconcile.
         await _nativeStart(phase: state.phase, seconds: state.remainingSeconds);
         return;
-      }
-      if (nativePaused && state.isRunning) {
-        final int pausedMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
-        final int pausedSeconds = pausedMs > 0 ? pausedMs ~/ 1000 : 0;
-        _pausedRemaining = pausedSeconds > 0
-            ? pausedSeconds
-            : state.remainingSeconds;
-        _ticker?.cancel();
-        state = state.copyWith(
-          stage: FocusStage.paused,
-          remainingSeconds: _pausedRemaining,
-        );
-        _persist();
       }
       return;
     }
@@ -812,17 +896,6 @@ class FocusController extends Notifier<FocusSessionState> {
     }
 
     final int seconds = (remainingMs / 1000).ceil();
-
-    if (nativePaused) {
-      _pausedRemaining = seconds > 0 ? seconds : _pausedRemaining;
-      _ticker?.cancel();
-      state = state.copyWith(
-        stage: FocusStage.paused,
-        remainingSeconds: _pausedRemaining,
-      );
-      _persist();
-      return;
-    }
 
     // Native is running: resume from the exact remaining time.
     _pausedRemaining = seconds;

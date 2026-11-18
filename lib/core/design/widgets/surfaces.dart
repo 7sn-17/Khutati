@@ -4,6 +4,22 @@ import '../svg_path.dart';
 import '../palette.dart';
 import '../tokens.dart';
 
+/// A soft lift for light mode, where warm cards sit on a warm page and need a
+/// shadow to read as separate surfaces. Dark mode stays flat: the navy cards
+/// already separate from the background.
+List<BoxShadow> kCardShadow(BuildContext context) {
+  if (Theme.of(context).brightness == Brightness.dark) {
+    return const <BoxShadow>[];
+  }
+  return <BoxShadow>[
+    BoxShadow(
+      color: const Color(0xFF16233A).withValues(alpha: 0.05),
+      blurRadius: 14,
+      offset: const Offset(0, 4),
+    ),
+  ];
+}
+
 /// The prototype's card: `--card` background, 1px `--line` border, optional
 /// subject accent on the inline-start edge, and the repeating hexagon texture
 /// (`background: var(--card) var(--hx)`).
@@ -36,6 +52,7 @@ class KCard extends StatelessWidget {
         color: palette.card,
         borderRadius: borderRadius,
         border: Border.all(color: borderColor ?? palette.line),
+        boxShadow: kCardShadow(context),
       ),
       child: ClipRRect(
         borderRadius: borderRadius,
@@ -77,8 +94,16 @@ class HexagonPatternPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (double y = 0; y < size.height + KArtwork.hexTileHeight; y += KArtwork.hexTileHeight) {
-      for (double x = 0; x < size.width + KArtwork.hexTileWidth; x += KArtwork.hexTileWidth) {
+    for (
+      double y = 0;
+      y < size.height + KArtwork.hexTileHeight;
+      y += KArtwork.hexTileHeight
+    ) {
+      for (
+        double x = 0;
+        x < size.width + KArtwork.hexTileWidth;
+        x += KArtwork.hexTileWidth
+      ) {
         canvas.save();
         canvas.translate(x, y);
         canvas.drawPath(_tile, _paint);

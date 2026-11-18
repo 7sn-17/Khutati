@@ -48,6 +48,13 @@ class FocusTimerService : Service() {
         const val EXTRA_TASK_TITLE = "task_title"
         const val EXTRA_HAS_NEXT_STEP = "has_next_step"
         const val EXTRA_NOTIFY = "notifications_enabled"
+
+        /**
+         * Marks an intent as coming from a notification action. Dart-initiated
+         * `pause`/`resume` calls start this service too, and echoing those back
+         * as events would fight the Dart state machine.
+         */
+        const val EXTRA_FROM_NOTIFICATION = "from_notification"
         const val PREFS = "khutati_focus"
         const val KEY_TARGET = "target_end_ms"
         const val KEY_PAUSED = "is_paused"
@@ -189,6 +196,14 @@ class FocusTimerService : Service() {
                     cancelAlarm()
                     updateNotification()
                 }
+                if (intent.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false)) {
+                    // Push the pause into the live Flutter isolate now; the
+                    // persisted native state alone is only read on resume.
+                    FocusEvents.emit(
+                        "pause",
+                        mapOf("remainingMs" to pausedRemainingMillis),
+                    )
+                }
             }
             ACTION_RESUME -> {
                 val duration = intent.getLongExtra(EXTRA_DURATION, 0L)
@@ -201,11 +216,23 @@ class FocusTimerService : Service() {
                     startForeground(NOTIF_ID, buildNotification())
                     scheduleUpdates()
                     scheduleAlarm()
+                    if (intent.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false)) {
+                        FocusEvents.emit(
+                            "resume",
+                            mapOf("remainingMs" to remaining),
+                        )
+                    }
                 }
             }
-            // The notification's "إنهاء" button. This is the ONLY place that
-            // queues an end action for Dart.
+            // The notification's "إنهاء" button. It both pushes the action to a
+            // live engine and persists it for a killed process, and it is the
+            // only place that produces an "end" action for Dart.
             ACTION_END -> {
+                // Deliver the end to a live engine immediately. The persisted
+                // copy is always written as well: Dart removes it as soon as it
+                // applies the live event, so it is only ever consumed when the
+                // process was killed and the event never arrived.
+                FocusEvents.emit("end", mapOf("phase" to phase))
                 queuePendingAction("end")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 cancelAlarm()
@@ -308,6 +335,7 @@ class FocusTimerService : Service() {
     private fun pausePendingIntent(): PendingIntent {
         val intent = Intent(this, FocusTimerService::class.java).apply {
             action = ACTION_PAUSE
+            putExtra(EXTRA_FROM_NOTIFICATION, true)
         }
         return PendingIntent.getService(
             this,
@@ -321,6 +349,7 @@ class FocusTimerService : Service() {
         val intent = Intent(this, FocusTimerService::class.java).apply {
             action = ACTION_RESUME
             putExtra(EXTRA_DURATION, pausedRemainingMillis)
+            putExtra(EXTRA_FROM_NOTIFICATION, true)
         }
         return PendingIntent.getService(
             this,
@@ -333,6 +362,7 @@ class FocusTimerService : Service() {
     private fun endPendingIntent(): PendingIntent {
         val intent = Intent(this, FocusTimerService::class.java).apply {
             action = ACTION_END
+            putExtra(EXTRA_FROM_NOTIFICATION, true)
         }
         return PendingIntent.getService(
             this,
