@@ -58,8 +58,14 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
     }
     _dialogOpen = true;
     _presentedVersionCode = state.manifest!.versionCode;
-    final BuildContext? context = rootNavigatorKey.currentContext;
     try {
+      // Wait briefly for a valid navigator context so the modal never fails
+      // silently when the check resolves very early.
+      BuildContext? context = rootNavigatorKey.currentContext;
+      for (int i = 0; i < 20 && (context == null || !context.mounted); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        context = rootNavigatorKey.currentContext;
+      }
       if (context != null && context.mounted) {
         await showUpdateDialog(
           context,

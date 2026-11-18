@@ -154,15 +154,6 @@ class SettingsScreen extends ConsumerWidget {
                             color: palette.tx,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          AppInfo.versionLabel,
-                          style: TextStyle(
-                            fontFamily: KTypography.bodyFamily,
-                            fontSize: KTypography.smallSize,
-                            color: palette.mute,
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -256,31 +247,32 @@ class _UpdatePanel extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (state.isChecking)
-          _StatusLine(text: l10n.updateChecking, spinner: true)
-        else if (state.hasUpdate && manifest != null)
-          _StatusLine(
-            icon: Icons.system_update_alt_rounded,
-            text: l10n.updateAvailable(manifest.versionName),
-            color: palette.gold,
-          )
-        else if (state.status == UpdateStatus.failed)
-          _StatusLine(
-            icon: Icons.cloud_off_outlined,
-            text: l10n.updateFailed,
-            color: palette.mute,
-          )
-        else if (state.status == UpdateStatus.upToDate)
-          _StatusLine(
-            icon: Icons.check_circle_outline,
-            text: l10n.updateUpToDate,
-            color: palette.ok,
-          )
-        else
-          _StatusLine(
-            icon: Icons.wifi_tethering,
-            text: l10n.updateHint,
-            color: palette.mute,
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Center(child: CircularProgressIndicator()),
           ),
+        const SizedBox(height: 10),
+        KButton(
+          label: l10n.updateCheck,
+          variant: KButtonVariant.secondary,
+          expand: true,
+          onPressed: state.isChecking
+              ? null
+              : () async {
+                  await ref
+                      .read(updateControllerProvider.notifier)
+                      .check(force: true);
+                  if (!context.mounted) return;
+                  final UpdateState next = ref.read(updateControllerProvider);
+                  if (next.hasUpdate && next.manifest != null) {
+                    await showUpdateDialog(
+                      context,
+                      manifest: next.manifest!,
+                      source: next.source,
+                    );
+                  }
+                },
+        ),
         if (state.hasUpdate && manifest != null) ...<Widget>[
           const SizedBox(height: 10),
           KButton(
@@ -295,21 +287,6 @@ class _UpdatePanel extends ConsumerWidget {
             ),
           ),
         ],
-        const SizedBox(height: 10),
-        KButton(
-          label: l10n.updateCheck,
-          variant: KButtonVariant.secondary,
-          expand: true,
-          onPressed: state.isChecking
-              ? null
-              : () {
-                  unawaited(
-                    ref
-                        .read(updateControllerProvider.notifier)
-                        .check(force: true),
-                  );
-                },
-        ),
       ],
     );
   }
