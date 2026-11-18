@@ -347,8 +347,11 @@ class FocusController extends Notifier<FocusSessionState> {
   }
 
   /// "End": finish the current step now, record the real elapsed time and mark
-  /// the step 100% complete (never a partial 50% write), then land on the
-  /// completion screen where the next step can be started.
+  /// the step 100% complete (never a partial 50% write).
+  ///
+  /// If the task has a next step, transition straight to it (resetting the
+  /// timer) instead of showing the completion screen. Only the last step lands
+  /// on the completion screen.
   Future<void> endStep() async {
     if (_busy || !(state.isRunning || state.isPaused)) return;
     _busy = true;
@@ -356,10 +359,34 @@ class FocusController extends Notifier<FocusSessionState> {
       _ticker?.cancel();
       final int recorded = _elapsedSeconds();
       final FocusPhase phase = state.phase;
+      final bool wasPaused = state.isPaused;
       if (phase == FocusPhase.focus) {
         await _markCurrentStepComplete();
       }
       await _recordSession(completed: false, actualSeconds: recorded);
+
+      if (state.mode == FocusMode.linked && state.hasNextStep) {
+        final FocusStepRef? next = state.nextStep;
+        if (next != null && next.minutes > 0) {
+          final DateTime now = DateTime.now();
+          final int seconds = next.minutes * 60;
+          state = state.copyWith(
+            stepIndex: state.stepIndex + 1,
+            plannedSeconds: seconds,
+            remainingSeconds: seconds,
+            startedAt: now,
+            endsAt: now.add(Duration(seconds: seconds)),
+            stage: FocusStage.running,
+            phase: FocusPhase.focus,
+            recordedSeconds: 0,
+          );
+          _startTicker();
+          await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+          _persist();
+          return;
+        }
+      }
+
       _finish(FocusEndReason.ended, recorded);
     } finally {
       _busy = false;
@@ -596,6 +623,32 @@ class FocusController extends Notifier<FocusSessionState> {
         await _markCurrentStepComplete();
       }
       await _recordSession(completed: true, actualSeconds: planned);
+
+      // Linked task with a following step: advance automatically instead of
+      // finishing, so the next step starts without a completion dialog.
+      if (state.mode == FocusMode.linked && state.hasNextStep) {
+        final FocusStepRef? next = state.nextStep;
+        if (next != null && next.minutes > 0) {
+          final DateTime now = DateTime.now();
+          final int seconds = next.minutes * 60;
+          state = state.copyWith(
+            stepIndex: state.stepIndex + 1,
+            plannedSeconds: seconds,
+            remainingSeconds: seconds,
+            startedAt: now,
+            endsAt: now.add(Duration(seconds: seconds)),
+            stage: FocusStage.running,
+            phase: FocusPhase.focus,
+            recordedSeconds: 0,
+          );
+          _startTicker();
+          await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+          _persist();
+          _busy = false;
+          return;
+        }
+      }
+
       final bool wantsBreak =
           phase == FocusPhase.focus && state.autoBreak && state.breakMinutes > 0;
       if (wantsBreak) {
@@ -670,6 +723,10 @@ class FocusController extends Notifier<FocusSessionState> {
   /// Public so the UI can call it on app resume (foreground) to keep the
   /// in-app timer in sync with the native foreground service (pause/resume/end
   /// triggered from the notification).
+  /// True two-way sync with the Kotlin foreground service.
+  ///
+  /// On resume (or periodic tick) we adopt the native remaining time and
+  /// paused/running state verbatim instead of trusting stale local fields.
   Future<void> syncWithNative() async {
     if (!(state.isRunning || state.isPaused)) return;
     Map<dynamic, dynamic> native;
@@ -680,26 +737,52 @@ class FocusController extends Notifier<FocusSessionState> {
     }
     final bool nativePaused = native['paused'] == true;
     final int nativeMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
-    // Service stopped (e.g. "End" tapped from the notification) → finish.
-    if (nativeMs <= 0 && !(native['paused'] == true)) {
+    final int nativeSeconds = (nativeMs / 1000).ceil();
+
+    // Service is gone / finished → end the step.
+    if (nativeMs <= 0 && !nativePaused) {
       if (state.isRunning || state.isPaused) {
         await endStep();
       }
       return;
     }
-    if (nativePaused && state.isRunning) {
-      _pausedRemaining = (nativeMs / 1000).ceil();
-      pause();
+
+    if (nativePaused) {
+      _pausedRemaining = nativeSeconds > 0 ? nativeSeconds : _pausedRemaining;
+      if (state.isRunning) {
+        _ticker?.cancel();
+        state = state.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: _pausedRemaining,
+        );
+        _persist();
+      } else if (state.isPaused) {
+        state = state.copyWith(remainingSeconds: _pausedRemaining);
+        _persist();
+      }
       return;
     }
-    if (!nativePaused && state.isPaused) {
-      _pausedRemaining = (nativeMs / 1000).ceil();
-      await resume();
+
+    // Native is running.
+    if (state.isPaused) {
+      // Adopt native remaining and resume.
+      _pausedRemaining = nativeSeconds;
+      final DateTime now = DateTime.now();
+      state = state.copyWith(
+        stage: FocusStage.running,
+        remainingSeconds: nativeSeconds,
+        endsAt: now.add(Duration(seconds: nativeSeconds)),
+      );
+      _startTicker();
+      _persist();
       return;
     }
-    // Keep remaining time roughly in sync.
-    if (state.isRunning) {
-      state = state.copyWith(remainingSeconds: (nativeMs / 1000).ceil());
+    // Both running: align remaining time.
+    if (state.isRunning && nativeSeconds > 0) {
+      state = state.copyWith(
+        remainingSeconds: nativeSeconds,
+        endsAt: DateTime.now().add(Duration(seconds: nativeSeconds)),
+      );
     }
   }
 

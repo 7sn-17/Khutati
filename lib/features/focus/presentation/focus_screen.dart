@@ -43,6 +43,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(focusControllerProvider.notifier).consumePendingAction();
+      _tryAutoLoadTask();
       _applySystemUi();
     });
   }
@@ -131,6 +132,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
   @override
   Widget build(BuildContext context) {
     final FocusSessionState session = ref.watch(focusControllerProvider);
+    _tryAutoLoadTask();
     final KhutatiPalette palette = context.palette;
 
     // Toasts for phase transitions and pause, mirroring the HTML's status line.
@@ -1079,18 +1081,21 @@ class _FocusRing extends StatelessWidget {
                   color: palette.mute,
                 ),
               ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  time,
-                  textDirection: TextDirection.ltr,
-                  style: TextStyle(
-                    fontFamily: KTypography.displayFamily,
-                    fontSize: size * 0.225,
-                    fontWeight: FontWeight.w700,
-                    height: 1.05,
-                    color: palette.tx,
-                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              SizedBox(
+                width: size * 0.78,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    time,
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(
+                      fontFamily: KTypography.displayFamily,
+                      fontSize: size * 0.225,
+                      fontWeight: FontWeight.w700,
+                      height: 1.05,
+                      color: palette.tx,
+                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
               ),
@@ -1104,7 +1109,7 @@ class _FocusRing extends StatelessWidget {
                   ),
                 ),
               if (dots.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Row(mainAxisSize: MainAxisSize.min, children: dots),
               ],
             ],
