@@ -439,9 +439,11 @@ path alone still works, which is why local builds update correctly.
 
 **Sounds.** `SoundEffects` owns one pre-loaded `AudioPlayer` per entry in the
 `KSound` enum (`PlayerMode.lowLatency`, `ReleaseMode.stop`, per-sound volume
-0.14–0.22 — low enough to sit under the app rather than over it). Preparation is
-shared through a single future, so the startup call in `main.dart` and the
-settings provider never configure the same player twice.
+0.07–0.11). The assets peak near full scale, so the player volume is the only
+attenuation — the tap lands around -23 dBFS, low enough to sit under the content
+rather than on top of it. Preparation is shared through a single future, so the
+startup call in `main.dart` and the settings provider never configure the same
+player twice.
 
 | `KSound` | Asset | Length | Used by |
 |---|---|---|---|

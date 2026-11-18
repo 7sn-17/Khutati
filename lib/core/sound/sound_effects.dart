@@ -32,18 +32,22 @@ class SoundEffectsController extends Notifier<bool> {
 }
 
 /// The four UI sounds, each with its own pre-loaded player.
+///
+/// These multipliers are deliberately low: the tap fires on every press, so it
+/// has to sit under the content instead of competing with it. On a phone at
+/// normal media volume they read as texture, not as a click track.
 enum KSound {
   /// Soft wooden click: buttons, list rows, modal actions.
-  tap('sounds/click.wav', 0.20),
+  tap('sounds/click.wav', 0.08),
 
   /// Short "tock": switches and the 4-tap step cycle.
-  toggle('sounds/toggle.wav', 0.22),
+  toggle('sounds/toggle.wav', 0.10),
 
   /// Gentle chime: a step or a focus session is completed.
-  success('sounds/success.wav', 0.16),
+  success('sounds/success.wav', 0.11),
 
   /// Soft whoosh: starting or stopping a focus session.
-  timer('sounds/timer.wav', 0.14);
+  timer('sounds/timer.wav', 0.07);
 
   const KSound(this.asset, this.volume);
 
@@ -53,9 +57,9 @@ enum KSound {
 
 /// Small, bundled sounds played through one pre-loaded player each.
 ///
-/// All four are prepared once at startup so a tap never waits on decoding; the
-/// files are mastered quietly (peak around -10 dBFS) and the player volume is
-/// kept low, so the result is a texture rather than a noise.
+/// All four are prepared once at startup so a tap never waits on decoding. The
+/// files themselves peak at about -1.4 dBFS, so the player volume carries the
+/// whole attenuation — one place to change when the mix needs to move.
 abstract final class SoundEffects {
   static const String storageKey = 'sound_effects_enabled';
 
