@@ -210,9 +210,21 @@ jobs:
             exit 1
           fi
 
+      - name: Determine release tag
+        run: |
+          set -euo pipefail
+          VERSION_LINE="$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')"
+          VERSION_NAME="${VERSION_LINE%%+*}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${VERSION_NAME}"
+          fi
+          echo "RELEASE_TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "Release tag: ${TAG}"
+
       - name: Write the update manifest
         env:
-          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
           LC_ALL: C.UTF-8
           LANG: C.UTF-8
         run: |
@@ -259,8 +271,8 @@ jobs:
         with:
           # Tag pushes publish the versioned release; main publishes a rolling
           # pre-release that always points at the newest build.
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest build' }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           make_latest: true
           body_path: release_notes/ar.txt

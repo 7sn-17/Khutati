@@ -439,6 +439,14 @@ class _Hero extends ConsumerWidget {
                   final PlanStep? step = next.nextStep;
                   final int planned =
                       (step?.minutes ?? next.plannedMinutes) * 60;
+                  final List<PlanStep> steps = next.stepsInOrder;
+                  final int currentIndex = step == null
+                      ? -1
+                      : steps.indexWhere((PlanStep s) => s.id == step.id);
+                  final PlanStep? following =
+                      currentIndex >= 0 && currentIndex + 1 < steps.length
+                      ? steps[currentIndex + 1]
+                      : null;
                   ref
                       .read(focusControllerProvider.notifier)
                       .start(
@@ -449,6 +457,17 @@ class _Hero extends ConsumerWidget {
                         subjectName:
                             next.subjectName ??
                             data.subjectNames[next.subjectKey],
+                        nextStepId: following?.id,
+                        nextStepTitle: following == null
+                            ? null
+                            : (following.isAttendance
+                                  ? l10n.galleryAttend
+                                  : following.isStudy
+                                  ? l10n.galleryStudy
+                                  : following.kind),
+                        nextStepPlannedSeconds: following == null
+                            ? null
+                            : following.minutes * 60,
                       );
                   context.go('/focus');
                 },

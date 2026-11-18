@@ -1,15 +1,14 @@
 {
   "@@locale": "ar",
-
   "appName": "خطتي",
-  "@appName": {"description": "Application name shown on the launcher and in the task switcher"},
-
+  "@appName": {
+    "description": "Application name shown on the launcher and in the task switcher"
+  },
   "navToday": "اليوم",
   "navPlan": "الخطة",
   "navFocus": "التركيز",
   "navAchievements": "إنجازاتي",
   "navSettings": "الإعدادات",
-
   "foundationSubtitle": "المرحلة 0 — الأساس جاهز",
   "foundationProof": "الاتجاه من اليمين إلى اليسار، الخطوط العربية مضمّنة، والألوان مستخرجة من النموذج.",
   "todayPlaceholder": "شاشة اليوم تُبنى في المرحلة 3",
@@ -19,12 +18,20 @@
   "todayDayNumber": "اليوم {day}",
   "@todayDayNumber": {
     "description": "Today screen heading, e.g. اليوم 12",
-    "placeholders": {"day": {"type": "int"}}
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
   },
   "todayRemainingDays": "{days, plural, =0{انتهت الخطة} =1{باقي يوم واحد} =2{باقي يومان} few{باقي {days} أيام} many{باقي {days} يوماً} other{باقي {days} يوماً}}",
   "@todayRemainingDays": {
     "description": "Days left after today, printed in the date line",
-    "placeholders": {"days": {"type": "int"}}
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
   },
   "todayStudyDay": "يوم دراسة",
   "todayPracticalDay": "يوم عملي بنصف الوقت",
@@ -41,17 +48,32 @@
   "todayOverdueTitle": "{count, plural, =1{مهمة متأخرة} =2{مهمتان متأخرتان} few{{count} مهام متأخرة} many{{count} مهمة متأخرة} other{{count} مهمة متأخرة}}",
   "@todayOverdueTitle": {
     "description": "Overdue alert heading",
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "todayOverdueBody": "باقي {duration} من أيام سابقة",
   "@todayOverdueBody": {
     "description": "Overdue alert detail line",
-    "placeholders": {"duration": {"type": "String"}}
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
   },
   "todayBreakLabel": "استراحة · {duration} · {range}",
   "@todayBreakLabel": {
     "description": "Break divider between periods",
-    "placeholders": {"duration": {"type": "String"}, "range": {"type": "String"}}
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      },
+      "range": {
+        "type": "String"
+      }
+    }
   },
   "todayQuote1": "كل خطوة تعلّمها اليوم تقصّر عليك سنوات الطب.",
   "todayQuote2": "الانضباط أثقل من الموهبة، وأبقى منها.",
@@ -67,18 +89,33 @@
   "planStartsOn": "تبدأ خطتك في {date}",
   "@planStartsOn": {
     "description": "Shown before Day 1 when the plan has not started yet",
-    "placeholders": {"date": {"type": "String"}}
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "planWeek": "الأسبوع {week}",
   "@planWeek": {
     "description": "Week selector chip and week summary heading",
-    "placeholders": {"week": {"type": "int"}}
+    "placeholders": {
+      "week": {
+        "type": "int"
+      }
+    }
   },
   "planOverall": "إنجاز الخطة",
   "planOverallValue": "{days} من {total} يوماً",
   "@planOverallValue": {
     "description": "Overall plan completion by study days",
-    "placeholders": {"days": {"type": "int"}, "total": {"type": "int"}}
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   },
   "planWeekSummary": "ملخص الأسبوع",
   "planDays": "الأيام",
@@ -89,12 +126,20 @@
   "planTaskCount": "{count, plural, =0{لا مهام} =1{مهمة واحدة} =2{مهمتان} few{{count} مهام} many{{count} مهمة} other{{count} مهمة}}",
   "@planTaskCount": {
     "description": "Number of tasks in a day or week",
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "planDayCount": "{count, plural, =0{لا أيام} =1{يوم واحد} =2{يومان} few{{count} أيام} many{{count} يوماً} other{{count} يوماً}}",
   "@planDayCount": {
     "description": "Number of study days in the overall progress line",
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "planSearchHint": "ابحث في الدروس والفصول والمواد",
   "planSearchResults": "نتائج البحث",
@@ -103,7 +148,14 @@
   "planSearchDay": "اليوم {day} · {date}",
   "@planSearchDay": {
     "description": "Search result context line",
-    "placeholders": {"day": {"type": "int"}, "date": {"type": "String"}}
+    "placeholders": {
+      "day": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "planShowTasks": "عرض المهام",
   "planHideTasks": "إخفاء المهام",
@@ -130,7 +182,6 @@
   "focusConfirm": "تأكيد",
   "focusCancel": "إلغاء",
   "achievementsPlaceholder": "الإنجازات تُبنى في المرحلة 6",
-
   "galleryTitle": "معرض المكوّنات",
   "galleryOpen": "افتح معرض المكوّنات",
   "galleryTheme": "تبديل المظهر",
@@ -155,16 +206,18 @@
   "galleryBreaks": "الاستراحات",
   "galleryBreakLabel": "استراحة · 15 د · 9:14 – 9:30",
   "galleryFeedback": "التنبيهات",
-
   "unitHour": "س",
-  "@unitHour": {"description": "Short hour suffix used in durations, e.g. 2 س 15 د"},
+  "@unitHour": {
+    "description": "Short hour suffix used in durations, e.g. 2 س 15 د"
+  },
   "unitMinute": "د",
-  "@unitMinute": {"description": "Short minute suffix used in durations"},
+  "@unitMinute": {
+    "description": "Short minute suffix used in durations"
+  },
   "partMorning": "صباحاً",
   "partNoon": "ظهراً",
   "partAfternoon": "عصراً",
   "partEvening": "مساءً",
-
   "settingsTitle": "الإعدادات",
   "settingsAppearance": "المظهر",
   "settingsThemeAuto": "تلقائي",
@@ -188,7 +241,6 @@
   "settingsAbout": "عن التطبيق",
   "settingsVersion": "الإصدار",
   "settingsComingSoon": "قريباً",
-
   "settingsUpdates": "تحديثات التطبيق",
   "settingsInstalledVersion": "إصدارك الحالي",
   "updateCheck": "تحقق من وجود تحديث",
@@ -197,7 +249,11 @@
   "updateAvailable": "يتوفر إصدار {version}",
   "@updateAvailable": {
     "description": "Update prompt title",
-    "placeholders": {"version": {"type": "String"}}
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
   },
   "updateNotes": "ما الجديد",
   "updateNow": "تحديث الآن",
@@ -228,5 +284,14 @@
   "aboutAppBody": "خطتي تطبيق دراسي يساعدك على تنظيم وقتك اليومي، ومتابعة مهامك، والحفاظ على روتين ثابت ومستمر في التعلّم. صُمّم ليكون رفيقك في رحلة طويلة، بسلاسة ودقة وجدية.",
   "aboutDeveloperName": "حسن المحمد",
   "aboutTelegram": "تليجرام",
-  "aboutWhatsapp": "واتساب"
+  "aboutWhatsapp": "واتساب",
+  "focusBreak": "استراحة",
+  "focusSkipNext": "تخطي إلى الخطوة التالية",
+  "focusSkipBreak": "تخطي الاستراحة",
+  "focusBreakEnded": "انتهت الاستراحة",
+  "focusResumePrompt": "هل تريد استئناف التركيز؟",
+  "focusStartNextStep": "ابدأ الخطوة التالية",
+  "focusNextStep": "الخطوة التالية",
+  "focusBreakStarted": "بدأت الاستراحة",
+  "focusSessionEnded": "انتهت جلسة التركيز"
 }
