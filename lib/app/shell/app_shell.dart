@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/khutati_icons.dart';
-import '../../features/focus/application/focus_controller.dart';
+import '../../features/focus/application/focus_controller.dart'
+    show focusImmersiveProvider;
 import '../../core/design/palette.dart';
 import '../../core/design/tokens.dart';
 import '../../core/motion/haptics.dart';
@@ -27,8 +28,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final KhutatiPalette palette = context.palette;
     final AppLocalizations l10n = context.l10n;
-    final FocusSessionState focusSession = ref.watch(focusControllerProvider);
-    final bool focusActive = focusSession.isRunning || focusSession.isPaused;
+    final bool immersive = ref.watch(focusImmersiveProvider);
 
     final List<_NavItem> items = <_NavItem>[
       _NavItem(label: l10n.navToday, svgBody: KhutatiIcons.todayBody),
@@ -48,7 +48,7 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       extendBody: true,
       body: SafeArea(bottom: false, child: navigationShell),
-      bottomNavigationBar: focusActive
+      bottomNavigationBar: immersive
           ? null
           : SafeArea(
               top: false,

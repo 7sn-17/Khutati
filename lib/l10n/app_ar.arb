@@ -293,5 +293,10 @@
   "focusStartNextStep": "ابدأ الخطوة التالية",
   "focusNextStep": "الخطوة التالية",
   "focusBreakStarted": "بدأت الاستراحة",
-  "focusSessionEnded": "انتهت جلسة التركيز"
+  "focusSessionEnded": "انتهت جلسة التركيز",
+  "focusSkip": "تخطي",
+  "focusStartBreak": "بدء الراحة",
+  "focusExitImmersive": "خروج من وضع ملء الشاشة",
+  "focusPhaseFocus": "تركيز",
+  "focusPhaseBreak": "استراحة"
 }

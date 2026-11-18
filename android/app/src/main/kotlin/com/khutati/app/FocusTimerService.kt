@@ -30,6 +30,8 @@ class FocusTimerService : Service() {
         const val EXTRA_PHASE = "phase"
         const val EXTRA_BREAK_ENABLED = "break_enabled"
         const val EXTRA_BREAK_MINUTES = "break_minutes"
+        const val EXTRA_TASK_TITLE = "task_title"
+        const val EXTRA_HAS_NEXT_STEP = "has_next_step"
         const val PREFS = "khutati_focus"
         const val KEY_TARGET = "target_end_ms"
         const val KEY_PAUSED = "is_paused"
@@ -39,6 +41,8 @@ class FocusTimerService : Service() {
         const val KEY_STEP = "step_id"
         const val KEY_BREAK_ENABLED = "break_enabled"
         const val KEY_BREAK_SECONDS = "break_seconds"
+        const val KEY_TASK_TITLE = "task_title"
+        const val KEY_HAS_NEXT_STEP = "has_next_step"
 
         fun persistedRemaining(context: Context): Long {
             val state = persistedState(context)
@@ -78,6 +82,8 @@ class FocusTimerService : Service() {
     private var stepId: String? = null
     private var breakEnabled: Boolean = true
     private var breakSeconds: Int = 300
+    private var taskTitle: String? = null
+    private var hasNextStep: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -93,6 +99,8 @@ class FocusTimerService : Service() {
                 taskId = intent.getStringExtra(EXTRA_TASK)
                 stepId = intent.getStringExtra(EXTRA_STEP)
                 phase = intent.getStringExtra(EXTRA_PHASE) ?: "focus"
+                taskTitle = intent.getStringExtra(EXTRA_TASK_TITLE)
+                hasNextStep = intent.getBooleanExtra(EXTRA_HAS_NEXT_STEP, false)
                 breakEnabled = intent.getBooleanExtra(EXTRA_BREAK_ENABLED, true)
                 breakSeconds = intent.getIntExtra(EXTRA_BREAK_MINUTES, 5) * 60
                 targetEndMillis = System.currentTimeMillis() + duration
@@ -140,6 +148,8 @@ class FocusTimerService : Service() {
                 phase = prefs.getString(KEY_PHASE, "focus") ?: "focus"
                 taskId = prefs.getString(KEY_TASK, null)
                 stepId = prefs.getString(KEY_STEP, null)
+                taskTitle = prefs.getString(KEY_TASK_TITLE, null)
+                hasNextStep = prefs.getBoolean(KEY_HAS_NEXT_STEP, false)
                 breakEnabled = prefs.getBoolean(KEY_BREAK_ENABLED, true)
                 breakSeconds = prefs.getInt(KEY_BREAK_SECONDS, 300)
                 if (paused) {
@@ -178,6 +188,8 @@ class FocusTimerService : Service() {
             .putString(KEY_PHASE, phase)
             .putString(KEY_TASK, taskId)
             .putString(KEY_STEP, stepId)
+            .putString(KEY_TASK_TITLE, taskTitle)
+            .putBoolean(KEY_HAS_NEXT_STEP, hasNextStep)
             .putBoolean(KEY_BREAK_ENABLED, breakEnabled)
             .putInt(KEY_BREAK_SECONDS, breakSeconds)
             .apply()
@@ -248,23 +260,31 @@ class FocusTimerService : Service() {
         )
     }
 
+    private fun deepLinkIntent(action: String? = null): Intent {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(this, MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        intent.putExtra("route", "/focus")
+        if (action != null) intent.putExtra("focus_action", action)
+        return intent
+    }
+
     private fun buildNotification(): Notification {
         val remaining = remainingMs() / 1000
         val minutes = remaining / 60
         val seconds = remaining % 60
         val text = String.format("%02d:%02d", minutes, seconds)
-        val title = if (phase == "break") "استراحة" else "تركيز"
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val title = taskTitle ?: if (phase == "break") "استراحة" else "تركيز"
         val contentPi = PendingIntent.getActivity(
             this,
             0,
-            launchIntent,
+            deepLinkIntent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentText(if (phase == "break") "استراحة • $text" else text)
+            .setSmallIcon(R.drawable.ic_focus_monochrome)
             .setContentIntent(contentPi)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -287,6 +307,17 @@ class FocusTimerService : Service() {
             "إنهاء",
             endPendingIntent(),
         )
+        val thirdLabel = if (hasNextStep) "تخطي" else if (breakEnabled && phase == "focus") "بدء الراحة" else null
+        val thirdAction = if (hasNextStep) "skip_step" else if (breakEnabled && phase == "focus") "start_break" else null
+        if (thirdLabel != null && thirdAction != null) {
+            val pi = PendingIntent.getActivity(
+                this,
+                9,
+                deepLinkIntent(thirdAction),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, thirdLabel, pi)
+        }
         return builder.build()
     }
 
@@ -296,11 +327,10 @@ class FocusTimerService : Service() {
     }
 
     private fun notifyAlert(title: String, text: String) {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         val pi = PendingIntent.getActivity(
             this,
             0,
-            launchIntent,
+            deepLinkIntent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)

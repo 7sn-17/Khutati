@@ -198,7 +198,14 @@ class FocusController extends Notifier<FocusSessionState> {
       nextStepPlannedSeconds: nextStepPlannedSeconds,
     );
     _startTicker();
-    await _nativeStart(plannedSeconds, taskId, stepId, phase);
+    await _nativeStart(
+      plannedSeconds,
+      taskId,
+      stepId,
+      phase,
+      taskTitle,
+      nextStepId != null || (nextStepPlannedSeconds ?? 0) > 0,
+    );
     if (taskId != null) {
       try {
         await ref
@@ -232,48 +239,105 @@ class FocusController extends Notifier<FocusSessionState> {
     _persist();
   }
 
-  Future<void> end() async {
+  /// Ends the current step early: marks it completed when the timer finished,
+  /// otherwise partial, logs the real elapsed time, then moves immediately to
+  /// the next step when one exists.
+  Future<void> end() => endSession();
+
+  Future<void> endSession() async {
     _ticker?.cancel();
-    final actual = _elapsed();
+    final bool finished = state.remainingSeconds <= 0;
+    final int actual = _elapsed();
+    await _logSession(completed: finished, actualSeconds: actual);
+
+    final String? stepId = state.stepId;
+    final String? taskId = state.taskId;
+    if (stepId != null) {
+      try {
+        await ref.read(userStateRepositoryProvider).setStepCompleted(
+          stepId,
+          finished ? StepProgress.completed : StepProgress.partial,
+        );
+      } catch (_) {}
+    }
+    if (taskId != null && state.nextStepPlannedSeconds == null) {
+      try {
+        await ref.read(userStateRepositoryProvider).setTaskStatus(taskId, 'completed');
+      } catch (_) {}
+    } else if (taskId != null) {
+      try {
+        await ref.read(userStateRepositoryProvider).setTaskStatus(taskId, 'in_progress');
+      } catch (_) {}
+    }
+
+    await _nativeStop();
+    final int? nextSeconds = state.nextStepPlannedSeconds;
+    if (nextSeconds != null && nextSeconds > 0) {
+      await start(
+        plannedSeconds: nextSeconds,
+        phase: FocusPhases.focus,
+        taskId: taskId,
+        stepId: state.nextStepId,
+        taskTitle: state.taskTitle,
+        subjectName: state.subjectName,
+      );
+      return;
+    }
+    state = state.copyWith(
+      status: FocusStatus.completed,
+      remainingSeconds: 0,
+      awaitingCompletion: taskId != null,
+      awaitingResume: false,
+    );
+    _persist();
+  }
+
+  /// Skips the current step without marking it complete, logs the elapsed time,
+  /// then moves immediately to the next step when one exists.
+  Future<void> skipStep() async {
+    _ticker?.cancel();
+    final int actual = _elapsed();
     await _logSession(completed: false, actualSeconds: actual);
     await _nativeStop();
+    final int? nextSeconds = state.nextStepPlannedSeconds;
+    final String? taskId = state.taskId;
+    if (nextSeconds != null && nextSeconds > 0) {
+      await start(
+        plannedSeconds: nextSeconds,
+        phase: FocusPhases.focus,
+        taskId: taskId,
+        stepId: state.nextStepId,
+        taskTitle: state.taskTitle,
+        subjectName: state.subjectName,
+      );
+      return;
+    }
     state = const FocusSessionState();
     _persist();
   }
 
   Future<void> complete() async {
     _ticker?.cancel();
-    final actual = state.plannedSeconds > 0 ? state.plannedSeconds : _elapsed();
+    final int actual =
+        state.plannedSeconds > 0 ? state.plannedSeconds : _elapsed();
     await _logSession(completed: true, actualSeconds: actual);
-    final bool hasBreak =
-        state.phase == FocusPhases.focus && _breakEnabled && _breakSeconds > 0;
-    if (hasBreak) {
-      // Keep the notification service in sync by starting the break through the
-      // normal path (which also restarts the native timer).
-      await start(
-        plannedSeconds: _breakSeconds,
-        phase: FocusPhases.breakTime,
-        taskTitle: state.taskTitle,
-        subjectName: state.subjectName,
-        nextStepId: state.nextStepId,
-        nextStepTitle: state.nextStepTitle,
-        nextStepPlannedSeconds: state.nextStepPlannedSeconds,
-      );
+    if (state.phase == FocusPhases.focus) {
       state = state.copyWith(
+        status: FocusStatus.completed,
+        remainingSeconds: 0,
         awaitingCompletion: state.taskId != null,
         awaitingResume: false,
       );
-      _persist();
-      return;
+    } else {
+      state = state.copyWith(
+        status: FocusStatus.completed,
+        remainingSeconds: 0,
+        awaitingCompletion: false,
+        awaitingResume: true,
+      );
     }
-    await _nativeStop();
-    state = state.copyWith(
-      status: FocusStatus.completed,
-      remainingSeconds: 0,
-      awaitingCompletion: state.taskId != null,
-      awaitingResume: state.phase == FocusPhases.breakTime,
-    );
     _persist();
+    await _syncNativeRemaining();
   }
 
   Future<void> markTaskCompleted() async {
@@ -310,6 +374,47 @@ class FocusController extends Notifier<FocusSessionState> {
       subjectName: state.subjectName,
     );
   }
+
+  Future<void> resumeFromBreak() async {
+    state = state.copyWith(awaitingResume: false);
+    final int? seconds = state.nextStepPlannedSeconds;
+    if (seconds != null && seconds > 0) {
+      await start(
+        plannedSeconds: seconds,
+        phase: FocusPhases.focus,
+        taskId: state.taskId,
+        stepId: state.nextStepId,
+        taskTitle: state.taskTitle,
+        subjectName: state.subjectName,
+      );
+      return;
+    }
+    await start(
+      plannedSeconds: 25 * 60,
+      phase: FocusPhases.focus,
+      taskId: state.taskId,
+      taskTitle: state.taskTitle ?? 'تركيز',
+      subjectName: state.subjectName,
+    );
+  }
+
+  Future<void> consumePendingAction() async {
+    try {
+      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
+      final String? action = prefs.getString('pending_focus_action');
+      if (action == null || action.isEmpty) return;
+      await prefs.remove('pending_focus_action');
+      if (action == 'skip_step') {
+        await skipStep();
+      } else if (action == 'start_break') {
+        // Native already handles the transition; refresh state.
+        await _syncNativeRemaining();
+      }
+    } catch (_) {}
+  }
+
+  bool get hasNextStep =>
+      state.nextStepId != null || (state.nextStepPlannedSeconds ?? 0) > 0;
 
   void dismissCompletion() {
     state = state.copyWith(awaitingCompletion: false);
@@ -370,19 +475,85 @@ class FocusController extends Notifier<FocusSessionState> {
       if (native == null) return;
       final bool paused = native['paused'] == true;
       final int remainingMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
-      final String phase = (native['phase'] as String?) ?? state.phase;
+      final String nativePhase =
+          (native['phase'] as String?) ?? state.phase;
+
       if (paused && state.status == FocusStatus.running) {
         pause();
-      } else if (!paused &&
-          state.status == FocusStatus.paused &&
-          remainingMs > 0) {
-        // Keep the UI authoritative; do not auto-resume from a notification.
       }
+
       if (remainingMs > 0) {
+        if (nativePhase != state.phase &&
+            state.status != FocusStatus.idle) {
+          if (nativePhase == FocusPhases.breakTime &&
+              state.phase == FocusPhases.focus) {
+            if (state.status == FocusStatus.running) {
+              await _logSession(
+                completed: true,
+                actualSeconds: state.plannedSeconds,
+              );
+            }
+            state = state.copyWith(
+              status: FocusStatus.running,
+              phase: FocusPhases.breakTime,
+              remainingSeconds: (remainingMs / 1000).ceil(),
+              targetEndAt: DateTime.now().add(
+                Duration(milliseconds: remainingMs),
+              ),
+              awaitingCompletion: state.taskId != null,
+              awaitingResume: false,
+            );
+            _persist();
+            return;
+          }
+          if (nativePhase == FocusPhases.focus &&
+              state.phase == FocusPhases.breakTime) {
+            state = state.copyWith(
+              status: FocusStatus.running,
+              phase: FocusPhases.focus,
+              remainingSeconds: (remainingMs / 1000).ceil(),
+              targetEndAt: DateTime.now().add(
+                Duration(milliseconds: remainingMs),
+              ),
+            );
+            _persist();
+            return;
+          }
+        }
         state = state.copyWith(
           remainingSeconds: (remainingMs / 1000).ceil(),
-          phase: phase,
+          phase: nativePhase,
+          targetEndAt: state.status == FocusStatus.running
+              ? DateTime.now().add(Duration(milliseconds: remainingMs))
+              : state.targetEndAt,
         );
+        _persist();
+      } else if (state.status == FocusStatus.running) {
+        if (state.phase == FocusPhases.focus) {
+          await _logSession(
+            completed: true,
+            actualSeconds: state.plannedSeconds,
+          );
+          state = state.copyWith(
+            status: FocusStatus.completed,
+            remainingSeconds: 0,
+            awaitingCompletion: state.taskId != null,
+          );
+        } else {
+          await _logSession(
+            completed: true,
+            actualSeconds: state.plannedSeconds,
+          );
+          state = state.copyWith(
+            status: FocusStatus.completed,
+            remainingSeconds: 0,
+            awaitingResume: true,
+          );
+        }
+        _persist();
+      }
+      if (state.status == FocusStatus.paused) {
+        _pausedRemaining = state.remainingSeconds;
       }
     } catch (_) {}
   }
@@ -486,6 +657,8 @@ class FocusController extends Notifier<FocusSessionState> {
     String? taskId,
     String? stepId,
     String phase,
+    String? taskTitle,
+    bool hasNextStep,
   ) async {
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
@@ -494,6 +667,8 @@ class FocusController extends Notifier<FocusSessionState> {
         'taskId': taskId,
         'stepId': stepId,
         'phase': phase,
+        'taskTitle': taskTitle,
+        'hasNextStep': hasNextStep,
         'breakEnabled': prefs.getBool('focus_break_enabled') ?? true,
         'breakMinutes': prefs.getInt('focus_break_minutes') ?? 5,
       });
@@ -612,3 +787,9 @@ class FocusController extends Notifier<FocusSessionState> {
 
 final focusControllerProvider =
     NotifierProvider<FocusController, FocusSessionState>(FocusController.new);
+
+/// Whether the Focus screen is currently in user-controlled immersive mode.
+/// Watched by [AppShell] so the bottom navigation bar disappears only when the
+/// user opts in, never automatically when a session starts.
+final StateProvider<bool> focusImmersiveProvider =
+    StateProvider<bool>((Ref ref) => false);

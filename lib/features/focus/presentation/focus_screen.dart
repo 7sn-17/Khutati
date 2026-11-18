@@ -6,7 +6,8 @@ import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../l10n/l10n.dart';
-import '../application/focus_controller.dart';
+import '../application/focus_controller.dart'
+    show FocusController, FocusSessionState, FocusStatus, focusImmersiveProvider;
 
 class FocusScreen extends ConsumerStatefulWidget {
   const FocusScreen({super.key});
@@ -21,6 +22,15 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   bool _resumePromptShown = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(focusControllerProvider.notifier).consumePendingAction();
+      _updateSystemUi();
+    });
+  }
+
+  @override
   void dispose() {
     if (_immersive) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -30,11 +40,30 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
 
   void _toggleImmersive() {
     setState(() => _immersive = !_immersive);
+    ref.read(focusImmersiveProvider.notifier).state = _immersive;
     if (_immersive) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+    _updateSystemUi();
+  }
+
+  void _updateSystemUi() {
+    final Brightness brightness = Theme.of(context).brightness;
+    final bool lightIcons = brightness == Brightness.dark;
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness:
+            lightIcons ? Brightness.light : Brightness.dark,
+        statusBarBrightness:
+            lightIcons ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            lightIcons ? Brightness.light : Brightness.dark,
+      ),
+    );
   }
 
   String _format(int seconds) {
@@ -86,11 +115,11 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
           ? session.remainingSeconds / session.plannedSeconds
           : 0,
       numeral: _format(session.remainingSeconds),
-      caption: isBreak
-          ? l10n.focusBreak
-          : (session.taskTitle ?? l10n.focusPlaceholder),
+      caption: isBreak ? l10n.focusBreak : session.taskTitle,
       color: ambient,
       size: ringSize,
+      arcDegrees: 270,
+      glow: true,
     );
 
     final Widget details = Column(
@@ -127,7 +156,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
               haptics.selection();
               controller.start(
                 plannedSeconds: 25 * 60,
-                taskTitle: l10n.focusPlaceholder,
+                taskTitle: l10n.navFocus,
               );
             },
           )
@@ -137,11 +166,14 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
               Row(
                 children: <Widget>[
                   Expanded(
-                    child: KButton(
+                    child: _PremiumFocusButton(
+                      icon: session.isPaused
+                          ? Icons.play_arrow_rounded
+                          : Icons.pause_rounded,
                       label: session.isPaused
                           ? l10n.focusResume
                           : l10n.focusPause,
-                      variant: KButtonVariant.secondary,
+                      color: palette.tx,
                       onPressed: () {
                         haptics.selection();
                         if (session.isPaused) {
@@ -154,39 +186,41 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: KButton(
+                    child: _PremiumFocusButton(
+                      icon: Icons.stop_rounded,
                       label: l10n.focusEnd,
-                      variant: KButtonVariant.secondary,
+                      color: palette.redtx,
                       onPressed: () {
                         haptics.selection();
                         if (isBreak) {
                           controller.skipBreak();
                         } else {
-                          controller.end();
+                          controller.endSession();
                         }
                       },
                     ),
                   ),
                 ],
               ),
-              if (session.nextStepPlannedSeconds != null &&
-                  !isBreak) ...<Widget>[
+              if (controller.hasNextStep && !isBreak) ...<Widget>[
                 const SizedBox(height: 12),
-                KButton(
-                  label: l10n.focusSkipNext,
-                  variant: KButtonVariant.secondary,
+                _PremiumFocusButton(
+                  icon: Icons.skip_next_rounded,
+                  label: l10n.focusSkip,
+                  color: palette.mute,
                   expand: true,
                   onPressed: () {
                     haptics.selection();
-                    controller.startNextStep();
+                    controller.skipStep();
                   },
                 ),
               ],
               if (isBreak) ...<Widget>[
                 const SizedBox(height: 12),
-                KButton(
+                _PremiumFocusButton(
+                  icon: Icons.skip_next_rounded,
                   label: l10n.focusSkipBreak,
-                  variant: KButtonVariant.secondary,
+                  color: palette.mute,
                   expand: true,
                   onPressed: () {
                     haptics.selection();
@@ -248,29 +282,40 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                   )
                 : Column(
                     children: <Widget>[
-                      if (!_immersive)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: <Widget>[
-                            Text(
-                              l10n.navFocus,
-                              style: TextStyle(
-                                fontFamily: KTypography.displayFamily,
-                                fontSize: KTypography.h1Size,
-                                fontWeight: FontWeight.w700,
-                                color: palette.tx,
-                              ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: <Widget>[
+                          Text(
+                            isBreak ? l10n.focusBreak : l10n.navFocus,
+                            style: TextStyle(
+                              fontFamily: KTypography.displayFamily,
+                              fontSize: KTypography.h1Size,
+                              fontWeight: FontWeight.w700,
+                              color: palette.tx,
                             ),
-                            IconButton(
-                              icon: Icon(
-                                _immersive
-                                    ? Icons.fullscreen_exit_rounded
-                                    : Icons.fullscreen_rounded,
-                                color: palette.mute,
-                              ),
-                              onPressed: _toggleImmersive,
+                          ),
+                          IconButton(
+                            tooltip: _immersive
+                                ? l10n.focusExitImmersive
+                                : l10n.focusExitImmersive,
+                            icon: Icon(
+                              _immersive
+                                  ? Icons.fullscreen_exit_rounded
+                                  : Icons.fullscreen_rounded,
+                              color: palette.mute,
                             ),
-                          ],
+                            onPressed: _toggleImmersive,
+                          ),
+                        ],
+                      ),
+                      if (_immersive)
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: TextButton.icon(
+                            onPressed: _toggleImmersive,
+                            icon: const Icon(Icons.fullscreen_exit_rounded),
+                            label: Text(l10n.focusExitImmersive),
+                          ),
                         ),
                       const Spacer(),
                       ring,
@@ -355,15 +400,83 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
             onPressed: () {
               controller.dismissResume();
               _resumePromptShown = false;
-              controller.start(
-                plannedSeconds: 25 * 60,
-                taskTitle: l10n.focusPlaceholder,
-              );
+              controller.resumeFromBreak();
               Navigator.of(ctx).pop();
             },
             child: Text(l10n.focusResume),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PremiumFocusButton extends StatelessWidget {
+  const _PremiumFocusButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+    this.expand = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    final Widget content = Row(
+      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: KTypography.bodySize,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+
+    return Semantics(
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: KMetrics.buttonMinHeight),
+            padding: const EdgeInsets.symmetric(
+              horizontal: KMetrics.buttonPaddingX,
+              vertical: KMetrics.buttonPaddingY,
+            ),
+            decoration: BoxDecoration(
+              color: palette.card.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+              border: Border.all(color: palette.line),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            width: expand ? double.infinity : null,
+            child: content,
+          ),
+        ),
       ),
     );
   }

@@ -19,6 +19,8 @@ class KProgressRing extends StatelessWidget {
     this.caption,
     this.color,
     this.size = KMetrics.ringSize,
+    this.arcDegrees = 360,
+    this.glow = false,
     super.key,
   });
 
@@ -27,6 +29,10 @@ class KProgressRing extends StatelessWidget {
   final String? caption;
   final Color? color;
   final double size;
+  /// Sweep of the open arc. 360 draws a full circle; ~270 draws the premium
+  /// focus arc with a gap at the bottom.
+  final double arcDegrees;
+  final bool glow;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +56,8 @@ class KProgressRing extends StatelessWidget {
                   progress: value,
                   trackColor: palette.line,
                   valueColor: color ?? palette.redtx,
+                  arcDegrees: arcDegrees,
+                  glow: glow,
                 ),
               );
             },
@@ -68,12 +76,21 @@ class KProgressRing extends StatelessWidget {
                 ),
               ),
               if (caption != null)
-                Text(
-                  caption!,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KArtwork.ringCaptionSize * scale,
-                    color: palette.mute,
+                SizedBox(
+                  width: size * 0.72,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      caption!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KArtwork.ringCaptionSize * scale,
+                        color: palette.mute,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -89,11 +106,24 @@ class _RingPainter extends CustomPainter {
     required this.progress,
     required this.trackColor,
     required this.valueColor,
+    this.arcDegrees = 360,
+    this.glow = false,
   });
 
   final double progress;
   final Color trackColor;
   final Color valueColor;
+  final double arcDegrees;
+  final bool glow;
+
+  double get _startAngle {
+    if (arcDegrees >= 359.9) return -math.pi / 2;
+    final double arc = arcDegrees * math.pi / 180.0;
+    return 3 * math.pi / 2 - arc / 2;
+  }
+
+  double get _sweepAngle =>
+      (arcDegrees >= 359.9 ? 2 * math.pi : arcDegrees * math.pi / 180.0);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -101,21 +131,45 @@ class _RingPainter extends CustomPainter {
     final double radius = KArtwork.ringRadius * scale;
     final double stroke = KArtwork.ringStrokeWidth * scale;
     final Rect rect = Rect.fromCircle(center: size.center(Offset.zero), radius: radius);
+    final double start = _startAngle;
+    final double sweep = _sweepAngle;
 
     final Paint track = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
-      ..color = trackColor;
-    canvas.drawCircle(rect.center, radius, track);
+      ..strokeCap = StrokeCap.round
+      ..color = trackColor.withValues(alpha: 0.55);
+    canvas.drawArc(rect, start, sweep, false, track);
 
     if (progress <= 0) return;
 
+    final double valueSweep = sweep * progress.clamp(0.0, 1.0);
+    if (glow) {
+      final Paint glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke * 1.9
+        ..strokeCap = StrokeCap.round
+        ..color = valueColor.withValues(alpha: 0.22)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      canvas.drawArc(rect, start, valueSweep, false, glowPaint);
+    }
     final Paint value = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
-      ..color = valueColor;
-    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * progress, false, value);
+      ..shader = SweepGradient(
+        center: Alignment.center,
+        startAngle: start,
+        endAngle: start + sweep,
+        colors: <Color>[
+          valueColor.withValues(alpha: 0.55),
+          valueColor,
+          Colors.white.withValues(alpha: 0.95),
+          valueColor,
+        ],
+        stops: const <double>[0.0, 0.45, 0.7, 1.0],
+      ).createShader(rect);
+    canvas.drawArc(rect, start, valueSweep, false, value);
   }
 
   @override
