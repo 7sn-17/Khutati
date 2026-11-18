@@ -20,12 +20,15 @@ void main() {
   });
 
   test('light palette matches the prototype overrides', () {
-    expect(KColors.light.bg, const Color(0xFFF1EDE4));
-    expect(KColors.light.card, const Color(0xFFFFFFFF));
-    expect(KColors.light.tx, const Color(0xFF0D1A2D));
+    expect(KColors.light.bg, const Color(0xFFF3EEE5));
+    expect(KColors.light.card, const Color(0xFFFFFCF6));
+    expect(KColors.light.card2, const Color(0xFFF8F2E7));
+    expect(KColors.light.line, const Color(0xFFE2D9C8));
+    expect(KColors.light.tx, const Color(0xFF16233A));
+    expect(KColors.light.mute, const Color(0xFF55637A));
     expect(KColors.light.redtx, const Color(0xFFA8241B));
     expect(KColors.light.ok, const Color(0xFF1F7A5F));
-    expect(KColors.light.gold, const Color(0xFF9A6A12));
+    expect(KColors.light.gold, const Color(0xFF8F6210));
     // --red is not overridden in the light theme; it inherits the dark value.
     expect(KColors.light.red, KColors.dark.red);
   });
