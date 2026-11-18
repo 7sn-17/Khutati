@@ -106,10 +106,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
 
     final Completer<void> waiter = Completer<void>();
     _resumedFromSettings = waiter;
-    await waiter.future.timeout(
-      const Duration(minutes: 3),
-      onTimeout: () {},
-    );
+    await waiter.future.timeout(const Duration(minutes: 3), onTimeout: () {});
     _resumedFromSettings = null;
     if (!mounted) return false;
 
@@ -561,6 +558,18 @@ class _FocusView extends ConsumerWidget {
       ],
     );
 
+    // Fullscreen hides ONLY the title and subtitle. History and the exit
+    // control stay in the same left-hand corner so the user can always leave
+    // immersive mode or open their session log.
+    final Widget compactHeader = Row(
+      children: <Widget>[
+        const Spacer(),
+        historyButton,
+        const SizedBox(width: 8),
+        fsButton,
+      ],
+    );
+
     // Segmented control (below the header).
     final Widget segmented = Container(
       decoration: BoxDecoration(
@@ -707,7 +716,7 @@ class _FocusView extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  if (!immersive) header,
+                  if (immersive) compactHeader else header,
                   if (!immersive) ...<Widget>[
                     const SizedBox(height: 12),
                     segmented,
@@ -735,7 +744,7 @@ class _FocusView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          if (!immersive) header,
+          if (immersive) compactHeader else header,
           if (!immersive) ...<Widget>[
             const SizedBox(height: 12),
             segmented,
@@ -1214,17 +1223,33 @@ class _FocusRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    // Three-digit durations (100:00+) need a larger ring so the dashes do not
-    // crowd the text. LayoutBuilder lets the ring grow with the available
-    // space instead of clipping the fitted text.
+    // Custom Pomodoro durations (100:00, 120:00 …) need a physically larger
+    // circle. LayoutBuilder measures the space actually offered by the Focus
+    // layout, so the ring can grow without ever pushing the controls off
+    // screen; the FittedBox is the final guard that keeps the numerals inside
+    // the dashed track.
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final bool threeDigits = time.length >= 6;
-        final double base = size * (threeDigits ? 1.25 : 1.0);
-        final double effective = constraints.hasBoundedWidth
-            ? math.min(base, constraints.maxWidth)
-            : base;
-        final double ringSize = effective.clamp(120.0, 420.0).toDouble();
+        final int? minutes = int.tryParse(time.split(':').first);
+        final bool longTime = minutes != null && minutes > 59;
+        final double wanted = size * (longTime ? 1.20 : 1.0);
+
+        final double maxWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : wanted;
+        final double maxHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : wanted;
+        final double ringSize = math
+            .min(wanted, math.min(maxWidth, maxHeight))
+            .clamp(120.0, 520.0)
+            .toDouble();
+
+        // Leave room for the 16px stroke/dashes on both sides. Long timers get
+        // a narrower text box, which the FittedBox then uses to scale down.
+        final double textWidth = ringSize * (longTime ? 0.58 : 0.70);
+        final double fontSize = ringSize * (longTime ? 0.17 : 0.20);
+
         return SizedBox(
           width: ringSize,
           height: ringSize,
@@ -1233,64 +1258,65 @@ class _FocusRing extends StatelessWidget {
             children: <Widget>[
               CustomPaint(
                 size: Size.square(ringSize),
-            painter: _FocusRingPainter(
-              fraction: fraction,
-              segments: segments,
-              color: color,
-              trackColor: trackColor,
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 14,
-                  color: palette.mute,
+                painter: _FocusRingPainter(
+                  fraction: fraction,
+                  segments: segments,
+                  color: color,
+                  trackColor: trackColor,
                 ),
               ),
-              SizedBox(
-                width: ringSize * 0.72,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    time,
-                    textDirection: TextDirection.ltr,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    label,
                     style: TextStyle(
-                      fontFamily: KTypography.displayFamily,
-                      fontSize: ringSize * 0.20,
-                      fontWeight: FontWeight.w700,
-                      height: 1.05,
-                      color: palette.tx,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: 14,
+                      color: palette.mute,
                     ),
                   ),
-                ),
-              ),
-              if (sub.isNotEmpty)
-                Text(
-                  sub,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: 13,
-                    color: palette.mute,
+                  SizedBox(
+                    width: textWidth,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        time,
+                        maxLines: 1,
+                        textDirection: TextDirection.ltr,
+                        style: TextStyle(
+                          fontFamily: KTypography.displayFamily,
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w700,
+                          height: 1.05,
+                          color: palette.tx,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              if (dots.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 12),
-                Row(mainAxisSize: MainAxisSize.min, children: dots),
-              ],
+                  if (sub.isNotEmpty)
+                    Text(
+                      sub,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 13,
+                        color: palette.mute,
+                      ),
+                    ),
+                  if (dots.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 12),
+                    Row(mainAxisSize: MainAxisSize.min, children: dots),
+                  ],
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
-);
   }
 }
 
@@ -2236,10 +2262,7 @@ Future<bool> _showExactAlarmDialog(BuildContext context) async {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text(
-            'لاحقاً',
-            style: TextStyle(color: palette.mute),
-          ),
+          child: Text('لاحقاً', style: TextStyle(color: palette.mute)),
         ),
         FilledButton(
           onPressed: () async {

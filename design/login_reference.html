@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>خطتي — شاشة الدخول</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Reem+Kufi:wght@700&display=swap" rel="stylesheet">
+<!--
+مرجع تصميم شاشة الدخول (للتحويل إلى Flutter). افتح الرابط مع #dark أو #light لفرض المظهر.
+
+الألوان (فاتح / داكن):
+  bg        #F1EDE4 / #0D1A2D      (أرضية الورقة السفلية + بداية السماء)
+  card      #FFFFFF / #15263F      (زر Google في الداكن)
+  line      #D9D2C3 / #26395A
+  tx        #0D1A2D / #EAE5DA
+  mute      #5B6A80 / #93A1B8
+  sky end   #B6E2D4 / #12606F      (نهاية تدرج السماء)
+  جبل خلفي  #9CC4BB / #2A7C8A
+  جبل وسط   #5B9A94 / #1B5668
+  جبل أمامي #256A70 / #10334A
+  علم       #B52A20
+الخطوط: Reem Kufi 700 للاسم والعنوان، IBM Plex Sans Arabic للباقي.
+المقاسات: اسم 54 | نص تحته 15 | عنوان 26 | زر 62 ارتفاعاً وكامل العرض وحواف دائرية كاملة
+          | عبارة صغيرة 13 | شريحة الزائر ارتفاع 44 | الورقة السفلية حواف علوية 34 وحشوة 28/24/64 وفراغ بين العناصر 18.
+الحركة (مرة واحدة عند الفتح): كل طبقة جبل تصعد من الأسفل 120 وحدة خلال 1.6 ثانية بمنحنى
+          cubic-bezier(.2,.8,.2,1)، الطبقات بالترتيب: خلفية (0s) ثم وسطى (0.15s) ثم أمامية (0.3s).
+-->
+<style>
+:root{--bg:#F1EDE4;--card:#fff;--line:#D9D2C3;--tx:#0D1A2D;--mute:#5B6A80;--gold:#9A6A12;--page:#E4DED0;--sky:#B6E2D4;--mt1:#9CC4BB;--mt2:#5B9A94;--mt3:#256A70;--btn-bg:#0D1A2D;--btn-tx:#F1EDE4;--btn-bd:#0D1A2D;--btn-sh:none}
+:root[data-theme=dark]{--bg:#0D1A2D;--card:#15263F;--line:#26395A;--tx:#EAE5DA;--mute:#93A1B8;--gold:#E8B65A;--page:#07101D;--sky:#12606F;--mt1:#2A7C8A;--mt2:#1B5668;--mt3:#10334A;--btn-bg:#15263F;--btn-tx:#EAE5DA;--btn-bd:#26395A;--btn-sh:0 6px 18px rgba(0,0,0,.25)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0D1A2D;--card:#15263F;--line:#26395A;--tx:#EAE5DA;--mute:#93A1B8;--gold:#E8B65A;--page:#07101D;--sky:#12606F;--mt1:#2A7C8A;--mt2:#1B5668;--mt3:#10334A;--btn-bg:#15263F;--btn-tx:#EAE5DA;--btn-bd:#26395A;--btn-sh:0 6px 18px rgba(0,0,0,.25)}}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--page);color:var(--tx);font-family:'IBM Plex Sans Arabic',sans-serif;overflow:hidden}
+h1,h2{font-family:'Reem Kufi',sans-serif;font-weight:700}
+button{font:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.scr{position:relative;height:100%;height:100dvh;width:100%;display:flex;flex-direction:column;background:var(--bg);isolation:isolate}
+@media(min-width:700px){.scr{max-width:440px;margin:0 auto;box-shadow:0 0 60px rgba(0,0,0,.2)}}
+.sky{position:relative;flex:1;min-height:0;background:linear-gradient(180deg,var(--bg) 10%,color-mix(in srgb,var(--sky) 80%,var(--bg)) 100%);overflow:hidden}
+.wm{position:absolute;top:calc(env(safe-area-inset-top,0px) + 40px);right:24px}
+.wm h1{font-size:54px;line-height:1}
+.wm p{font-size:15px;color:var(--mute);margin-top:6px}
+.chip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:20px;min-height:44px;padding:0 16px;border-radius:999px;background:color-mix(in srgb,var(--bg) 60%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);color:var(--tx);font-size:14px;font-weight:500}
+.mts{position:absolute;right:0;left:0;bottom:0;width:100%;height:clamp(220px,42dvh,400px)}
+.mts g{animation:rise 1.6s cubic-bezier(.2,.8,.2,1) backwards}
+.mts g:nth-child(2){animation-delay:.15s}
+.mts g:nth-child(3){animation-delay:.3s}
+@keyframes rise{from{transform:translateY(120px)}}
+.sheet{position:relative;z-index:1;margin-top:-20px;background:var(--bg);border-radius:34px 34px 0 0;padding:28px 24px calc(64px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:18px}
+.sheet h2{font-size:26px;line-height:1.3}
+.btn{min-height:62px;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:600;border-radius:999px;background:var(--btn-bg);color:var(--btn-tx);border:1px solid var(--btn-bd);box-shadow:var(--btn-sh)}
+.btn:active{transform:scale(.98)}
+.fine{font-size:13px;color:var(--mute);line-height:1.6;text-align:center}
+@media(prefers-reduced-motion:reduce){.mts g{animation:none}}
+</style>
+</head>
+<body>
+<main class="scr">
+  <section class="sky">
+    <button class="chip" type="button">المتابعة كزائر</button>
+    <div class="wm"><h1>خطتي</h1><p>دراسة أهدأ، ويوم أوضح</p></div>
+    <svg class="mts" viewBox="0 0 300 200" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <g><path fill="var(--mt1)" d="M0 200V110L52 56 98 104 150 40 206 108 252 70 300 118V200Z"/></g>
+      <g><path fill="var(--mt2)" d="M0 200V140L70 84 120 134 176 62 232 130 300 96V200Z"/><path d="M176 62V30" stroke="var(--tx)" stroke-width="2.5" stroke-linecap="round"/><path d="M176 30L202 38 176 46Z" fill="#B52A20"/></g>
+      <g><path fill="var(--mt3)" d="M0 200V164L58 122 112 168 170 128 226 172 300 136V200Z"/></g>
+    </svg>
+  </section>
+  <section class="sheet">
+    <h2>ابدأ يومك بخطة واضحة</h2>
+    <button class="btn" type="button">
+      <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      <span>المتابعة باستخدام Google</span>
+    </button>
+    <p class="fine">بحساب Google تبقى خطتك معك حتى لو غيّرت هاتفك</p>
+  </section>
+</main>
+<script>
+var r=document.documentElement;
+function ap(){var h=location.hash.slice(1);if(h==='dark'||h==='light')r.dataset.theme=h;else delete r.dataset.theme}
+ap();addEventListener('hashchange',ap);
+</script>
+</body>
+</html>

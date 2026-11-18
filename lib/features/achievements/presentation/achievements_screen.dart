@@ -1737,11 +1737,15 @@ class _DayGrid extends StatelessWidget {
       if (w != weeks - 1) rows.add(SizedBox(height: _gap));
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      itemCount: rows.length,
-      itemBuilder: (BuildContext context, int index) => rows[index],
+    // A plain Column, not a shrink-wrapped ListView: inside the outer ListView
+    // the nested viewport was reserving extra vertical extent below the last
+    // week, which surfaced as a large empty band before the legend. Building
+    // the (small, fixed) row list eagerly makes the grid wrap its content
+    // exactly, so the legend and day details sit immediately beneath week 11.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
     );
   }
 

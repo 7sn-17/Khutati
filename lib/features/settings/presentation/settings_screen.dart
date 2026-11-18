@@ -18,6 +18,8 @@ import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart';
 import '../../../l10n/l10n.dart';
+import '../../auth/application/auth_providers.dart';
+import '../../auth/presentation/account_section.dart';
 import '../../updates/application/update_controller.dart';
 import '../../updates/domain/app_release.dart';
 import '../../updates/presentation/update_dialog.dart';
@@ -40,6 +42,7 @@ class SettingsScreen extends ConsumerWidget {
     final KhutatiPalette palette = context.palette;
     final ThemeMode themeMode = ref.watch(themeModeProvider);
     final bool hapticsEnabled = ref.watch(hapticsEnabledProvider);
+    final bool signedIn = ref.watch(isSignedInProvider);
     final NotificationPrefs prefs = ref.watch(notificationPrefsProvider);
 
     return ListView(
@@ -60,6 +63,8 @@ class SettingsScreen extends ConsumerWidget {
             color: palette.tx,
           ),
         ),
+        KSectionHeader(title: 'الحساب'),
+        const AccountSection(),
         KSectionHeader(title: l10n.settingsAppearance),
         _SettingsCard(
           child: Column(
@@ -240,6 +245,10 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+        if (signedIn) ...<Widget>[
+          const SizedBox(height: 24),
+          const SignOutButton(),
+        ],
       ],
     );
   }

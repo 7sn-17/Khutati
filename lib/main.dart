@@ -9,6 +9,7 @@ import 'core/notifications/focus_notifications.dart';
 import 'core/settings/theme_mode_controller.dart';
 import 'data/database/app_database.dart';
 import 'data/database/database_provider.dart';
+import 'features/auth/data/supabase_auth.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,16 @@ Future<void> main() async {
 
   // Read the stored theme before the first frame so there is no flash.
   final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  // Restore the persisted Supabase session before routing decides between
+  // Login and Today. With no credentials (local contributor build) the app
+  // still renders; the login button reports that sign-in is not configured.
+  try {
+    await SupabaseAuth.initialize();
+  } catch (error) {
+    debugPrint('Supabase initialization failed: $error');
+  }
+
   // The template import is idempotent: the first launch writes the 68 days,
   // every later launch only compares the dataset hash.
   final AppDatabase database = await bootstrapDatabase();

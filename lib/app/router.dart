@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthState;
 
 import '../features/achievements/presentation/achievements_screen.dart';
+import '../features/auth/data/supabase_auth.dart';
+import '../features/auth/presentation/login_screen.dart';
 import '../features/focus/presentation/focus_screen.dart';
 import '../features/gallery/presentation/widget_gallery_screen.dart';
 import '../features/plan/presentation/plan_screen.dart';
@@ -18,11 +23,31 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Application routes. The five sections live in a stateful shell so each tab
 /// keeps its own stack, matching the prototype's persistent bottom navigation.
+///
+/// Authentication is a hard gate: a persisted Supabase session starts the app
+/// on Today (fully offline), and the login route is the only way in without
+/// one. Signing in or out emits an auth event which re-runs [GoRouter.redirect],
+/// clearing the navigation stack in both directions.
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
+  final _AuthRefresh refresh = _AuthRefresh();
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/today',
+    initialLocation: SupabaseAuth.currentSession == null ? '/login' : '/today',
+    refreshListenable: refresh,
+    redirect: (BuildContext context, GoRouterState state) {
+      final bool signedIn = SupabaseAuth.currentSession != null;
+      final bool onLogin = state.matchedLocation == '/login';
+      if (!signedIn) return onLogin ? null : '/login';
+      if (onLogin) return '/today';
+      return null;
+    },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        builder: (BuildContext context, GoRouterState state) =>
+            const LoginScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (
           BuildContext context,
@@ -87,9 +112,7 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
         path: '/past-tasks',
         name: 'past-tasks',
         builder: (BuildContext context, GoRouterState state) {
-          final int? day = int.tryParse(
-            state.uri.queryParameters['day'] ?? '',
-          );
+          final int? day = int.tryParse(state.uri.queryParameters['day'] ?? '');
           return PastTasksScreen(dayNumber: day);
         },
       ),
@@ -102,3 +125,21 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
     ],
   );
 });
+
+/// Bridges Supabase's auth stream to GoRouter's [Listenable] contract.
+class _AuthRefresh extends ChangeNotifier {
+  _AuthRefresh() {
+    _subscription = SupabaseAuth.authStateChanges.listen(
+      (AuthState _) => notifyListeners(),
+      onError: (Object _) {},
+    );
+  }
+
+  late final StreamSubscription<AuthState> _subscription;
+
+  @override
+  void dispose() {
+    unawaited(_subscription.cancel());
+    super.dispose();
+  }
+}
