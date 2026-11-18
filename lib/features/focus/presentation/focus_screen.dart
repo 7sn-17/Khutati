@@ -89,6 +89,45 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     ref.read(hapticsProvider).selection();
   }
 
+  void _tryAutoLoadTask() {
+    if (!mounted) return;
+    final FocusSessionState session = ref.read(focusControllerProvider);
+    if (!session.isIdle) return;
+    final FocusSetup setup = ref.read(focusSetupProvider);
+    if (setup.mode != FocusMode.linked) return;
+    if (ref.read(focusDraftProvider) != null) return;
+    final AsyncValue<TodayData?> dataAsync = ref.read(todayDataProvider);
+    final TodayData? data = dataAsync.valueOrNull;
+    if (data == null) return;
+    final PlanTask? task = data.nextTask;
+    if (task == null) return;
+    final List<PlanStep> steps = task.stepsInOrder;
+    final PlanStep? step = task.nextStep;
+    final int currentIndex = step == null
+        ? 0
+        : steps.indexWhere((PlanStep s) => s.id == step.id);
+    final AppLocalizations l10n = context.l10n;
+    final FocusTaskDraft draft = FocusTaskDraft(
+      taskId: task.id,
+      taskTitle: task.title,
+      subjectName: task.subjectName ?? data.subjectNames[task.subjectKey],
+      startIndex: currentIndex < 0 ? 0 : currentIndex,
+      steps: <FocusStepRef>[
+        for (final PlanStep s in steps)
+          FocusStepRef(
+            id: s.id,
+            label: s.isAttendance
+                ? l10n.galleryAttend
+                : s.isStudy
+                ? l10n.galleryStudy
+                : l10n.gallerySolve,
+            minutes: s.minutes > 0 ? s.minutes : 25,
+          ),
+      ],
+    );
+    ref.read(focusDraftProvider.notifier).state = draft;
+  }
+
   @override
   Widget build(BuildContext context) {
     final FocusSessionState session = ref.watch(focusControllerProvider);
@@ -123,44 +162,19 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     });
 
     // Auto-load the next task/step when the user opens the Focus tab directly
-    // in Task mode without a draft (mirrors the HTML's example task).
+    // in Task mode without a draft (mirrors the HTML's example task), and also
+    // when the user switches to Task mode.
     ref.listen<AsyncValue<TodayData?>>(todayDataProvider, (
       AsyncValue<TodayData?>? previous,
       AsyncValue<TodayData?> next,
     ) {
-      if (!session.isIdle) return;
-      final FocusSetup setup = ref.read(focusSetupProvider);
-      if (setup.mode != FocusMode.linked) return;
-      if (ref.read(focusDraftProvider) != null) return;
-      final TodayData? data = next.valueOrNull;
-      if (data == null) return;
-      final PlanTask? task = data.nextTask;
-      if (task == null) return;
-      final List<PlanStep> steps = task.stepsInOrder;
-      final PlanStep? step = task.nextStep;
-      final int currentIndex = step == null
-          ? 0
-          : steps.indexWhere((PlanStep s) => s.id == step.id);
-      final AppLocalizations l10n = context.l10n;
-      final FocusTaskDraft draft = FocusTaskDraft(
-        taskId: task.id,
-        taskTitle: task.title,
-        subjectName: task.subjectName ?? data.subjectNames[task.subjectKey],
-        startIndex: currentIndex < 0 ? 0 : currentIndex,
-        steps: <FocusStepRef>[
-          for (final PlanStep s in steps)
-            FocusStepRef(
-              id: s.id,
-              label: s.isAttendance
-                  ? l10n.galleryAttend
-                  : s.isStudy
-                  ? l10n.galleryStudy
-                  : l10n.gallerySolve,
-              minutes: s.minutes > 0 ? s.minutes : 25,
-            ),
-        ],
-      );
-      ref.read(focusDraftProvider.notifier).state = draft;
+      _tryAutoLoadTask();
+    });
+    ref.listen<FocusSetup>(focusSetupProvider, (
+      FocusSetup? previous,
+      FocusSetup next,
+    ) {
+      _tryAutoLoadTask();
     });
 
     if (session.isFinished) {
@@ -512,6 +526,11 @@ class _FocusView extends ConsumerWidget {
               onTap: onSkip,
             ),
           ),
+        ] else ...<Widget>[
+          // Balance the End button so the central Go button stays centered
+          // when there is no Skip button.
+          const SizedBox(width: 28),
+          SizedBox(width: 56, height: 56 + 6 + 14),
         ],
       ],
     );
@@ -1060,16 +1079,19 @@ class _FocusRing extends StatelessWidget {
                   color: palette.mute,
                 ),
               ),
-              Text(
-                time,
-                textDirection: TextDirection.ltr,
-                style: TextStyle(
-                  fontFamily: KTypography.displayFamily,
-                  fontSize: size * 0.225,
-                  fontWeight: FontWeight.w700,
-                  height: 1.05,
-                  color: palette.tx,
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  time,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontFamily: KTypography.displayFamily,
+                    fontSize: size * 0.225,
+                    fontWeight: FontWeight.w700,
+                    height: 1.05,
+                    color: palette.tx,
+                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
               if (sub.isNotEmpty)
@@ -1506,12 +1528,8 @@ Color _subjectColor(FocusTaskDraft d) {
 
 String _clock(int totalSeconds, {required bool free}) {
   final int safe = totalSeconds < 0 ? 0 : totalSeconds;
-  final int h = safe ~/ 3600;
-  final int m = (safe % 3600) ~/ 60;
+  final int m = safe ~/ 60;
   final int s = safe % 60;
-  if (h > 0) {
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
@@ -1542,9 +1560,38 @@ class _HistoryButton extends StatelessWidget {
   }
 }
 
-class _FocusHistorySheet extends ConsumerWidget {
+
+
+// ---------------------------------------------------------------------------
+// Focus history (advanced)
+// ---------------------------------------------------------------------------
+
+class _FocusHistorySheet extends ConsumerStatefulWidget {
   const _FocusHistorySheet({required this.palette});
   final KhutatiPalette palette;
+
+  @override
+  ConsumerState<_FocusHistorySheet> createState() => _FocusHistorySheetState();
+}
+
+class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
+  int _range = 0; // 0 day, 1 week, 2 all
+  String _type = 'all'; // all / linked / pomodoro / free
+
+  KhutatiPalette get palette => widget.palette;
+
+  bool _inRange(DateTime d) {
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    if (_range == 0) {
+      return DateTime(d.year, d.month, d.day) == today;
+    }
+    if (_range == 1) {
+      final DateTime weekAgo = today.subtract(const Duration(days: 6));
+      return !DateTime(d.year, d.month, d.day).isBefore(weekAgo);
+    }
+    return true;
+  }
 
   String _modeLabel(String mode) {
     switch (mode) {
@@ -1579,7 +1626,7 @@ class _FocusHistorySheet extends ConsumerWidget {
     }
   }
 
-  String _dateLabel(DateTime date, AppLocalizations l10n) {
+  String _dateLabel(DateTime date) {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);
     final DateTime d = DateTime(date.year, date.month, date.day);
@@ -1597,12 +1644,20 @@ class _FocusHistorySheet extends ConsumerWidget {
     return '$m دقيقة $s ثانية';
   }
 
+  String _fmtHours(int seconds) {
+    final int h = seconds ~/ 3600;
+    final int m = (seconds % 3600) ~/ 60;
+    if (h == 0 && m == 0) return '0 دقيقة';
+    if (h == 0) return '$m دقيقة';
+    if (m == 0) return '$h ساعة';
+    return '$h ساعة و $m دقيقة';
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = context.l10n;
+  Widget build(BuildContext context) {
     final AsyncValue<List<FocusSession>> history = ref.watch(focusHistoryProvider);
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
+      initialChildSize: 0.85,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
@@ -1633,136 +1688,230 @@ class _FocusHistorySheet extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              // Time range tabs
+              Row(
+                children: <Widget>[
+                  _tab('اليوم', 0),
+                  const SizedBox(width: 8),
+                  _tab('أسبوع', 1),
+                  const SizedBox(width: 8),
+                  _tab('من البداية', 2),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Type filters
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: <Widget>[
+                    _chip('الكل', 'all'),
+                    const SizedBox(width: 8),
+                    _chip('مرتبط بمهمة', 'linked'),
+                    const SizedBox(width: 8),
+                    _chip('بومودورو', 'pomodoro'),
+                    const SizedBox(width: 8),
+                    _chip('مؤقت حر', 'free'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Expanded(
                 child: history.when(
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  loading: () => const Center(child: CircularProgressIndicator()),
                   error: (Object e, StackTrace st) => Center(
-                    child: Text(
-                      'تعذّر تحميل السجل',
-                      style: TextStyle(color: palette.mute),
-                    ),
+                    child: Text('تعذّر تحميل السجل',
+                        style: TextStyle(color: palette.mute)),
                   ),
                   data: (List<FocusSession> sessions) {
-                    if (sessions.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(
-                              Icons.history_toggle_off_rounded,
-                              size: 56,
-                              color: palette.mute,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'لم تبدأ أي جلسات تركيز بعد. ابدأ الآن!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: KTypography.bodyFamily,
-                                fontSize: 15,
-                                color: palette.mute,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
+                    final List<FocusSession> filtered = sessions.where((FocusSession s) {
+                      if (!_inRange(s.startedAt)) return false;
+                      if (_type != 'all' && s.mode != _type) return false;
+                      return true;
+                    }).toList();
+                    // summary
+                    int totalSec = 0;
+                    int completed = 0;
+                    for (final FocusSession s in filtered) {
+                      totalSec += s.actualSeconds;
+                      if (s.completed) completed += 1;
                     }
-                    // Group by date.
+                    // group by date
                     final Map<String, List<FocusSession>> groups =
                         <String, List<FocusSession>>{};
-                    for (final FocusSession s in sessions) {
-                      final String key = _dateLabel(s.startedAt, l10n);
+                    for (final FocusSession s in filtered) {
+                      final String key = _dateLabel(s.startedAt);
                       groups.putIfAbsent(key, () => <FocusSession>[]).add(s);
                     }
                     final List<String> keys = groups.keys.toList();
-                    return ListView.builder(
-                      controller: scroll,
-                      itemCount: keys.length,
-                      itemBuilder: (BuildContext c, int gi) {
-                        final String key = keys[gi];
-                        final List<FocusSession> items = groups[key]!;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                key,
-                                style: TextStyle(
-                                  fontFamily: KTypography.displayFamily,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: palette.gold,
-                                ),
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: palette.bg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: palette.line),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: <Widget>[
+                              Column(
+                                children: <Widget>[
+                                  Text(
+                                    _fmtHours(totalSec),
+                                    style: TextStyle(
+                                      fontFamily: KTypography.displayFamily,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: palette.tx,
+                                    ),
+                                  ),
+                                  Text(
+                                    'إجمالي الدراسة',
+                                    style: TextStyle(
+                                      fontFamily: KTypography.bodyFamily,
+                                      fontSize: 12,
+                                      color: palette.mute,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            ...items.map((FocusSession s) {
-                              final String mode = s.mode;
-                              final String title =
-                                  (s.taskTitle != null && s.taskTitle!.isNotEmpty)
-                                  ? s.taskTitle!
-                                  : (s.taskId != null ? 'مهمة' : _modeLabel(mode));
-                              final String typeLabel = _modeLabel(mode);
-                              final String status =
-                                  s.completed ? 'مكتمل' : 'متوقف';
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: palette.bg,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: palette.line),
-                                ),
-                                child: Row(
-                                  children: <Widget>[
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: _modeColor(mode).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(
-                                        _modeIcon(mode),
-                                        color: _modeColor(mode),
-                                        size: 20,
-                                      ),
+                              Column(
+                                children: <Widget>[
+                                  Text(
+                                    '$completed',
+                                    style: TextStyle(
+                                      fontFamily: KTypography.displayFamily,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: palette.tx,
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Text(
-                                            title,
+                                  ),
+                                  Text(
+                                    'جلسات مكتملة',
+                                    style: TextStyle(
+                                      fontFamily: KTypography.bodyFamily,
+                                      fontSize: 12,
+                                      color: palette.mute,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: filtered.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(Icons.history_toggle_off_rounded,
+                                          size: 56, color: palette.mute),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'لم تبدأ أي جلسات تركيز بعد. ابدأ الآن!',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontFamily: KTypography.bodyFamily,
+                                          fontSize: 15,
+                                          color: palette.mute,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  controller: scroll,
+                                  itemCount: keys.length,
+                                  itemBuilder: (BuildContext c, int gi) {
+                                    final String key = keys[gi];
+                                    final List<FocusSession> items = groups[key]!;
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: <Widget>[
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          child: Text(
+                                            key,
                                             style: TextStyle(
-                                              fontFamily: KTypography.bodyFamily,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w500,
-                                              color: palette.tx,
+                                              fontFamily: KTypography.displayFamily,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: palette.gold,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '$typeLabel · ${_fmtDuration(s.actualSeconds)} · $status',
-                                            style: TextStyle(
-                                              fontFamily: KTypography.bodyFamily,
-                                              fontSize: 12,
-                                              color: palette.mute,
+                                        ),
+                                        ...items.map((FocusSession s) {
+                                          final String mode = s.mode;
+                                          final String title =
+                                              (s.taskTitle != null && s.taskTitle!.isNotEmpty)
+                                                  ? s.taskTitle!
+                                                  : (s.taskId != null ? 'مهمة' : _modeLabel(mode));
+                                          final String typeLabel = _modeLabel(mode);
+                                          final String status =
+                                              s.completed ? 'مكتمل' : 'متوقف';
+                                          return Container(
+                                            margin: const EdgeInsets.only(bottom: 10),
+                                            padding: const EdgeInsets.all(14),
+                                            decoration: BoxDecoration(
+                                              color: palette.bg,
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: palette.line),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                            child: Row(
+                                              children: <Widget>[
+                                                Container(
+                                                  width: 40,
+                                                  height: 40,
+                                                  decoration: BoxDecoration(
+                                                    color: _modeColor(mode).withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  child: Icon(
+                                                    _modeIcon(mode),
+                                                    color: _modeColor(mode),
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: <Widget>[
+                                                      Text(
+                                                        title,
+                                                        style: TextStyle(
+                                                          fontFamily: KTypography.bodyFamily,
+                                                          fontSize: 15,
+                                                          fontWeight: FontWeight.w500,
+                                                          color: palette.tx,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        '$typeLabel · ${_fmtDuration(s.actualSeconds)} · $status',
+                                                        style: TextStyle(
+                                                          fontFamily: KTypography.bodyFamily,
+                                                          fontSize: 12,
+                                                          color: palette.mute,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    );
+                                  },
                                 ),
-                              );
-                            }),
-                          ],
-                        );
-                      },
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -1771,6 +1920,55 @@ class _FocusHistorySheet extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _tab(String label, int index) {
+    final bool active = _range == index;
+    return GestureDetector(
+      onTap: () => setState(() => _range = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? palette.gold : palette.card,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: palette.line),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.black : palette.tx,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String label, String value) {
+    final bool active = _type == value;
+    return GestureDetector(
+      onTap: () => setState(() => _type = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? palette.gold.withValues(alpha: 0.2) : palette.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? palette.gold : palette.line,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 12,
+            color: active ? palette.gold : palette.tx,
+          ),
+        ),
+      ),
     );
   }
 }

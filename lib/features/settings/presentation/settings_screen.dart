@@ -209,6 +209,17 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 onTap: () => _openAbout(context),
               ),
+              Divider(height: 1, color: palette.line),
+              _SettingsActionRow(
+                title: l10n.settingsDeveloper,
+                icon: Icons.code_rounded,
+                trailing: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 20,
+                  color: palette.mute,
+                ),
+                onTap: () => _openDeveloper(context),
+              ),
             ],
           ),
         ),
@@ -220,6 +231,13 @@ class SettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => Dialog(child: const _AboutModalContent()),
+    );
+  }
+
+  void _openDeveloper(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(child: const _DeveloperModalContent()),
     );
   }
 }
@@ -379,21 +397,62 @@ class _AboutModalContent extends ConsumerWidget {
             ),
           ),
         ),
-        Divider(height: 1, color: palette.line),
-        // Developer & contact section.
+      ],
+    );
+  }
+}
+
+class _DeveloperModalContent extends ConsumerWidget {
+  const _DeveloperModalContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              'المطور والتواصل',
-              style: TextStyle(
-                fontFamily: KTypography.displayFamily,
-                fontSize: KTypography.quoteSize,
-                fontWeight: FontWeight.w700,
-                color: palette.tx,
+          padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
+          child: Row(
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                ),
               ),
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  l10n.settingsDeveloper,
+                  style: TextStyle(
+                    fontFamily: KTypography.displayFamily,
+                    fontSize: KTypography.h2Size,
+                    fontWeight: FontWeight.w700,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: palette.card2,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 20,
+                    color: palette.mute,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         Padding(
