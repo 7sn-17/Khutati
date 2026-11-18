@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/tokens.dart';
+import '../../../core/sound/sound_effects.dart';
 import '../../../features/focus/application/focus_controller.dart';
 import '../../../features/focus/application/focus_setup_controller.dart';
 import '../../../features/focus/domain/focus_setup.dart';
@@ -144,7 +147,7 @@ class _TodayBody extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _Quote(text: _quoteOfDay(l10n, data.now)),
+          _Quote(text: _quoteOfDay(data.now)),
           _Hero(data: data, format: format),
           if (data.overdueTasks > 0)
             _OverdueAlert(
@@ -235,17 +238,27 @@ class _TodayBody extends ConsumerWidget {
     }
   }
 
-  String _quoteOfDay(AppLocalizations l10n, DateTime now) {
-    // The prototype rotates six quotes by weekday; % 6 keeps the same order.
-    final List<String> quotes = <String>[
-      l10n.todayQuote1,
-      l10n.todayQuote2,
-      l10n.todayQuote3,
-      l10n.todayQuote4,
-      l10n.todayQuote5,
-      l10n.todayQuote6,
+  String _quoteOfDay(DateTime now) {
+    // A quiet dhikr rotates with the local calendar date. Keeping the change
+    // daily (not per rebuild) means the section is stable while the user reads
+    // it and never animates while they are tapping steps.
+    final List<String> phrases = <String>[
+      'سبحان الله',
+      'الحمد لله',
+      'لا إله إلا الله',
+      'الله أكبر',
+      'اللهم صلِّ على سيدنا محمد',
+      'أستغفر الله العظيم وأتوب إليه',
+      'لا حول ولا قوة إلا بالله',
+      'سبحان الله وبحمده، سبحان الله العظيم',
+      'حسبي الله ونعم الوكيل',
+      'اللهم إني أسألك العلم النافع والعمل الصالح',
     ];
-    return quotes[now.weekday % quotes.length];
+    final int day = DateTime(now.year, now.month, now.day)
+        .difference(DateTime(2026))
+        .inDays
+        .abs();
+    return phrases[day % phrases.length];
   }
 }
 
@@ -739,27 +752,81 @@ class _TaskCardState extends ConsumerState<TaskCard> {
   }
 }
 
-class StepChips extends ConsumerWidget {
+class StepChips extends ConsumerStatefulWidget {
   const StepChips({required this.task, required this.format, super.key});
 
   final PlanTask task;
   final KhutatiFormat format;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StepChips> createState() => _StepChipsState();
+}
+
+class _StepChipsState extends ConsumerState<StepChips> {
+  /// Immediate UI values for taps whose database write is still in flight.
+  ///
+  /// Four fast taps must walk the cycle four times. Reading `step.progress`
+  /// from the last build would make every tap recompute the same first
+  /// transition, which is exactly what skipped `partialDown`.
+  final Map<String, StepProgress> _optimistic = <String, StepProgress>{};
+  final Set<String> _pending = <String>{};
+  final Map<String, Future<void>> _writes = <String, Future<void>>{};
+  String? _toastStepId;
+  Timer? _toastTimer;
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant StepChips oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task.id != widget.task.id) {
+      _optimistic.clear();
+      _pending.clear();
+      _writes.clear();
+      return;
+    }
+    // Once the write queue drains, drop overrides that the live row has
+    // already confirmed, so edits from Plan/another surface show up here.
+    for (final PlanStep step in widget.task.stepsInOrder) {
+      final StepProgress? local = _optimistic[step.id];
+      if (local != null && !_pending.contains(step.id)) {
+        if (local == _liveProgress(step)) _optimistic.remove(step.id);
+      }
+    }
+  }
+
+  bool get _taskCompleted => widget.task.status == PlanTaskStatus.completed;
+
+  StepProgress _liveProgress(PlanStep step) {
+    if (_taskCompleted && step.progress == StepProgress.notStarted) {
+      return StepProgress.completed;
+    }
+    return step.progress;
+  }
+
+  StepProgress _displayProgress(PlanStep step) =>
+      _optimistic[step.id] ?? _liveProgress(step);
+
+  PlanStep? _stepById(String id) {
+    for (final PlanStep step in widget.task.stepsInOrder) {
+      if (step.id == id) return step;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final AppLocalizations l10n = context.l10n;
-    final List<PlanStep> steps = task.stepsInOrder; // A task marked complete (e.g. from the Plan tab) counts all its steps as
-    // done without rewriting the user's step rows, so render them as completed
-    // here. A step that was explicitly touched keeps its own progress.
-    final bool taskCompleted = task.status == PlanTaskStatus.completed;
+    final List<PlanStep> steps = widget.task.stepsInOrder;
 
     final List<Widget> chips = <Widget>[
       for (final PlanStep step in steps)
         () {
-          final StepProgress effective =
-              taskCompleted && step.progress == StepProgress.notStarted
-              ? StepProgress.completed
-              : step.progress;
+          final StepProgress effective = _displayProgress(step);
           return KChip(
             title: step.isAttendance
                 ? l10n.galleryAttend
@@ -767,13 +834,12 @@ class StepChips extends ConsumerWidget {
                 ? l10n.galleryStudy
                 : l10n.gallerySolve,
             subtitle:
-                format.tryRange(step.suggestedStart, step.suggestedEnd) ??
-                format.duration(step.minutes),
-            fraction:
-                effective == StepProgress.partial ||
-                    effective == StepProgress.partialDown
-                ? 0.5
-                : 0.0,
+                widget.format.tryRange(
+                  step.suggestedStart,
+                  step.suggestedEnd,
+                ) ??
+                widget.format.duration(step.minutes),
+            fraction: effective.isPartial ? 0.5 : 0.0,
             icon: effective == StepProgress.completed
                 ? Icons.check_rounded
                 : step.isAttendance
@@ -783,7 +849,7 @@ class StepChips extends ConsumerWidget {
                 : Icons.quiz_outlined,
             selected: effective != StepProgress.notStarted,
             wide: steps.length == 1,
-            onTap: () => _toggle(context, ref, step),
+            onTap: () => _toggle(step),
           );
         }(),
     ];
@@ -808,24 +874,68 @@ class StepChips extends ConsumerWidget {
     );
   }
 
-  Future<void> _toggle(
-    BuildContext context,
-    WidgetRef ref,
-    PlanStep step,
-  ) async {
-    final StepProgress next = step.progress.nextWithinSession();
-    final AppLocalizations l10n = context.l10n;
-
+  void _toggle(PlanStep step) {
     ref.read(hapticsProvider).selection();
 
-    await ref.read(todayActionsProvider).setStepCompleted(step.id, next);
+    final StepProgress next = _displayProgress(step).next();
+    setState(() {
+      _optimistic[step.id] = next;
+      _pending.add(step.id);
+    });
 
-    if (!context.mounted) return;
-    if (next == StepProgress.partial || next == StepProgress.partialDown) {
-      showKToast(context, l10n.todayStepPartialToast);
-    } else if (next == StepProgress.completed) {
-      showKToast(context, l10n.todayStepCompleteToast);
-    }
+    // One chain per step: every tap appends its write, so the database sees
+    // partialUp → completed → partialDown → notStarted in order instead of
+    // four concurrent updates racing to the same final row.
+    final Future<void> previous =
+        _writes[step.id] ?? Future<void>.value();
+    final Future<void> write = previous
+        .then(
+          (_) => ref
+              .read(todayActionsProvider)
+              .setStepCompleted(step.id, next),
+        )
+        .catchError((Object _) {});
+    _writes[step.id] = write;
+
+    unawaited(
+      write.whenComplete(() {
+        if (!mounted) return;
+        if (!identical(_writes[step.id], write)) return;
+        _writes.remove(step.id);
+        _pending.remove(step.id);
+        final StepProgress? local = _optimistic[step.id];
+        final PlanStep? current = _stepById(step.id);
+        if (local != null &&
+            current != null &&
+            local == _liveProgress(current)) {
+          _optimistic.remove(step.id);
+        }
+        setState(() {});
+      }),
+    );
+
+    _scheduleToast(step);
+  }
+
+  /// A single toast per burst of taps. Four rapid taps should read as one
+  /// action, not four stacked snackbars.
+  void _scheduleToast(PlanStep step) {
+    _toastStepId = step.id;
+    _toastTimer?.cancel();
+    _toastTimer = Timer(const Duration(milliseconds: 420), () {
+      if (!mounted || _toastStepId != step.id) return;
+      final PlanStep? current = _stepById(step.id);
+      if (current == null) return;
+      final StepProgress settled =
+          _optimistic[step.id] ?? _liveProgress(current);
+      final AppLocalizations l10n = context.l10n;
+      if (settled.isPartial) {
+        showKToast(context, l10n.todayStepPartialToast);
+      } else if (settled == StepProgress.completed) {
+        SoundEffects.success();
+        showKToast(context, l10n.todayStepCompleteToast);
+      }
+    });
   }
 }
 

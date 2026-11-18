@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 
 import '../../domain/plan/step_progress.dart';
 import '../database/app_database.dart';
+import '../sync/sync_ids.dart';
+import 'sync_queue_repository.dart';
 
 /// User-owned progress. Never touches template tables, so a reset can always
 /// restore the original plan (PRD section 5.5).
@@ -23,9 +25,19 @@ class UserStateRepository {
             stepId: stepId,
             completed: Value<bool>(completed),
             completedAt: Value<DateTime?>(completed ? now : null),
+            // Store 1 for partialUp and 3 for partialDown. Keeping them
+            // distinct is what makes the fourth tap reach 0% after a restart.
             progress: Value<int>(progress.code),
+            updatedAt: Value<DateTime>(now),
           ),
         );
+    await SyncQueueRepository(_db).enqueue('step_state', stepId, <String, Object?>{
+      'step_id': stepId,
+      'progress': progress.code,
+      'completed': completed,
+      'completed_at': isoOrNull(completed ? now : null),
+      'updated_at': isoOrNull(now),
+    });
   }
 
   Future<Set<String>> completedStepIdsForDay(String dayId) async {
@@ -137,9 +149,9 @@ class UserStateRepository {
     };
   }
 
-  Future<void> setTaskStatus(String taskId, String status, {DateTime? at}) {
+  Future<void> setTaskStatus(String taskId, String status, {DateTime? at}) async {
     final DateTime now = at ?? DateTime.now();
-    return _db
+    await _db
         .into(_db.userTaskStates)
         .insertOnConflictUpdate(
           UserTaskStatesCompanion.insert(
@@ -149,6 +161,12 @@ class UserStateRepository {
             updatedAt: now,
           ),
         );
+    await SyncQueueRepository(_db).enqueue('task_state', taskId, <String, Object?>{
+      'task_id': taskId,
+      'status': status,
+      'completed_at': isoOrNull(status == 'completed' ? now : null),
+      'updated_at': isoOrNull(now),
+    });
   }
 
   Future<void> addNote(String taskId, String body) {

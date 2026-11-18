@@ -28,6 +28,7 @@ part 'app_database.g.dart';
     Notes,
     ReviewFlags,
     AppSettings,
+    SyncQueue,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -37,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -52,6 +53,8 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('CREATE INDEX IF NOT EXISTS idx_breaks_day ON breaks(day_id)');
           await customStatement('CREATE INDEX IF NOT EXISTS idx_sessions_started ON focus_sessions(started_at)');
           await customStatement('CREATE INDEX IF NOT EXISTS idx_overrides_target ON user_overrides(target_type, target_id)');
+          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_focus_client_id ON focus_sessions(client_id) WHERE client_id IS NOT NULL');
+          await customStatement('CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity, entity_id)');
         },
         onUpgrade: (Migrator m, int from, int to) async {
           // v2 adds the two-tap step state. Existing rows keep `completed`
@@ -63,6 +66,23 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await m.addColumn(focusSessions, focusSessions.mode);
             await m.addColumn(focusSessions, focusSessions.taskTitle);
+          }
+          // v4 adds the offline-first sync outbox, a stable cloud id for
+          // focus sessions, and a local timestamp for step-state conflict
+          // resolution. Existing step rows keep their exact progress code
+          // (including code 3 = partialDown), so the 4-tap cycle survives.
+          if (from < 4) {
+            await m.addColumn(userStepStates, userStepStates.updatedAt);
+            await m.addColumn(focusSessions, focusSessions.clientId);
+            await m.createTable(syncQueue);
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_focus_client_id '
+              'ON focus_sessions(client_id) WHERE client_id IS NOT NULL',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_sync_queue_entity '
+              'ON sync_queue(entity, entity_id)',
+            );
           }
         },
         beforeOpen: (details) async {

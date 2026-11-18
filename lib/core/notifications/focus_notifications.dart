@@ -1,34 +1,91 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// The one place that owns the local-notification plugin.
-///
-/// Previously `main.dart`, the permission bootstrap and the focus controller
-/// each constructed their own `FlutterLocalNotificationsPlugin`, and the timer
-/// channel was only created lazily (by `show`, after the fact). On Android the
-/// first `NotificationChannel` wins forever, so if anything created the channel
-/// with a lower importance the sound was silently gone for the life of the
-/// install. Creating `Importance.max` here, once, at startup, removes that
-/// class of bug.
+/// The one place that owns the local-notification plugin and every Android
+/// channel. The first channel definition on Android is permanent, so all four
+/// are created here with their final importance.
+enum KhutatiNotificationChannel { tasks, daily, review, timer }
+
+extension KhutatiNotificationChannelInfo on KhutatiNotificationChannel {
+  String get id => switch (this) {
+        KhutatiNotificationChannel.tasks => 'khutati_reminders_tasks_v1',
+        KhutatiNotificationChannel.daily => 'khutati_reminders_daily_v1',
+        KhutatiNotificationChannel.review => 'khutati_reminders_review_v1',
+        KhutatiNotificationChannel.timer => 'khutati_timer_alerts',
+      };
+
+  String get name => switch (this) {
+        KhutatiNotificationChannel.tasks => 'تذكير المهام',
+        KhutatiNotificationChannel.daily => 'ملخص اليوم',
+        KhutatiNotificationChannel.review => 'مراجعة المهام',
+        KhutatiNotificationChannel.timer => 'تنبيهات الجلسات',
+      };
+
+  String get description => switch (this) {
+        KhutatiNotificationChannel.tasks =>
+          'تنبيه قبل بدء مهمة من جدول اليوم',
+        KhutatiNotificationChannel.daily =>
+          'ملخص إنجاز اليوم وخطة الغد',
+        KhutatiNotificationChannel.review =>
+          'تذكير بمراجعة المهام والأسئلة المعلّمة',
+        KhutatiNotificationChannel.timer =>
+          'صوت واهتزاز عند انتهاء جلسة التركيز أو الاستراحة',
+      };
+
+  int get notificationId => switch (this) {
+        KhutatiNotificationChannel.tasks => 2001,
+        KhutatiNotificationChannel.daily => 2002,
+        KhutatiNotificationChannel.review => 2003,
+        KhutatiNotificationChannel.timer => 1001,
+      };
+
+  AndroidNotificationDetails get androidDetails => AndroidNotificationDetails(
+        id,
+        name,
+        channelDescription: description,
+        importance: this == KhutatiNotificationChannel.timer
+            ? Importance.max
+            : Importance.high,
+        priority: Priority.high,
+        category: this == KhutatiNotificationChannel.timer
+            ? AndroidNotificationCategory.alarm
+            : AndroidNotificationCategory.reminder,
+        playSound: true,
+        enableVibration: true,
+        visibility: NotificationVisibility.public,
+      );
+
+  AndroidNotificationChannel get platformChannel => AndroidNotificationChannel(
+        id,
+        name,
+        description: description,
+        importance: this == KhutatiNotificationChannel.timer
+            ? Importance.max
+            : Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: this != KhutatiNotificationChannel.timer,
+      );
+}
+
 abstract final class FocusNotifications {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static const String alertChannelId = 'khutati_timer_alerts';
+  static const String alertChannelId =
+      'khutati_timer_alerts';
+  static const String alertChannelName = 'تنبيهات الجلسات';
 
-  /// The completion channel: heads-up, sound and vibration.
-  static const AndroidNotificationChannel alertChannel =
-      AndroidNotificationChannel(
-        alertChannelId,
-        'تنبيهات الجلسات',
-        description: 'تنبيه صوتي عند انتهاء جلسة التركيز أو الاستراحة',
-        importance: Importance.max,
-        playSound: true,
-        enableVibration: true,
-        showBadge: true,
-      );
+  /// Mirrors the persisted timer preference so [showCompletion] can never fire
+  /// on a channel the user switched off.
+  static bool _timerEnabled = true;
 
   /// Called once from `main()` before the first frame.
-  static Future<void> init() async {
+  static Future<void> init({
+    bool tasks = true,
+    bool daily = true,
+    bool review = true,
+    bool timer = true,
+  }) async {
     const AndroidInitializationSettings android = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
@@ -38,7 +95,57 @@ abstract final class FocusNotifications {
       // an action: state reconciliation happens in FocusController on resume.
       onDidReceiveNotificationResponse: (NotificationResponse response) {},
     );
-    await _android?.createNotificationChannel(alertChannel);
+    await applyPreferences(
+      tasks: tasks,
+      daily: daily,
+      review: review,
+      timer: timer,
+    );
+  }
+
+  /// Creates the channels whose toggles are ON and removes the ones that are
+  /// OFF. Removing a channel is the only way Android lets an app truly
+  /// suppress it; merely not posting a notification would leave the toggle
+  /// cosmetic.
+  static Future<void> applyPreferences({
+    required bool tasks,
+    required bool daily,
+    required bool review,
+    required bool timer,
+  }) async {
+    await _setEnabled(KhutatiNotificationChannel.tasks, tasks);
+    await _setEnabled(KhutatiNotificationChannel.daily, daily);
+    await _setEnabled(KhutatiNotificationChannel.review, review);
+    await _setEnabled(KhutatiNotificationChannel.timer, timer);
+  }
+
+  static Future<void> setEnabled(
+    KhutatiNotificationChannel channel,
+    bool enabled,
+  ) {
+    return _setEnabled(channel, enabled);
+  }
+
+  static Future<void> _setEnabled(
+    KhutatiNotificationChannel channel,
+    bool enabled,
+  ) async {
+    if (channel == KhutatiNotificationChannel.timer) {
+      _timerEnabled = enabled;
+    }
+    final AndroidFlutterLocalNotificationsPlugin? android = _android;
+    if (android == null) return;
+    try {
+      if (enabled) {
+        await android.createNotificationChannel(channel.platformChannel);
+      } else {
+        await _plugin.cancel(channel.notificationId);
+        await _plugin.cancel(channel.notificationId + 1);
+        await android.deleteNotificationChannel(channel.id);
+      }
+    } catch (_) {
+      // A denied permission or an OEM restriction must not break Settings.
+    }
   }
 
   /// Android 13+ runtime permission (`POST_NOTIFICATIONS`).
@@ -62,24 +169,14 @@ abstract final class FocusNotifications {
 
   /// Fires at 00:00, from the Dart state machine.
   static Future<void> showCompletion({required bool isBreak}) async {
+    if (!_timerEnabled) return;
     try {
       await _plugin.show(
         isBreak ? 1002 : 1001,
         isBreak ? 'انتهت الاستراحة' : 'انتهى وقت التركيز',
         isBreak ? 'وقت العودة للدراسة.' : 'أحسنت! أكملت جلسة التركيز.',
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            alertChannelId,
-            'تنبيهات الجلسات',
-            channelDescription: 'تنبيه صوتي عند انتهاء جلسة التركيز أو الاستراحة',
-            importance: Importance.max,
-            priority: Priority.high,
-            category: AndroidNotificationCategory.alarm,
-            playSound: true,
-            enableVibration: true,
-            visibility: NotificationVisibility.public,
-            ticker: 'مؤقت التركيز',
-          ),
+        NotificationDetails(
+          android: KhutatiNotificationChannel.timer.androidDetails,
         ),
         payload: isBreak ? 'focus:break-done' : 'focus:done',
       );

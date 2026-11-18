@@ -168,9 +168,19 @@ class UserStepStates extends Table {
   TextColumn get stepId => text()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
-  /// Mirrors `StepProgress.code`; the enum itself cannot be read in a const
-  /// default expression, so the notStarted value (0) is spelled out here.
+
+  /// Mirrors `StepProgress.code`. 1 is the half-way state reached by tapping
+  /// upward (`partialUp`), 3 is the half-way state reached by tapping downward
+  /// (`partialDown`). They are stored separately so a four-tap cycle always
+  /// resumes at the right point after the app is closed.
+  ///
+  /// The enum itself cannot be read in a const default expression, so the
+  /// notStarted value (0) is spelled out here.
   IntColumn get progress => integer().withDefault(const Constant(0))();
+
+  /// Local clock of the last edit. Used by cloud sync to resolve a remote row
+  /// against a newer local one without ever downgrading the user's progress.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => <Column>{stepId};
@@ -205,6 +215,11 @@ class UserAdditions extends Table {
 @DataClassName('FocusSession')
 class FocusSessions extends Table {
   IntColumn get id => integer().autoIncrement()();
+
+  /// Stable, client-generated id used as the primary key in Supabase. The local
+  /// auto-increment id is only meaningful on this install, so it must never
+  /// travel to the cloud.
+  TextColumn get clientId => text().nullable()();
   TextColumn get taskId => text().nullable()();
   TextColumn get taskTitle => text().nullable()();
   TextColumn get mode => text().withDefault(const Constant('pomodoro'))();
@@ -217,6 +232,11 @@ class FocusSessions extends Table {
   DateTimeColumn get startedAt => dateTime()();
   DateTimeColumn get endedAt => dateTime().nullable()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{clientId},
+      ];
 }
 
 @DataClassName('NoteRow')
@@ -243,4 +263,29 @@ class AppSettings extends Table {
 
   @override
   Set<Column> get primaryKey => <Column>{key};
+}
+
+/// Local, durable outbox for cloud sync.
+///
+/// Every user-data write lands in SQLite first and then replaces (or inserts)
+/// one row here. A single unique entity key means ten rapid taps on the same
+/// step produce one upload with the latest state, not ten network calls. The
+/// queue survives process death, so nothing is lost while offline.
+@DataClassName('SyncQueueRow')
+class SyncQueue extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// `task_state`, `step_state` or `focus_session`.
+  TextColumn get entity => text()();
+  TextColumn get entityId => text()();
+
+  /// JSON snapshot of the row that will be upserted to Supabase.
+  TextColumn get payload => text()();
+  DateTimeColumn get enqueuedAt => dateTime()();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{entity, entityId},
+      ];
 }

@@ -18,6 +18,7 @@ class UpdateState {
     this.lastChecked,
     this.skippedVersionCode,
     this.error,
+    this.requestId = 0,
   });
 
   final UpdateStatus status;
@@ -26,6 +27,10 @@ class UpdateState {
   final DateTime? lastChecked;
   final int? skippedVersionCode;
   final String? error;
+
+  /// Incremented by a manual check so the single app-level presenter can show
+  /// the dialog again even when the available version did not change.
+  final int requestId;
 
   bool get hasUpdate => status == UpdateStatus.available && manifest != null;
   bool get isChecking => status == UpdateStatus.checking;
@@ -37,6 +42,7 @@ class UpdateState {
     DateTime? lastChecked,
     int? skippedVersionCode,
     String? error,
+    int? requestId,
     bool clearManifest = false,
     bool clearError = false,
   }) {
@@ -47,6 +53,7 @@ class UpdateState {
       lastChecked: lastChecked ?? this.lastChecked,
       skippedVersionCode: skippedVersionCode ?? this.skippedVersionCode,
       error: clearError ? null : (error ?? this.error),
+      requestId: requestId ?? this.requestId,
     );
   }
 }
@@ -86,7 +93,12 @@ class UpdateController extends Notifier<UpdateState> {
   Future<void> check({bool force = false}) async {
     if (state.status == UpdateStatus.checking) return;
 
-    state = state.copyWith(status: UpdateStatus.checking, clearError: true);
+    final int requestId = force ? state.requestId + 1 : state.requestId;
+    state = state.copyWith(
+      status: UpdateStatus.checking,
+      clearError: true,
+      requestId: requestId,
+    );
 
     try {
       final UpdateCheck? result = await ref
@@ -103,6 +115,7 @@ class UpdateController extends Notifier<UpdateState> {
           status: UpdateStatus.upToDate,
           lastChecked: now,
           skippedVersionCode: state.skippedVersionCode,
+          requestId: requestId,
         );
         await _rememberCheck(now);
         return;
@@ -115,6 +128,7 @@ class UpdateController extends Notifier<UpdateState> {
           status: UpdateStatus.upToDate,
           lastChecked: now,
           skippedVersionCode: state.skippedVersionCode,
+          requestId: requestId,
         );
         await _rememberCheck(now);
         return;
@@ -126,6 +140,7 @@ class UpdateController extends Notifier<UpdateState> {
         source: result.source,
         lastChecked: now,
         skippedVersionCode: state.skippedVersionCode,
+        requestId: requestId,
       );
       await _rememberCheck(now);
     } catch (error) {

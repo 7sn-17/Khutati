@@ -142,6 +142,11 @@ class MainActivity : FlutterActivity() {
                         forwardToService(intent)
                         result.success(null)
                     }
+                    "setNotificationsEnabled" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: true
+                        FocusTimerService.setNotifications(this, enabled)
+                        result.success(null)
+                    }
                     "getRemaining" -> {
                         result.success(FocusTimerService.persistedRemaining(this))
                     }

@@ -158,6 +158,27 @@ void main() {
     expect(done, <String>{'d001-chem-01-01'});
   });
 
+  test('both half-step states survive a database round-trip', () async {
+    await seedDay();
+    const String stepId = 'd001-chem-01-01';
+
+    await userState.setStepCompleted(stepId, StepProgress.partialUp);
+    expect(await userState.stepProgress(stepId), StepProgress.partialUp);
+
+    await userState.setStepCompleted(stepId, StepProgress.completed);
+    expect(await userState.stepProgress(stepId), StepProgress.completed);
+
+    await userState.setStepCompleted(stepId, StepProgress.partialDown);
+    expect(await userState.stepProgress(stepId), StepProgress.partialDown);
+
+    await userState.setStepCompleted(stepId, StepProgress.notStarted);
+    expect(await userState.stepProgress(stepId), StepProgress.notStarted);
+
+    // Repeated edits of the same entity must replace one outbox snapshot
+    // instead of violating the (entity, entity_id) unique index.
+    expect(await db.select(db.syncQueue).get(), hasLength(1));
+  });
+
   test('task statuses are read per day from user state', () async {
     await seedDay();
     await userState.setTaskStatus('d001-chem-01', 'completed');
@@ -197,14 +218,14 @@ void main() {
   test('partial state is stored and read back per step', () async {
     await seedDay();
 
-    await userState.setStepCompleted('d001-chem-01-01', StepProgress.partial);
+    await userState.setStepCompleted('d001-chem-01-01', StepProgress.partialUp);
     expect(
       await userState.stepProgress('d001-chem-01-01'),
-      StepProgress.partial,
+      StepProgress.partialUp,
     );
     expect(
       (await userState.stepProgressForDay('d001'))['d001-chem-01-01'],
-      StepProgress.partial,
+      StepProgress.partialUp,
     );
   });
 

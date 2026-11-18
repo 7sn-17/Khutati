@@ -66,8 +66,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: '/today',
                 name: 'today',
-                builder: (BuildContext context, GoRouterState state) =>
-                    const TodayScreen(),
+                pageBuilder: (BuildContext context, GoRouterState state) =>
+                    authEntryPage(state, const TodayScreen()),
               ),
             ],
           ),

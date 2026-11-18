@@ -23,6 +23,7 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
     with WidgetsBindingObserver {
   bool _dialogOpen = false;
   int? _presentedVersionCode;
+  int _lastRequestId = 0;
 
   @override
   void initState() {
@@ -49,13 +50,15 @@ class _UpdateBootstrapState extends ConsumerState<UpdateBootstrap>
   }
 
   Future<void> _present(UpdateState state) async {
-    // A release is presented once per availability transition. The controller
-    // still owns the throttle, so a resume inside the window does not refetch.
+    // A silent release is presented once per version. A manual Settings check
+    // bumps `requestId`, which is allowed to re-open the same release.
+    final bool manual = state.requestId != _lastRequestId;
     if (_dialogOpen ||
         state.manifest == null ||
-        _presentedVersionCode == state.manifest!.versionCode) {
+        (!manual && _presentedVersionCode == state.manifest!.versionCode)) {
       return;
     }
+    _lastRequestId = state.requestId;
     _dialogOpen = true;
     _presentedVersionCode = state.manifest!.versionCode;
     try {

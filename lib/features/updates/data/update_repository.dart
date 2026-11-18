@@ -48,31 +48,42 @@ class UpdateRepository {
   /// GitHub release. Supabase wins ties because it is the curated channel.
   Future<UpdateCheck?> check() async {
     final List<String> problems = <String>[];
-    UpdateCheck? best;
 
-    if (_supabaseConfigured) {
-      try {
-        final UpdateManifest? manifest = await _fromSupabase();
-        if (manifest != null) {
-          best = UpdateCheck(manifest: manifest, source: UpdateSource.supabase);
-        }
-      } catch (error) {
-        problems.add('supabase: $error');
-      }
+    // Both sources race. Sequential checks made a manual tap wait for Supabase
+    // before GitHub even started; running them together keeps "Check for
+    // updates" instant and still lets the newer of the two win.
+    final List<UpdateManifest?> manifests = await Future.wait<UpdateManifest?>(
+      <Future<UpdateManifest?>>[
+        if (_supabaseConfigured)
+          () async {
+            try {
+              return await _fromSupabase();
+            } catch (error) {
+              problems.add('supabase: $error');
+              return null;
+            }
+          }()
+        else
+          Future<UpdateManifest?>.value(null),
+        () async {
+          try {
+            return await _fromGitHub();
+          } catch (error) {
+            problems.add('github: $error');
+            return null;
+          }
+        }(),
+      ],
+    );
+
+    UpdateManifest? best = manifests[0];
+    UpdateSource source = UpdateSource.supabase;
+    final UpdateManifest? github = manifests[1];
+    if (github != null && (best == null || _isNewerManifest(github, best))) {
+      best = github;
+      source = UpdateSource.github;
     }
-
-    try {
-      final UpdateManifest? manifest = await _fromGitHub();
-      if (manifest != null) {
-        if (best == null || _isNewerManifest(manifest, best.manifest)) {
-          best = UpdateCheck(manifest: manifest, source: UpdateSource.github);
-        }
-      }
-    } catch (error) {
-      problems.add('github: $error');
-    }
-
-    if (best != null) return best;
+    if (best != null) return UpdateCheck(manifest: best, source: source);
     if (problems.isEmpty) return null;
     throw UpdateException(problems.join(' · '));
   }

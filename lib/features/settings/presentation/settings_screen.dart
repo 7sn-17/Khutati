@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/device/battery_optimization.dart';
@@ -17,6 +16,7 @@ import '../../../core/motion/haptics.dart';
 import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart';
+import '../../../core/sound/sound_effects.dart';
 import '../../../l10n/l10n.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/account_section.dart';
@@ -26,10 +26,9 @@ import '../../updates/presentation/update_dialog.dart';
 
 /// Settings — the fifth tab (PRD 5.11).
 ///
-/// Phase 3.1 builds the shell: appearance, haptics and notification
-/// preferences are live and persisted. Backup/restore and account land in
-/// Phase 5 and are shown here as disabled rows with a "coming soon" marker so
-/// the information architecture is already final.
+/// Appearance, sound effects, notifications, account and updates are live and
+/// persisted. There are no placeholder toggles: every row changes real app
+/// behaviour.
 ///
 /// Updates are live: a silent check runs at launch, and this panel is where the
 /// user can check on demand, read release notes and start the APK download.
@@ -41,7 +40,7 @@ class SettingsScreen extends ConsumerWidget {
     final AppLocalizations l10n = context.l10n;
     final KhutatiPalette palette = context.palette;
     final ThemeMode themeMode = ref.watch(themeModeProvider);
-    final bool hapticsEnabled = ref.watch(hapticsEnabledProvider);
+    final bool soundEnabled = ref.watch(soundEffectsEnabledProvider);
     final bool signedIn = ref.watch(isSignedInProvider);
     final NotificationPrefs prefs = ref.watch(notificationPrefsProvider);
 
@@ -79,14 +78,11 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               _SettingsSwitchRow(
-                title: l10n.settingsHaptics,
-                value: hapticsEnabled,
-                onChanged: (bool value) {
-                  // Fire a tangible confirmation even when the feature is being
-                  // turned back on (the provider would otherwise stay silent).
-                  if (value) HapticFeedback.lightImpact();
-                  ref.read(hapticsEnabledProvider.notifier).set(value);
-                },
+                title: 'المؤثرات الصوتية',
+                value: soundEnabled,
+                onChanged: ref
+                    .read(soundEffectsEnabledProvider.notifier)
+                    .set,
               ),
             ],
           ),
@@ -254,16 +250,16 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _openAbout(BuildContext context) {
-    showDialog(
+    showKDialog<void>(
       context: context,
-      builder: (_) => Dialog(child: const _AboutModalContent()),
+      builder: (_) => const _AboutModalContent(),
     );
   }
 
   void _openDeveloper(BuildContext context) {
-    showDialog(
+    showKDialog<void>(
       context: context,
-      builder: (_) => Dialog(child: const _DeveloperModalContent()),
+      builder: (_) => const _DeveloperModalContent(),
     );
   }
 }
@@ -280,35 +276,33 @@ class _UpdatePanel extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (state.isChecking)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Center(child: CircularProgressIndicator()),
-          ),
         const SizedBox(height: 10),
         KButton(
           label: l10n.updateCheck,
           variant: KButtonVariant.secondary,
           expand: true,
+          loading: state.isChecking,
           onPressed: state.isChecking
               ? null
               : () async {
+                  // The app-level presenter owns the update modal. Asking the
+                  // controller here would open a second copy behind it.
                   await ref
                       .read(updateControllerProvider.notifier)
                       .check(force: true);
                   if (!context.mounted) return;
                   final UpdateState next = ref.read(updateControllerProvider);
-                  if (next.hasUpdate && next.manifest != null) {
-                    await showUpdateDialog(
-                      context,
-                      manifest: next.manifest!,
-                      source: next.source,
-                    );
-                  } else if (next.status == UpdateStatus.upToDate) {
+                  if (next.status == UpdateStatus.upToDate) {
                     showKToast(
                       context,
                       'أنت على أحدث إصدار',
                       kind: KToastKind.success,
+                    );
+                  } else if (next.status == UpdateStatus.failed) {
+                    showKToast(
+                      context,
+                      'تعذّر التحقق من التحديثات. تحقق من الإنترنت.',
+                      kind: KToastKind.error,
                     );
                   }
                 },
@@ -345,7 +339,7 @@ class _AboutModalContent extends ConsumerWidget {
       children: <Widget>[
         // Header: official app mark + name + close. No redundant "About" title.
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
           child: Row(
             children: <Widget>[
               // Official launcher icon asset.
@@ -399,7 +393,7 @@ class _AboutModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
           child: Text(
             l10n.aboutAppBody,
             style: TextStyle(
@@ -426,7 +420,7 @@ class _DeveloperModalContent extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
           child: Row(
             children: <Widget>[
               ClipRRect(
@@ -465,7 +459,7 @@ class _DeveloperModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: <Widget>[
               Container(
@@ -497,7 +491,7 @@ class _DeveloperModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+          padding: const EdgeInsets.only(top: 6, bottom: 4),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
@@ -511,7 +505,7 @@ class _DeveloperModalContent extends ConsumerWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+          padding: const EdgeInsets.only(top: 6),
           child: Column(
             children: <Widget>[
               _DeveloperActionTile(

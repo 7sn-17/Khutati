@@ -11,6 +11,7 @@ import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/device/battery_optimization.dart';
 import '../../../core/device/exact_alarm_permission.dart';
+import '../../../core/device/exact_alarm_prompt.dart';
 import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/design/widgets/surfaces.dart';
@@ -136,28 +137,26 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       }
       if (!mounted) return;
 
-      await showDialog<void>(
+      await showKDialog<void>(
         context: context,
-        builder: (BuildContext ctx) => AlertDialog(
-          title: const Text('تحسين استخدام البطارية'),
-          content: const Text(
-            'لضمان عمل المؤقت في الخلفية دون توقف، يرجى ضبط '
-            'استخدام البطارية لهذا التطبيق على "غير مقيد" (Unrestricted).',
-          ),
-          actions: <Widget>[
-            TextButton(
+        builder: (BuildContext ctx) => KDialog(
+          eyebrow: 'الأداء',
+          title: 'تحسين استخدام البطارية',
+          icon: Icons.battery_saver_rounded,
+          message:
+              'لضمان عمل المؤقت في الخلفية دون توقف، اجعل استخدام البطارية '
+              'لهذا التطبيق «غير مقيّد» (Unrestricted).',
+          onClose: () async {
+            await prefs.setBool('battery_prompt_shown', true);
+            if (ctx.mounted) Navigator.of(ctx).pop();
+          },
+          actions: <KDialogAction>[
+            KDialogAction(
+              label: 'فتح الإعدادات',
+              icon: Icons.settings_rounded,
               onPressed: () async {
-                await prefs.setBool('battery_prompt_shown', true);
-                if (ctx.mounted) Navigator.of(ctx).pop();
-              },
-              child: const Text('لاحقاً'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                // The platform call happens while the dialog is still on
-                // screen. Popping first (the previous code) left the channel
-                // invocation racing the route teardown, which is why the
-                // first-run button did nothing while the Settings row worked.
+                // Keep the dialog mounted while the platform channel runs;
+                // popping first raced route teardown on some devices.
                 final bool opened =
                     await BatteryOptimization.requestUnrestricted();
                 await prefs.setBool('battery_prompt_shown', true);
@@ -170,7 +169,14 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
                   );
                 }
               },
-              child: const Text('فتح الإعدادات'),
+            ),
+            KDialogAction(
+              label: 'لاحقاً',
+              variant: KButtonVariant.secondary,
+              onPressed: () async {
+                await prefs.setBool('battery_prompt_shown', true);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
             ),
           ],
         ),
@@ -2230,51 +2236,7 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
   }
 }
 
-/// Premium dialog shown when `SCHEDULE_EXACT_ALARM` is not granted on
-/// Android 12+. Resolves to `true` when the user asked to open the system
-/// settings screen for the permission.
-Future<bool> _showExactAlarmDialog(BuildContext context) async {
-  final KhutatiPalette palette = context.palette;
-  final bool? opened = await showDialog<bool>(
-    context: context,
-    builder: (BuildContext ctx) => AlertDialog(
-      backgroundColor: palette.card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        'المنبهات والتذكيرات',
-        style: TextStyle(
-          fontFamily: KTypography.displayFamily,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: palette.tx,
-        ),
-      ),
-      content: Text(
-        'لضمان انتهاء المؤقت بدقة في الخلفية، يحتاج التطبيق إلى صلاحية '
-        '"المنبهات والتذكيرات" (Alarms & Reminders). يرجى تفعيلها من الإعدادات.',
-        style: TextStyle(
-          fontFamily: KTypography.bodyFamily,
-          fontSize: 14,
-          color: palette.mute,
-          height: 1.6,
-        ),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text('لاحقاً', style: TextStyle(color: palette.mute)),
-        ),
-        FilledButton(
-          onPressed: () async {
-            // Pop first so the settings screen is not stacked behind a dialog
-            // that would still be animating when the app is backgrounded.
-            Navigator.of(ctx).pop(true);
-            await ExactAlarmPermission.request();
-          },
-          child: Text('فتح الإعدادات'),
-        ),
-      ],
-    ),
-  );
-  return opened ?? false;
+/// One shared premium explanation for the Android 12+ exact-alarm grant.
+Future<bool> _showExactAlarmDialog(BuildContext context) {
+  return showExactAlarmDialog(context);
 }

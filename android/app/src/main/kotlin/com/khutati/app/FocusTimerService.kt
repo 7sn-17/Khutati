@@ -70,6 +70,66 @@ class FocusTimerService : Service() {
         const val KEY_PLANNED = "planned_seconds"
         const val ALARM_REQUEST_CODE = 7301
 
+        /**
+         * Applies the "تنبيهات الجلسات" toggle to an alarm that is already
+         * armed. Deleting the Flutter notification channel is not enough once
+         * a session has started: this exact alarm belongs to the native
+         * service, so it must be cancelled (or re-armed) here as well.
+         */
+        fun setNotifications(context: Context, enabled: Boolean) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(KEY_NOTIFY, enabled).apply()
+
+            val manager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (!enabled) manager?.cancel(ALERT_ID)
+
+            val alarmManager =
+                context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val phase = prefs.getString(KEY_PHASE, "focus") ?: "focus"
+            val operation = PendingIntent.getBroadcast(
+                context,
+                ALARM_REQUEST_CODE,
+                Intent(context, FocusAlarmReceiver::class.java).apply {
+                    action = FocusAlarmReceiver.ACTION_ALARM
+                    putExtra(EXTRA_PHASE, phase)
+                    putExtra(EXTRA_NOTIFY, enabled)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            val paused = prefs.getBoolean(KEY_PAUSED, false)
+            val target = prefs.getLong(KEY_TARGET, 0L)
+            if (!enabled || paused || target <= System.currentTimeMillis()) {
+                alarmManager.cancel(operation)
+                return
+            }
+
+            try {
+                val exactAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    alarmManager.canScheduleExactAlarms()
+                if (exactAllowed) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        target,
+                        operation,
+                    )
+                } else {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        target,
+                        operation,
+                    )
+                }
+            } catch (_: SecurityException) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    target,
+                    operation,
+                )
+            }
+        }
+
         /** The notification the user sees while a session runs. */
         fun ensureChannels(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -517,10 +577,14 @@ class FocusTimerService : Service() {
     }
 
     private fun alarmPendingIntent(): PendingIntent {
+        // Re-read the toggle so a change made after the session started also
+        // applies to the next break alarm armed by handleExpiry().
+        val latestNotify = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFY, notificationsEnabled)
         val intent = Intent(this, FocusAlarmReceiver::class.java).apply {
             action = FocusAlarmReceiver.ACTION_ALARM
             putExtra(EXTRA_PHASE, phase)
-            putExtra(EXTRA_NOTIFY, notificationsEnabled)
+            putExtra(EXTRA_NOTIFY, latestNotify)
         }
         return PendingIntent.getBroadcast(
             this,

@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/feedback.dart';
+import '../../../core/design/widgets/surfaces.dart';
+import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/motion/press_scale.dart';
 import '../application/auth_providers.dart';
@@ -54,13 +56,10 @@ class _SignedInCard extends ConsumerWidget {
     final String name = _name;
     final String email = user.email ?? '—';
 
-    return Container(
+    return KCard(
+      showPattern: true,
+      borderColor: palette.gold.withValues(alpha: 0.22),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(KMetrics.cardRadius),
-        border: Border.all(color: palette.line),
-      ),
       child: Row(
         children: <Widget>[
           _Avatar(url: _avatar, name: name),
@@ -91,6 +90,29 @@ class _SignedInCard extends ConsumerWidget {
                     fontSize: 13,
                     color: palette.mute,
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: palette.ok,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'متزامن مع حسابك',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 11,
+                        color: palette.ok,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -132,26 +154,13 @@ class _SignedInCard extends ConsumerWidget {
     String current,
   ) async {
     ref.read(hapticsProvider).selection();
-    final String? next = await showDialog<String>(
+    final String? next = await showKDialog<String>(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext ctx) => _EditNameDialog(initial: current),
     );
-    if (next == null || next == current) return;
-    try {
-      await ref.read(authControllerProvider).updateDisplayName(next);
-      if (!context.mounted) return;
-      showKToast(context, 'تم تحديث اسمك.', kind: KToastKind.success);
-    } on AuthFailure catch (error) {
-      if (!context.mounted) return;
-      showKToast(context, error.message, kind: KToastKind.error);
-    } catch (_) {
-      if (!context.mounted) return;
-      showKToast(
-        context,
-        'تعذّر تحديث الاسم. تحقق من الإنترنت وحاول مرة أخرى.',
-        kind: KToastKind.error,
-      );
-    }
+    if (next == null || next == current || !context.mounted) return;
+    showKToast(context, 'تم تحديث اسمك.', kind: KToastKind.success);
   }
 }
 
@@ -211,20 +220,21 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _EditNameDialog extends StatefulWidget {
+class _EditNameDialog extends ConsumerStatefulWidget {
   const _EditNameDialog({required this.initial});
 
   final String initial;
 
   @override
-  State<_EditNameDialog> createState() => _EditNameDialogState();
+  ConsumerState<_EditNameDialog> createState() => _EditNameDialogState();
 }
 
-class _EditNameDialogState extends State<_EditNameDialog> {
+class _EditNameDialogState extends ConsumerState<_EditNameDialog> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initial,
   );
   String? _error;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -232,7 +242,8 @@ class _EditNameDialogState extends State<_EditNameDialog> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
+    if (_saving) return;
     final String value = _controller.text.trim();
     if (value.isEmpty) {
       setState(() => _error = 'لا يمكن ترك الاسم فارغاً.');
@@ -242,34 +253,87 @@ class _EditNameDialogState extends State<_EditNameDialog> {
       setState(() => _error = 'الاسم طويل جداً.');
       return;
     }
-    Navigator.of(context).pop(value);
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authControllerProvider).updateDisplayName(value);
+      if (mounted) Navigator.of(context).pop(value);
+    } on AuthFailure catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'تعذّر تحديث الاسم. تحقق من الإنترنت وحاول مرة أخرى.';
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    return AlertDialog(
-      backgroundColor: palette.card,
-      title: const Text('تعديل الاسم'),
-      content: TextField(
+    return KDialog(
+      eyebrow: 'حسابك',
+      title: 'تعديل الاسم',
+      icon: Icons.edit_rounded,
+      onClose: _saving ? null : () => Navigator.of(context).pop(),
+      child: TextField(
         controller: _controller,
         autofocus: true,
+        enabled: !_saving,
         maxLength: 60,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _save(),
+        style: TextStyle(
+          fontFamily: KTypography.bodyFamily,
+          fontSize: 16,
+          color: palette.tx,
+        ),
         decoration: InputDecoration(
           hintText: 'اسمك',
           errorText: _error,
           counterText: '',
-          border: const OutlineInputBorder(),
+          filled: true,
+          fillColor: palette.card2,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: palette.line),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: palette.line),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: palette.gold, width: 1.5),
+          ),
         ),
       ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('إلغاء'),
+      actions: <KDialogAction>[
+        KDialogAction(
+          label: 'حفظ',
+          icon: Icons.check_rounded,
+          loading: _saving,
+          onPressed: _saving ? null : _save,
         ),
-        FilledButton(onPressed: _save, child: const Text('حفظ')),
+        KDialogAction(
+          label: 'إلغاء',
+          variant: KButtonVariant.secondary,
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+        ),
       ],
     );
   }
@@ -283,52 +347,69 @@ class _SignedOutCard extends StatelessWidget {
     final KhutatiPalette palette = context.palette;
     final bool dark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return KCard(
+      showPattern: true,
+      borderColor: palette.gold.withValues(alpha: 0.24),
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-          colors: <Color>[
-            palette.card,
-            Color.lerp(palette.card, palette.gold, 0.06)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: palette.line),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: palette.gold.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: palette.gold.withValues(alpha: 0.30)),
-            ),
-            child: Icon(
-              Icons.cloud_sync_rounded,
-              size: 26,
-              color: palette.gold,
-            ),
+          Row(
+            children: <Widget>[
+              Container(
+                width: 58,
+                height: 58,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.gold.withValues(alpha: 0.13),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: palette.gold.withValues(alpha: 0.40),
+                  ),
+                ),
+                child: Text(
+                  'زائر',
+                  style: TextStyle(
+                    fontFamily: KTypography.displayFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: palette.gold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'أنت الآن زائر',
+                      style: TextStyle(
+                        fontFamily: KTypography.displayFamily,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: palette.tx,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'تقدمك محفوظ على هذا الجهاز',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 13,
+                        color: palette.mute,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Text(
-            'احفظ تقدمك في مكان آمن',
-            style: TextStyle(
-              fontFamily: KTypography.displayFamily,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: palette.tx,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'سجل دخولك لمزامنة خطتك، إنجازاتك، وسجل تركيزك. بهذه الطريقة، '
-            'إذا غيّرت هاتفك أو حذفت التطبيق، ستجد كل بياناتك في انتظارك.',
+            'يمكنك الدراسة الآن دون حساب. سجّل الدخول بحساب Google لتبقى خطتك '
+            'وإنجازاتك وسجل تركيزك معك إذا غيّرت هاتفك أو أعدت تثبيت التطبيق.',
             style: TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 14,
@@ -338,7 +419,7 @@ class _SignedOutCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           GoogleSignInButton(
-            height: 58,
+            height: 56,
             backgroundColor: dark ? palette.card : palette.tx,
             foregroundColor: dark ? palette.tx : palette.bg,
             borderColor: dark ? palette.line : palette.tx,
@@ -362,29 +443,29 @@ class _SignOutButtonState extends ConsumerState<SignOutButton> {
 
   Future<void> _confirm() async {
     ref.read(hapticsProvider).selection();
-    final bool? confirmed = await showDialog<bool>(
+    final bool? confirmed = await showKDialog<bool>(
       context: context,
       builder: (BuildContext ctx) {
         final KhutatiPalette palette = ctx.palette;
-        return AlertDialog(
-          backgroundColor: palette.card,
-          title: const Text('تسجيل الخروج'),
-          content: const Text(
-            'سيتم تسجيل خروجك من هذا الجهاز. ستحتاج إلى اتصال بالإنترنت '
-            'لتسجيل الدخول مرة أخرى، لكن تقدمك المحلي يبقى محفوظاً.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('إلغاء'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: palette.red,
-                foregroundColor: Colors.white,
-              ),
+        return KDialog(
+          eyebrow: 'الحساب',
+          title: 'تسجيل الخروج',
+          icon: Icons.logout_rounded,
+          accent: palette.red,
+          message:
+              'سيتم تسجيل خروجك من هذا الجهاز. ستحتاج إلى اتصال بالإنترنت '
+              'لتسجيل الدخول مرة أخرى، لكن تقدمك المحلي يبقى محفوظاً.',
+          onClose: () => Navigator.of(ctx).pop(false),
+          actions: <KDialogAction>[
+            KDialogAction(
+              label: 'تسجيل الخروج',
+              icon: Icons.logout_rounded,
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('تسجيل الخروج'),
+            ),
+            KDialogAction(
+              label: 'إلغاء',
+              variant: KButtonVariant.secondary,
+              onPressed: () => Navigator.of(ctx).pop(false),
             ),
           ],
         );

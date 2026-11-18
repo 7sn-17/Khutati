@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../sound/sound_effects.dart';
 import '../palette.dart';
 import '../tokens.dart';
 
@@ -60,7 +61,12 @@ class KChip extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: onTap == null
+              ? null
+              : () {
+                  SoundEffects.click();
+                  onTap!();
+                },
           borderRadius: BorderRadius.circular(KMetrics.chipRadius),
           child: AnimatedContainer(
             duration: Duration(milliseconds: KMotion.navMs),
@@ -151,6 +157,8 @@ class KButton extends StatelessWidget {
     this.onPressed,
     this.variant = KButtonVariant.primary,
     this.expand = false,
+    this.loading = false,
+    this.icon,
     super.key,
   });
 
@@ -159,28 +167,69 @@ class KButton extends StatelessWidget {
   final KButtonVariant variant;
   final bool expand;
 
+  /// Shows an in-button spinner and blocks taps without changing the button's
+  /// height, so an async save or update check never jumps the layout.
+  final bool loading;
+
+  final IconData? icon;
+
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
     final bool primary = variant == KButtonVariant.primary;
+    final Color foreground = primary ? Colors.white : palette.tx;
 
-    final Widget content = Text(
-      label,
-      style: TextStyle(
-        fontFamily: KTypography.bodyFamily,
-        fontSize: KTypography.bodySize,
-        fontWeight: FontWeight.w500,
-        color: primary ? Colors.white : palette.tx,
-      ),
+    final Widget content = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 160),
+      child: loading
+          ? SizedBox(
+              key: const ValueKey<String>('kbutton-loading'),
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(foreground),
+              ),
+            )
+          : Row(
+              key: const ValueKey<String>('kbutton-label'),
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                if (icon != null) ...<Widget>[
+                  Icon(icon, size: 18, color: foreground),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: KTypography.bodySize,
+                      fontWeight: FontWeight.w500,
+                      color: foreground,
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
 
     return Semantics(
       button: true,
-      enabled: onPressed != null,
+      enabled: onPressed != null && !loading,
       child: InkWell(
-        onTap: onPressed,
+        onTap: loading || onPressed == null
+            ? null
+            : () {
+                SoundEffects.click();
+                onPressed!();
+              },
         borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
           constraints: const BoxConstraints(minHeight: KMetrics.buttonMinHeight),
           padding: EdgeInsets.symmetric(
             horizontal: primary ? KMetrics.buttonPaddingX : 18,

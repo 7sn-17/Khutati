@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../data/sync/cloud_sync_service.dart';
 import '../data/supabase_auth.dart';
 import 'guest_mode.dart';
 
@@ -41,6 +44,9 @@ class AuthController {
   Future<void> signInWithGoogle() async {
     await SupabaseAuth.signInWithGoogle();
     await _ref.read(guestModeProvider.notifier).leave();
+    // The router moves to Today immediately; restoring the account's cloud
+    // rows runs alongside the entrance animation instead of blocking it.
+    unawaited(_ref.read(cloudSyncServiceProvider).syncNow());
   }
 
   Future<void> updateDisplayName(String name) =>

@@ -479,7 +479,7 @@ class _WeekStrip extends StatelessWidget {
           children: <Widget>[
             _LegendDot(color: palette.ok, filled: true, label: 'أنجزت يومك'),
             _LegendDot(dashed: true, label: 'يوم راحة'),
-            _LegendDot(color: palette.gold, label: 'مهام تنتظرك'),
+            _LegendDot(color: palette.red, label: 'فائت'),
           ],
         ),
       ],
@@ -510,8 +510,8 @@ class _DayDot extends StatelessWidget {
         fill = Colors.transparent;
         dashed = true;
       case 'wait':
-        line = palette.gold;
-        fill = Colors.transparent;
+        line = palette.red;
+        fill = palette.red.withValues(alpha: 0.14);
         dashed = false;
       case 'today':
         line = palette.tx;
@@ -1624,8 +1624,9 @@ class _DayMapSection extends StatelessWidget {
                     fill: palette.ok,
                   ),
                   _MapLegend(
-                    color: palette.gold,
-                    label: 'تنتظرك',
+                    color: palette.red,
+                    label: 'فائت',
+                    fill: palette.red.withValues(alpha: 0.14),
                     borderWidth: 2,
                   ),
                   _MapLegend(color: palette.tx, label: 'اليوم', borderWidth: 2),
@@ -1823,15 +1824,19 @@ class _DayCell extends StatelessWidget {
     final bool today = status == 'today';
     final bool rest = status == 'rest';
 
+    // A missed day is red, not gold: it is a warning, not a pending reward.
+    // The faint red wash keeps the numeral readable in both themes.
     final Color background = done
         ? palette.ok
+        : wait
+        ? palette.red.withValues(alpha: 0.13)
         : today
         ? palette.card
         : palette.card2;
     final Color border = done
         ? palette.ok
         : wait
-        ? palette.gold
+        ? palette.red
         : today
         ? palette.tx
         : rest
@@ -1844,22 +1849,30 @@ class _DayCell extends StatelessWidget {
         : 1.5;
     final Color text = done
         ? palette.bg
-        : wait || today
+        : wait
+        ? palette.redtx
+        : today
         ? palette.tx
         : palette.mute;
 
     return GestureDetector(
       onTap: () => onTap(day),
       behavior: HitTestBehavior.opaque,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
+          // Selection is a gold rim and a gold tint in the gutter, leaving
+          // today's primary border and a missed day's red border untouched.
+          color: selected
+              ? palette.gold.withValues(alpha: 0.13)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? palette.gold : Colors.transparent,
-            width: 2,
-          ),
+          border: selected
+              ? Border.all(color: palette.gold, width: 2)
+              : Border.all(color: Colors.transparent, width: 2),
         ),
-        padding: EdgeInsets.all(1),
         child: AspectRatio(
           aspectRatio: 1,
           child: RepaintBoundary(
@@ -1878,7 +1891,7 @@ class _DayCell extends StatelessWidget {
                     fontSize: 12,
                     height: 1.2,
                     color: text,
-                    fontWeight: today ? FontWeight.w500 : FontWeight.w400,
+                    fontWeight: today ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               ),
@@ -1949,7 +1962,7 @@ class _DayDetail extends StatelessWidget {
 
   static Map<String, String> _statusLabel = <String, String>{
     'done': 'مكتمل',
-    'wait': 'فيه مهام تنتظرك',
+    'wait': 'فائت',
     'today': 'يومك الحالي',
     'rest': 'يوم راحة مجدول',
     'future': 'قادم',
@@ -2009,7 +2022,7 @@ class _DayDetail extends StatelessWidget {
               style: TextStyle(
                 fontFamily: KTypography.bodyFamily,
                 fontSize: 14,
-                color: palette.mute,
+                color: status == 'wait' ? palette.redtx : palette.mute,
                 height: 1.6,
               ),
             ),

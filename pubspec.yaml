@@ -1,7 +1,7 @@
 name: khutati
 description: "خطتي — an Arabic-first, offline-first study plan app for the 68-day Professor MedX plan."
 publish_to: "none"
-version: 0.7.1+29
+version: 0.8.0+30
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -37,6 +37,8 @@ dependencies:
   # Platform services (Phase 4-5)
   flutter_local_notifications: ^18.0.1
   supabase_flutter: ^2.8.0
+  # Two bundled UI sounds (tap + completion chime). No network, no permission.
+  audioplayers: ^6.6.0
   # Native Google account picker (Credential Manager) -> Supabase ID token.
   # Pin the Flutter 3.29-compatible generation: the newer Android
   # implementation expects a newer AGP/Kotlin toolchain than this project.
@@ -64,6 +66,8 @@ flutter:
     - khutati_plan_data.json
     # Official launcher icon, shown in the About modal.
     - assets/app_icon.png
+    # UI sounds (soft tap + completion chime).
+    - assets/sounds/
 
   # Declared fonts are registered before the first frame, so the Arabic faces
   # never fall back to the platform default (and never touch the network).

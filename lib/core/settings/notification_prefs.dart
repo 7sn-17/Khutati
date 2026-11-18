@@ -1,5 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../notifications/focus_notifications.dart';
 import 'theme_mode_controller.dart' show sharedPreferencesProvider;
 
 /// Notification preferences (PRD 5.9). Each type is independently toggleable;
@@ -55,17 +57,64 @@ class NotificationPrefsController extends Notifier<NotificationPrefs> {
     );
   }
 
-  Future<void> setTasks(bool value) =>
-      _write(tasksKey, value, (NotificationPrefs p) => p.copyWith(tasks: value));
+  Future<void> setTasks(bool value) async {
+    await _write(
+      tasksKey,
+      value,
+      (NotificationPrefs p) => p.copyWith(tasks: value),
+    );
+    await FocusNotifications.setEnabled(
+      KhutatiNotificationChannel.tasks,
+      value,
+    );
+  }
 
-  Future<void> setDaily(bool value) =>
-      _write(dailyKey, value, (NotificationPrefs p) => p.copyWith(daily: value));
+  Future<void> setDaily(bool value) async {
+    await _write(
+      dailyKey,
+      value,
+      (NotificationPrefs p) => p.copyWith(daily: value),
+    );
+    await FocusNotifications.setEnabled(
+      KhutatiNotificationChannel.daily,
+      value,
+    );
+  }
 
-  Future<void> setReview(bool value) =>
-      _write(reviewKey, value, (NotificationPrefs p) => p.copyWith(review: value));
+  Future<void> setReview(bool value) async {
+    await _write(
+      reviewKey,
+      value,
+      (NotificationPrefs p) => p.copyWith(review: value),
+    );
+    await FocusNotifications.setEnabled(
+      KhutatiNotificationChannel.review,
+      value,
+    );
+  }
 
-  Future<void> setTimer(bool value) =>
-      _write(timerKey, value, (NotificationPrefs p) => p.copyWith(timer: value));
+  Future<void> setTimer(bool value) async {
+    await _write(
+      timerKey,
+      value,
+      (NotificationPrefs p) => p.copyWith(timer: value),
+    );
+    await FocusNotifications.setEnabled(
+      KhutatiNotificationChannel.timer,
+      value,
+    );
+    // A session can already be armed natively. The Kotlin service owns the
+    // exact alarm while the app is frozen, so deleting the Flutter channel is
+    // not enough: cancel or re-arm that alarm too.
+    try {
+      await const MethodChannel('khutati/focus_timer')
+          .invokeMethod<void>('setNotificationsEnabled', <String, Object?>{
+            'enabled': value,
+          });
+    } catch (_) {
+      // No Android service (tests/desktop): the Dart gate still suppresses it.
+    }
+  }
 
   Future<void> _write(
     String key,

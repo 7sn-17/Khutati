@@ -127,9 +127,11 @@ class PlanProgress {
           if (progress.isComplete) {
             completedSteps += 1;
           }
-          if (progress == StepProgress.partial) {
+          if (progress.isPartial) {
             partialSteps += 1;
-            // Partial progress credits half the step's planned minutes.
+            // Both half states (up and down) credit half the step's minutes.
+            // Treating partialDown as complete inflated today's completed
+            // minutes and made the summary jump after the third tap.
             completedMinutes += step.minutes ~/ 2;
             completedByKind.update(
               step.kind,

@@ -88,6 +88,10 @@ abstract final class SupabaseAuth {
       if (idToken == null || idToken.isEmpty) {
         throw const AuthFailure('تعذّر الحصول على رمز Google. حاول مرة أخرى.');
       }
+      // Native Credential Manager tokens are not minted with a nonce. The
+      // matching switch is a server-side Google-provider setting
+      // ("Skip nonce check"), not a parameter on the Dart client, so it is
+      // configured in the Supabase dashboard for this project.
       await auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,

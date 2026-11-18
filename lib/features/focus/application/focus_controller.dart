@@ -8,12 +8,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/notifications/focus_notifications.dart';
 import '../../../core/settings/notification_prefs.dart';
+import '../../../core/sound/sound_effects.dart';
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
 import '../../../data/database/app_database.dart';
 import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
+import '../../../data/repositories/sync_queue_repository.dart';
 import '../../../data/repositories/user_state_repository.dart';
+import '../../../data/sync/sync_ids.dart';
 import '../../../domain/plan/step_progress.dart';
 import '../domain/focus_setup.dart';
 
@@ -1146,6 +1149,10 @@ class FocusController extends Notifier<FocusSessionState> {
   /// when the Dart isolate is frozen in the background the native side is the
   /// only thing still running, and the user must still hear the timer end.
   Future<void> _notifyTimerComplete(FocusPhase phase) async {
+    // The in-app chime follows the sound-effects toggle, independently of the
+    // notification channel: a user can want a silent system alert but still
+    // hear the completion inside the open app.
+    if (phase == FocusPhase.focus) SoundEffects.success();
     if (!ref.read(notificationPrefsProvider).timer) return;
     await FocusNotifications.showCompletion(
       isBreak: phase == FocusPhase.breakTime,
@@ -1160,24 +1167,48 @@ class FocusController extends Notifier<FocusSessionState> {
     if (startedAt == null) return;
     try {
       final AppDatabase db = ref.read(appDatabaseProvider);
+      final String clientId = SyncIds.newId();
+      final DateTime endedAt = DateTime.now();
+      final int recorded = state.mode == FocusMode.free
+          ? actualSeconds
+          : actualSeconds.clamp(0, state.plannedSeconds);
       await db
           .into(db.focusSessions)
           .insert(
             FocusSessionsCompanion.insert(
+              clientId: Value<String>(clientId),
               taskId: Value<String?>(state.taskId),
               taskTitle: Value<String?>(state.taskTitle),
               mode: Value<String>(state.mode.name),
               stepId: Value<String?>(state.currentStep?.id),
               phase: state.phase.wire,
               plannedSeconds: state.plannedSeconds,
-              actualSeconds: state.mode == FocusMode.free
-                  ? actualSeconds
-                  : actualSeconds.clamp(0, state.plannedSeconds),
+              actualSeconds: recorded,
               startedAt: startedAt,
-              endedAt: Value<DateTime>(DateTime.now()),
+              endedAt: Value<DateTime>(endedAt),
               completed: Value<bool>(completed),
             ),
           );
+      // Local write first, then the durable outbox. Sync may happen minutes
+      // later (or after the next launch) without ever blocking the timer.
+      await SyncQueueRepository(db).enqueue(
+        'focus_session',
+        clientId,
+        <String, Object?>{
+          'id': clientId,
+          'task_id': state.taskId,
+          'task_title': state.taskTitle,
+          'mode': state.mode.name,
+          'step_id': state.currentStep?.id,
+          'phase': state.phase.wire,
+          'planned_seconds': state.plannedSeconds,
+          'actual_seconds': recorded,
+          'started_at': isoOrNull(startedAt),
+          'ended_at': isoOrNull(endedAt),
+          'completed': completed,
+          'updated_at': isoOrNull(endedAt),
+        },
+      );
     } catch (_) {
       // Analytics must never block the user's session.
     }

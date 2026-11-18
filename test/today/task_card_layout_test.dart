@@ -99,7 +99,7 @@ void main() {
   testWidgets('a partially done step still lays out with equal-height chips', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(host(taskWithSteps(first: StepProgress.partial)));
+    await tester.pumpWidget(host(taskWithSteps(first: StepProgress.partialUp)));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
