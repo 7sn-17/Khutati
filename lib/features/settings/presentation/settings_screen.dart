@@ -404,6 +404,13 @@ class _AboutModalContent extends ConsumerWidget {
             ),
           ),
         ),
+        const SizedBox(height: 18),
+        KButton(
+          label: 'إغلاق',
+          variant: KButtonVariant.secondary,
+          expand: true,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ],
     );
   }
@@ -525,6 +532,13 @@ class _DeveloperModalContent extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 18),
+        KButton(
+          label: 'إغلاق',
+          variant: KButtonVariant.secondary,
+          expand: true,
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ],
     );
