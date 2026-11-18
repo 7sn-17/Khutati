@@ -4,30 +4,33 @@ The app checks for a newer APK without blocking startup or breaking offline use.
 
 ## Sources and order
 
-1. **Supabase** — `public.app_updates` via PostgREST. Used when
-   `KHUTATI_SUPABASE_URL` and `KHUTATI_SUPABASE_ANON_KEY` are compiled in
-   (`--dart-define`). This is the primary channel because rows can be edited
-   from the dashboard without shipping a release.
-2. **GitHub Releases** — `7sn-17/Khutati`, newest non-draft release. Every
-   release built by CI carries `update.json` plus `Khutati.apk`, so this
-   fallback needs no secrets and works even if Supabase is down.
+A strict waterfall. Each step runs only when the one before it produced nothing.
 
-Both sources are consulted and the newest version wins, so a stale Supabase row
-can never hide a newer GitHub release; Supabase wins ties. A failed source is
-ignored when the other one succeeds. Only when **every** source fails does the
-check throw, and then the UI says so plainly.
+1. **GitHub Releases API** — `7sn-17/Khutati`, newest non-draft release. Every
+   release built by CI carries `update.json` plus `Khutati.apk`, so this path
+   needs no secrets and is the authoritative record.
+2. **GitHub Atom feed** — `https://github.com/<repo>/releases.atom`, a static
+   file outside the API quota, read when the API fails (typically `403` rate
+   limiting). It has no asset list, so the APK URL is reconstructed as
+   `releases/download/<tag>/Khutati.apk`; the tag keeps its `v`. The release
+   page is kept as a secondary link.
+3. **Supabase** — `public.app_versions` via PostgREST. Used when both GitHub
+   paths fail, which is the case the others cannot cover: github.com being
+   unreachable or blocked on the user's network. Requires
+   `KHUTATI_SUPABASE_URL` and `KHUTATI_SUPABASE_ANON_KEY` at build time
+   (`--dart-define`); without them the GitHub path runs alone.
+
+A source that answers "no release" is a **success**, not a failure. Only when
+every step fails does the check throw, and then the UI says so plainly.
 
 GitHub's anonymous API allows 60 requests per hour per IP, so the GitHub path
 has two extra layers:
 
-3. **Conditional requests** — the ETag of the last successful response is stored
+4. **Conditional requests** — the ETag of the last successful response is stored
    and sent as `If-None-Match`. `304 Not Modified` is a successful check with no
    update and costs no quota.
-4. **Atom fallback** — if the API fails (typically `403` rate limiting), the
-   static `https://github.com/<repo>/releases.atom` feed is read instead. It has
-   no asset list, so the APK URL is reconstructed as
-   `releases/download/<tag>/Khutati.apk`; the tag keeps its `v`. The release page
-   is kept as a secondary link.
+5. **Cooldown** — background checks run at most once every 60 minutes, measured
+   from the last successful check.
 
 ## Client behaviour
 
@@ -49,30 +52,60 @@ has two extra layers:
   Settings bypasses the skip and the cooldown.
 - Versions compare semantically first, then by Android `versionCode`, so a
   rebuilt APK with the same marketing version can still be delivered.
-- Only `https://` APK URLs are accepted. The app ships a single `Khutati.apk`
-  built for modern 64-bit ARM devices (arm64-v8a) only.
+- Only `https://` APK URLs are accepted, from every source. A Supabase row whose
+  `download_url` is not HTTPS is treated as broken, not as a release.
+- The app ships a single `Khutati.apk` built for modern 64-bit ARM devices
+  (arm64-v8a) only.
 - "Update now" opens the APK in the browser; Android shows the install
   confirmation. Silent install is intentionally not used (no
   `REQUEST_INSTALL_PACKAGES`), which suits a private side-loaded app.
 
 ## Supabase setup
 
-Apply `supabase/migrations/202611170001_app_updates.sql` (the Supabase MCP or
-the SQL editor both work). The table is public read-only through RLS; writes
-stay in the dashboard or service role.
-
-Publish a release by inserting/updating a row:
+Apply `supabase/migrations/202611190001_app_versions.sql` (the SQL editor or the
+Management API both work). It creates:
 
 ```sql
-insert into public.app_updates
-  (platform, channel, version_name, version_code, apk_url, notes)
-values
-  ('android', 'stable', '0.3.0', 3,
-   'https://github.com/7sn-17/Khutati/releases/download/v0.3.0/Khutati.apk',
-   'إصلاحات وتحسينات لمؤقت التركيز.');
+create table public.app_versions (
+  id uuid primary key default gen_random_uuid(),
+  version text not null,
+  download_url text not null,
+  release_notes text,
+  created_at timestamptz not null default now()
+);
 ```
 
-`platform` must be `android` and `channel` must be `stable`.
+with RLS enabled and a `select` policy for `anon`/`authenticated`; a unique
+index on `version` lets CI upsert instead of appending duplicates. Writes stay
+with the service role.
+
+CI mirrors every published release into the table in the
+"Mirror the release into Supabase" step, so the row always describes the APK
+that is actually on GitHub. That step needs one more secret:
+
+```
+KHUTATI_SUPABASE_SERVICE_KEY=<service-role key>
+```
+
+It is used only inside the release job, never compiled into the app. If the
+secret is absent the step warns and skips, and the waterfall simply ends after
+GitHub.
+
+To publish a row by hand:
+
+```sql
+insert into public.app_versions (version, download_url, release_notes)
+values
+  ('0.8.7+37',
+   'https://github.com/7sn-17/Khutati/releases/latest/download/Khutati.apk',
+   'مشاركة التطبيق، واحتياطي تحديث ثالث، وقائمة متأخرة أقصر.')
+on conflict (version) do update
+  set download_url = excluded.download_url,
+      release_notes = excluded.release_notes;
+```
+
+`version` may carry the build number (`0.8.7+37`); the client parses it with the
+same `AppVersion` rules as every other source.
 
 Then provide the build-time config as repository secrets (or local
 `--dart-define`s):
@@ -82,9 +115,10 @@ KHUTATI_SUPABASE_URL=https://<project-ref>.supabase.co
 KHUTATI_SUPABASE_ANON_KEY=<anon/publishable key>
 ```
 
-The anon key is public by design; never use the service-role key here.
+The anon key is public by design; never compile the service-role key into the
+app.
 
-## GitHub fallback
+## GitHub
 
 Release notes are authored in Arabic in `release_notes/ar.txt`. CI rejects a
 missing or non-Arabic file, uses it for `update.json` and publishes the same text
@@ -94,12 +128,12 @@ as the GitHub release body. Edit that file as part of every release.
 
 ```json
 {
-  "versionName": "0.2.2",
-  "versionCode": 4,
+  "versionName": "0.8.7",
+  "versionCode": 37,
   "notes": "ملاحظات الإصدار العربية من release_notes/ar.txt",
-  "apkUrl": "https://github.com/7sn-17/Khutati/releases/download/latest/Khutati.apk",
-  "pageUrl": "https://github.com/7sn-17/Khutati/releases/tag/latest",
-  "publishedAt": "2026-11-17T12:00:00Z"
+  "apkUrl": "https://github.com/7sn-17/Khutati/releases/latest/download/Khutati.apk",
+  "pageUrl": "https://github.com/7sn-17/Khutati/releases/tag/v0.8.7",
+  "publishedAt": "2026-11-19T00:00:00Z"
 }
 ```
 

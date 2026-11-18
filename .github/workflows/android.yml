@@ -281,3 +281,42 @@ jobs:
             build/app/outputs/flutter-apk/Khutati.apk
             build/app/outputs/flutter-apk/update.json
 
+      # Keeps the in-app waterfall's last step truthful: the client falls back
+      # to this table only when github.com itself is unreachable, so it must
+      # describe the release that was just published.
+      - name: Mirror the release into Supabase
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.KHUTATI_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.KHUTATI_SUPABASE_SERVICE_KEY }}
+          LC_ALL: C.UTF-8
+          LANG: C.UTF-8
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "::warning::Supabase mirror skipped: service key is not configured."
+            exit 0
+          fi
+
+          VERSION_LINE="$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')"
+          # A permanent link: `latest` always resolves to the newest published
+          # release, so a stale row can never 404 on a deleted tag.
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Khutati.apk"
+
+          jq -n \
+            --arg version "$VERSION_LINE" \
+            --arg url "$APK_URL" \
+            --rawfile notes release_notes/ar.txt \
+            '{version:$version, download_url:$url, release_notes:($notes | rtrimstr("\n"))}' \
+            > build/app_version.json
+
+          curl -fsS -X POST \
+            "${SUPABASE_URL%/}/rest/v1/app_versions?on_conflict=version" \
+            -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates,return=minimal" \
+            --data-binary @build/app_version.json
+
+          echo "Mirrored ${VERSION_LINE} into app_versions."
+

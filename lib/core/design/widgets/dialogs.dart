@@ -33,6 +33,7 @@ class KDialog extends StatelessWidget {
     this.accent,
     this.child,
     this.actions = const <KDialogAction>[],
+    this.secondaryActions = const <KDialogAction>[],
     this.onClose,
     super.key,
   });
@@ -43,7 +44,14 @@ class KDialog extends StatelessWidget {
   final IconData? icon;
   final Color? accent;
   final Widget? child;
+
+  /// Stacked full-width buttons, primary first.
   final List<KDialogAction> actions;
+
+  /// Smaller choices that share one row under [actions] — "later" and "skip"
+  /// belong together, and giving each its own full-width bar would make the
+  /// dialog taller than its content.
+  final List<KDialogAction> secondaryActions;
   final VoidCallback? onClose;
 
   @override
@@ -152,6 +160,26 @@ class KDialog extends StatelessWidget {
               onPressed: actions[i].onPressed,
             ),
           ],
+        ],
+        if (secondaryActions.isNotEmpty) ...<Widget>[
+          SizedBox(height: actions.isEmpty ? 18 : 8),
+          Row(
+            children: <Widget>[
+              for (int i = 0; i < secondaryActions.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: KButton(
+                    label: secondaryActions[i].label,
+                    icon: secondaryActions[i].icon,
+                    variant: secondaryActions[i].variant,
+                    loading: secondaryActions[i].loading,
+                    expand: true,
+                    onPressed: secondaryActions[i].onPressed,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ],
     );

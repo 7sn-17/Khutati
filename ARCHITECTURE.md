@@ -358,8 +358,9 @@ Applied by `supabase/migrations/202611180001_sync_tables.sql`:
 | `focus_sessions` | `(user_id, id)` | owner-only |
 
 `anon` is revoked on all three; `authenticated` gets select/insert/update/delete.
-`public.app_updates` (migration `202611170001`) is the opposite: public read,
-writes only via dashboard/service role.
+`public.app_versions` (migration `202611190001`) is the opposite: public read,
+writes only via CI with the service role. `app_updates` (migration `202611170001`)
+is superseded by it and can be dropped once the new table is seeded.
 
 ---
 
@@ -393,19 +394,31 @@ Key behaviours:
 ```
 UpdateController (60 min cooldown on the last SUCCESSFUL check)
    └─ UpdateRepository.check(etag: stored)        (timeout: 8 s)
-        ├─ Supabase: GET {url}/rest/v1/app_updates?...&limit=1
-        └─ GitHub:   GET api.github.com/repos/{repo}/releases
-        │              If-None-Match: <etag>  → 304 = success, zero quota
-        │              any failure (403 rate limit, 5xx, timeout, DNS)
-        │                 └─ fallback: GET github.com/{repo}/releases.atom
-        ↓  both raced in parallel; failures collected, not thrown
-   pick the newer manifest by (versionCode, then versionName)
-        ↓
+        ├─ 1. GitHub API   GET api.github.com/repos/{repo}/releases
+        │      If-None-Match: <etag>  → 304 = success, zero quota
+        ├─ 2. GitHub Atom  GET github.com/{repo}/releases.atom
+        │      only if the API failed (403 rate limit, 5xx, timeout, DNS)
+        └─ 3. Supabase     GET {url}/rest/v1/app_versions?order=created_at.desc&limit=1
+               only if neither GitHub path produced a release
+        ↓  strict waterfall: the first source with a manifest wins
    compare with AppInfo.versionCode
         ↓
    UpdateBootstrap (single app-level presenter, rootNavigatorKey)
         └─ KDialog → open apkUrl / pageUrl via url_launcher
 ```
+
+**The waterfall.** Sources are tried in order and each one falls through only
+when it produced nothing. GitHub is first because it is the authoritative record
+(CI publishes there); the Atom feed covers a rate-limited API; Supabase covers
+the case the first two cannot — github.com itself being unreachable or blocked.
+A source that answers "no release" is a success and does not throw, so the UI
+can still distinguish "nothing new" from "could not check".
+
+| Step | Cost | Answers | Falls through when |
+|---|---|---|---|
+| GitHub API | 0 (304) or 1 of 60/h | version, build, notes, assets | any non-2xx, timeout |
+| GitHub Atom | free (static file) | tag + date; URL rebuilt from the tag | non-2xx, unparseable feed |
+| Supabase | free | `version`, `download_url`, `release_notes` | non-2xx, row without an HTTPS URL |
 
 **Quota discipline.** GitHub allows 60 anonymous requests per hour per IP, so
 the app must not spend one per launch:
@@ -420,9 +433,14 @@ the app must not spend one per launch:
   API quota) supplies the newest tag. It has no asset list, so the APK URL is
   reconstructed from the CI convention `releases/download/<tag>/Khutati.apk`;
   the tag keeps its `v`.
-- Only a total failure throws. `null` (nothing published) and `304` are
-  successes — the controller must never turn either into an error, and must
-  never report a failure as "up to date".
+
+**Supabase mirror.** `supabase/migrations/202611190001_app_versions.sql` creates
+`app_versions` (`id uuid`, `version`, `download_url`, `release_notes`,
+`created_at`) with RLS and a public `select` policy for the anon key; a unique
+index on `version` lets CI upsert. The release job mirrors every published
+release into it with the service role, so the last-resort row always describes
+the APK that is actually on GitHub. `UpdateManifest.fromJson` already reads
+`download_url` and `release_notes`, so no row shape is special-cased.
 
 **Honest UI.** A manual check bypasses the cooldown, shows the button spinner
 immediately, and reports the outcome: `updateUpToDate` on success, `updateFailed`
@@ -655,7 +673,7 @@ scrolling list items; they are rasterised per item per frame.
 | Plan engine | `test/plan_engine_test.dart`, `plan_calendar_matrix_test.dart`, `plan_today_resolution_test.dart` | date mapping, midnight, totals |
 | Design parity | `test/design/*` | SVG paths and tokens match the prototype |
 | Formatting | `test/core/format_test.dart` | Arabic digits, durations |
-| Updates | `test/updates/update_repository_test.dart`, `update_controller_test.dart` | `If-None-Match`/304, 403 → Atom fallback, both-fail throws, 60-minute cooldown, silent background failure, honest manual failure, cached ETag |
+| Updates | `test/updates/update_repository_test.dart`, `update_controller_test.dart` | `If-None-Match`/304, 403 → Atom fallback, Supabase last-resort row, empty table is a success, non-HTTPS row rejected, waterfall order, both-fail throws, 60-minute cooldown, silent background failure, honest manual failure, cached ETag |
 | Onboarding | `test/onboarding/onboarding_test.dart` | next→start, skip and start persist the flag, dot jump, `complete()` idempotence |
 | Launch | `test/onboarding/splash_test.dart` | wordmark and quote render, the 2.5 s hold, first run → onboarding, `launchReadyProvider` unlocks |
 | Widgets | `test/design/widgets_test.dart`, `test/today/task_card_layout_test.dart` | layout invariants |

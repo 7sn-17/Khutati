@@ -180,4 +180,113 @@ void main() {
 
     expect(result.check!.manifest.notes, 'ملاحظات الإصدار');
   });
+
+  group('Supabase is the last step of the waterfall', () {
+    const String supabaseUrl = 'https://project.supabase.co';
+
+    UpdateRepository withSupabase(MockClient client) => UpdateRepository(
+      client,
+      supabaseUrl: supabaseUrl,
+      supabaseAnonKey: 'anon-key',
+    );
+
+    /// Fails GitHub both ways, then answers from [supabaseBody].
+    MockClient offlineGithub(String supabaseBody) {
+      return MockClient((http.Request request) async {
+        if (request.url.host == 'api.github.com') {
+          return http.Response('{"message":"rate limit"}', 403);
+        }
+        if (request.url.path.endsWith('releases.atom')) {
+          return http.Response('down', 500);
+        }
+        if (request.url.host == 'project.supabase.co') {
+          return http.Response(
+            supabaseBody,
+            200,
+            headers: <String, String>{'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      });
+    }
+
+    test('returns the newest row when both GitHub paths fail', () async {
+      final List<String> paths = <String>[];
+      final MockClient client = MockClient((http.Request request) async {
+        paths.add(request.url.toString());
+        if (request.url.host == 'api.github.com') {
+          return http.Response('{"message":"rate limit"}', 403);
+        }
+        if (request.url.path.endsWith('releases.atom')) {
+          return http.Response('down', 500);
+        }
+        return http.Response(
+          '''
+[
+  {
+    "version": "0.9.0+40",
+    "download_url": "https://github.com/7sn-17/Khutati/releases/download/v0.9.0/Khutati.apk",
+    "release_notes": "ملاحظات",
+    "created_at": "2026-12-01T10:00:00Z"
+  }
+]
+''',
+          200,
+          headers: <String, String>{'content-type': 'application/json'},
+        );
+      });
+
+      final UpdateCheckResult result = await withSupabase(client).check();
+
+      expect(result.hasRelease, isTrue);
+      expect(result.check!.source, UpdateSource.supabase);
+      expect(result.check!.manifest.versionName, '0.9.0+40');
+      expect(result.check!.manifest.notes, 'ملاحظات');
+      // The table is queried newest-first with a single row.
+      final String query = paths.last;
+      expect(query, contains('/rest/v1/app_versions'));
+      expect(query, contains('order=created_at.desc'));
+      expect(query, contains('limit=1'));
+    });
+
+    test('an empty table is a successful check, not a failure', () async {
+      final UpdateCheckResult result = await withSupabase(offlineGithub('[]'))
+          .check();
+
+      expect(result.hasRelease, isFalse);
+      expect(result.notModified, isFalse);
+    });
+
+    test('rejects a row whose download_url is not HTTPS', () async {
+      final MockClient client = offlineGithub('''
+[
+  {
+    "version": "0.9.0",
+    "download_url": "http://example.com/Khutati.apk"
+  }
+]
+''');
+
+      await expectLater(
+        withSupabase(client).check(),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('GitHub is never skipped: a working API ends the waterfall', () async {
+      final List<String> hosts = <String>[];
+      final MockClient client = MockClient((http.Request request) async {
+        hosts.add(request.url.host);
+        if (request.url.host == 'api.github.com') {
+          return http.Response(releaseBody, 200);
+        }
+        return http.Response('should not be reached', 500);
+      });
+
+      final UpdateCheckResult result = await withSupabase(client).check();
+
+      expect(result.check!.source, UpdateSource.github);
+      expect(hosts, <String>['api.github.com']);
+    });
+  });
 }

@@ -138,6 +138,7 @@ class UpdateManifest {
           'apkUrl',
           'apk_url',
           'downloadUrl',
+          'download_url',
           'url',
         ]) ??
         fallbackApkUrl ??
@@ -167,6 +168,7 @@ class UpdateManifest {
         'notes',
         'notes_ar',
         'releaseNotes',
+        'release_notes',
         'body',
       ]),
       pageUrl:

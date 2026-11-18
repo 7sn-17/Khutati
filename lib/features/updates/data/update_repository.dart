@@ -4,18 +4,22 @@ import 'package:http/http.dart' as http;
 
 import '../domain/app_release.dart';
 
-/// Update discovery: Supabase first, GitHub Releases as the offline-safe
-/// fallback (the repository is public, so the fallback needs no secrets).
+/// Update discovery, in a strict waterfall.
 ///
-/// Three defences keep a background check from ever burning GitHub's anonymous
-/// quota (60 requests/hour per IP):
-///
-/// 1. the controller's 60-minute cooldown, so a cold start plus a resume is not
-///    two requests;
-/// 2. conditional requests — the caller passes the stored ETag and GitHub
-///    answers `304 Not Modified` for free when nothing changed;
-/// 3. the `releases.atom` feed, a static file on github.com, used only when the
+/// 1. **GitHub API** — conditional (`If-None-Match`), so an unchanged release
+///    list costs no quota. Two defences keep a background check from ever
+///    burning GitHub's 60 requests/hour per IP: the controller's 60-minute
+///    cooldown and the ETag.
+/// 2. **GitHub Atom feed** — a static file on github.com, used only when the
 ///    API itself fails (typically `403` rate limiting).
+/// 3. **Supabase `app_versions`** — the last resort, and the only source that
+///    still answers when github.com is unreachable or blocked. CI mirrors every
+///    published release into it.
+///
+/// Each step falls through to the next only when it produced nothing. A source
+/// that answers "no release" is a success, not a failure: the caller must be
+/// able to tell "nothing new" from "could not check", and only the latter may
+/// surface as an error.
 class UpdateRepository {
   UpdateRepository(
     this._client, {
@@ -29,14 +33,13 @@ class UpdateRepository {
        _timeout = timeout;
 
   static const String defaultGithubRepo = '7sn-17/Khutati';
-  static const String channel = 'stable';
 
   /// Asset name CI publishes for every release; the Atom fallback has no asset
   /// list, so it reconstructs the download URL from the tag.
   static const String apkAssetName = 'Khutati.apk';
 
-  // Supplied through --dart-define in CI once the Supabase project exists.
-  // Without them the GitHub fallback is used directly.
+  // Supplied through --dart-define in CI. Without them the GitHub path runs
+  // alone, which is why a local build still checks for updates.
   static const String _envSupabaseUrl = String.fromEnvironment(
     'KHUTATI_SUPABASE_URL',
   );
@@ -60,107 +63,80 @@ class UpdateRepository {
   /// exists" and "304 Not Modified" are successes and return a result with no
   /// manifest — the caller must not report those as errors.
   Future<UpdateCheckResult> check({String? etag}) async {
-    // Both sources race. Sequential checks made a manual tap wait for Supabase
-    // before GitHub even started; running them together keeps "Check for
-    // updates" instant and still lets the newer of the two win.
-    final Future<_SourceResult> supabaseFuture = _supabaseConfigured
-        ? _fetchSupabase()
-        : Future<_SourceResult>.value(const _SourceResult.ok(null));
-    final Future<_GithubOutcome> githubFuture = _fetchGithub(etag);
+    final List<String> problems = <String>[];
+    String? nextEtag = etag;
+    bool notModified = false;
 
-    final _SourceResult supabase = await supabaseFuture;
-    final _GithubOutcome github = await githubFuture;
-
-    UpdateManifest? best = supabase.manifest;
-    UpdateSource source = UpdateSource.supabase;
-    if (github.manifest != null &&
-        (best == null || _isNewerManifest(github.manifest!, best))) {
-      best = github.manifest;
-      source = UpdateSource.github;
-    }
-    if (best != null) {
-      return UpdateCheckResult(
-        check: UpdateCheck(manifest: best, source: source),
-        etag: github.etag,
-      );
-    }
-
-    // A 304 is only trustworthy as "nothing new" when the other configured
-    // source also answered; otherwise we would be claiming to be up to date on
-    // the strength of a source that may be hiding a release.
-    if (github.notModified && supabase.ok) {
-      return UpdateCheckResult.notModified(etag: github.etag ?? etag);
-    }
-
-    if (supabase.ok && github.ok) {
-      // Every source answered and nothing has been published yet.
-      return UpdateCheckResult(etag: github.etag);
-    }
-
-    final List<String> problems = <String>[
-      if (!supabase.ok) 'supabase: ${supabase.error}',
-      if (!github.ok) 'github: ${github.error}',
-    ];
-    throw UpdateException(problems.join(' · '));
-  }
-
-  Future<_SourceResult> _fetchSupabase() async {
+    // 1. GitHub API.
+    bool answered = false;
     try {
-      return _SourceResult.ok(await _fromSupabase());
-    } catch (error) {
-      return _SourceResult.failed('$error');
-    }
-  }
-
-  /// GitHub, with two layers of fallback: a conditional API call first, then
-  /// the static Atom feed if the API refuses or times out.
-  Future<_GithubOutcome> _fetchGithub(String? etag) async {
-    try {
-      return await _fromGitHubApi(etag: etag);
+      final _GithubOutcome api = await _fromGitHubApi(etag: etag);
+      answered = true;
+      nextEtag = api.etag ?? etag;
+      notModified = api.notModified;
+      if (api.manifest != null) {
+        return UpdateCheckResult(
+          check: UpdateCheck(
+            manifest: api.manifest!,
+            source: UpdateSource.github,
+          ),
+          etag: nextEtag,
+        );
+      }
     } catch (apiError) {
+      problems.add('github api: $apiError');
+
+      // 2. The static feed. It has no asset list and no quota, but it still
+      // names the newest tag, which is all the installer needs.
       try {
         final UpdateManifest? manifest = await _fromAtom();
-        // An empty or unparseable feed tells us nothing; reporting it as "no
-        // update" would be a guess dressed up as an answer.
-        if (manifest == null) {
-          return _GithubOutcome(error: '$apiError · atom: no release entry');
+        if (manifest != null) {
+          return UpdateCheckResult(
+            check: UpdateCheck(manifest: manifest, source: UpdateSource.github),
+            etag: nextEtag,
+          );
         }
-        return _GithubOutcome(manifest: manifest);
+        // An empty or unparseable feed tells us nothing, so it does not count
+        // as an answer; falling through to Supabase is the honest move.
+        problems.add('github atom: no release entry');
       } catch (atomError) {
-        return _GithubOutcome(error: '$apiError · atom: $atomError');
+        problems.add('github atom: $atomError');
       }
     }
-  }
 
-  static bool _isNewerManifest(
-    UpdateManifest candidate,
-    UpdateManifest current,
-  ) {
-    final AppVersion? next = candidate.version;
-    final AppVersion? installed = current.version;
-    if (next == null) return false;
-    if (installed == null) return true;
+    // 3. Supabase. An empty table is a real answer ("nothing published"), so it
+    // counts even when it returns no row.
+    if (_supabaseConfigured) {
+      try {
+        final UpdateManifest? manifest = await _fromSupabase();
+        answered = true;
+        if (manifest != null) {
+          return UpdateCheckResult(
+            check: UpdateCheck(
+              manifest: manifest,
+              source: UpdateSource.supabase,
+            ),
+            etag: nextEtag,
+          );
+        }
+      } catch (error) {
+        problems.add('supabase: $error');
+      }
+    }
 
-    final int semantic = next.withoutBuild.compareTo(installed.withoutBuild);
-    if (semantic != 0) return semantic > 0;
-
-    final int nextBuild = candidate.versionCode > 0
-        ? candidate.versionCode
-        : next.build;
-    final int currentBuild = current.versionCode > 0
-        ? current.versionCode
-        : installed.build;
-    return nextBuild > currentBuild;
+    if (answered) {
+      return UpdateCheckResult(etag: nextEtag, notModified: notModified);
+    }
+    throw UpdateException(problems.join(' · '));
   }
 
   Future<UpdateManifest?> _fromSupabase() async {
     final String base = _supabaseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
-    final Uri uri = Uri.parse('$base/rest/v1/app_updates').replace(
+    // `app_versions` is written by CI on every release: newest row first.
+    final Uri uri = Uri.parse('$base/rest/v1/app_versions').replace(
       queryParameters: <String, String>{
-        'select': '*',
-        'platform': 'eq.android',
-        'channel': 'eq.$channel',
-        'order': 'published_at.desc',
+        'select': 'version,download_url,release_notes,created_at',
+        'order': 'created_at.desc',
         'limit': '1',
       },
     );
@@ -178,6 +154,8 @@ class UpdateRepository {
     if (rows.isEmpty) return null;
 
     final UpdateManifest manifest = UpdateManifest.fromSupabaseRow(rows.first);
+    // A row is only actionable if it points at a real HTTPS APK; anything else
+    // is a broken record, not a release.
     _requireHttps(manifest.apkUrl, 'Supabase');
     return manifest;
   }
@@ -383,28 +361,10 @@ class UpdateRepository {
   }
 }
 
-class _SourceResult {
-  const _SourceResult.ok(this.manifest) : error = null;
-  const _SourceResult.failed(this.error) : manifest = null;
-
-  final UpdateManifest? manifest;
-  final String? error;
-
-  bool get ok => error == null;
-}
-
 class _GithubOutcome {
-  const _GithubOutcome({
-    this.manifest,
-    this.etag,
-    this.notModified = false,
-    this.error,
-  });
+  const _GithubOutcome({this.manifest, this.etag, this.notModified = false});
 
   final UpdateManifest? manifest;
   final String? etag;
   final bool notModified;
-  final String? error;
-
-  bool get ok => error == null;
 }

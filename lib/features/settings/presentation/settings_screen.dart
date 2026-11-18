@@ -7,6 +7,7 @@ import '../../../core/device/alarm_settings.dart';
 import '../../../core/device/battery_optimization.dart';
 import '../../../core/device/exact_alarm_prompt.dart';
 
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_info.dart';
@@ -233,6 +234,17 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 onTap: () => _openDeveloper(context),
               ),
+              Divider(height: 1, color: palette.line),
+              _SettingsActionRow(
+                title: l10n.settingsShare,
+                icon: Icons.share_rounded,
+                trailing: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 20,
+                  color: palette.mute,
+                ),
+                onTap: () => _shareApp(context),
+              ),
             ],
           ),
         ),
@@ -256,6 +268,23 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (_) => const _DeveloperModalContent(),
     );
+  }
+
+  /// Hands the pre-formatted invitation to the system share sheet.
+  ///
+  /// The text lives in the ARB, so the message is translated with the rest of
+  /// the UI and the direct-download URL is never assembled in two places.
+  Future<void> _shareApp(BuildContext context) async {
+    final String message = context.l10n.settingsShareMessage;
+    final String subject = context.l10n.settingsShare;
+    try {
+      await Share.share(message, subject: subject);
+    } catch (_) {
+      // A device with no share target at all is rare, but a silent no-op is
+      // worse than saying so.
+      if (!context.mounted) return;
+      showKToast(context, 'تعذّر فتح نافذة المشاركة.', kind: KToastKind.error);
+    }
   }
 }
 

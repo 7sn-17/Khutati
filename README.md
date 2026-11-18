@@ -80,7 +80,7 @@ supabase/     SQL migrations (sync tables, update manifest)
 design/       tokens.json + HTML reference screens
 tools/        Node guards for tokens, dataset, version, launcher icons
 docs/         focused notes: date resolution, updates, APK size, signing
-test/         126 tests (domain, data, design parity, updates, launch, widgets)
+test/         130 tests (domain, data, design parity, updates, launch, widgets)
 ```
 
 ## 4. Design system
@@ -171,8 +171,9 @@ Create a project, then run both migrations in the SQL editor (or
 `supabase db push` with the CLI):
 
 ```
-supabase/migrations/202611170001_app_updates.sql   -- public update manifest
+supabase/migrations/202611170001_app_updates.sql   -- legacy update manifest (superseded)
 supabase/migrations/202611180001_sync_tables.sql   -- user_task_states, user_step_states, focus_sessions + RLS
+supabase/migrations/202611190001_app_versions.sql  -- public release history (update waterfall)
 ```
 
 Both are idempotent. After applying, confirm RLS is enabled on all three sync
@@ -216,16 +217,19 @@ production.
 
 ### 6.4 Update manifest
 
-`app_updates` is read with the anon key and is public by design. Add a row per
-release, or let the GitHub fallback handle it:
+`app_versions` is the last step of the update waterfall and is read with the
+anon key (public by design). CI upserts a row on every release, so the table
+normally needs no manual work; to publish one by hand:
 
 ```sql
-insert into public.app_updates
-  (platform, channel, version_name, version_code, apk_url, notes, published_at)
+insert into public.app_versions (version, download_url, release_notes)
 values
-  ('android', 'stable', '0.8.1', 31,
-   'https://github.com/7sn-17/Khutati/releases/download/v0.8.1/Khutati.apk',
-   'إصلاحات وتحسينات…', now());
+  ('0.8.7+37',
+   'https://github.com/7sn-17/Khutati/releases/latest/download/Khutati.apk',
+   'إصلاحات وتحسينات…')
+on conflict (version) do update
+  set download_url = excluded.download_url,
+      release_notes = excluded.release_notes;
 ```
 
 The client queries the newest row, races it against the GitHub Releases API and

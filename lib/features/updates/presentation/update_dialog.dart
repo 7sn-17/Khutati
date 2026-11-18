@@ -153,6 +153,11 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
           loading: _opening,
           onPressed: _opening ? null : () => unawaited(_open()),
         ),
+      ],
+      // The two ways out sit side by side under the update button: they are
+      // the same kind of decision, and stacking them made the dialog taller
+      // than the notes it was showing.
+      secondaryActions: <KDialogAction>[
         KDialogAction(
           label: l10n.updateLater,
           variant: KButtonVariant.secondary,
