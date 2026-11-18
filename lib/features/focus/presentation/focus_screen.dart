@@ -15,8 +15,10 @@ import '../../../core/device/exact_alarm_prompt.dart';
 import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
+import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
+import '../../../core/sound/sound_effects.dart';
 import '../../../l10n/l10n.dart';
 import '../application/focus_controller.dart';
 import '../../../data/database/app_database.dart';
@@ -526,9 +528,9 @@ class _FocusView extends ConsumerWidget {
           backgroundColor: palette.card,
           // 200 ms instead of the 250 ms default: the sheet is a read-only
           // list, so a longer entry animation only reads as latency.
-          sheetAnimationStyle: const AnimationStyle(
-            duration: Duration(milliseconds: 200),
-            reverseDuration: Duration(milliseconds: 150),
+          sheetAnimationStyle: AnimationStyle(
+            duration: const Duration(milliseconds: 200),
+            reverseDuration: const Duration(milliseconds: 150),
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -683,6 +685,7 @@ class _FocusView extends ConsumerWidget {
             icon: Icons.stop_rounded,
             iconColor: palette.tx,
             onTap: onEnd,
+            sound: KSound.timer,
           ),
         ),
         const SizedBox(width: 28),
@@ -695,6 +698,7 @@ class _FocusView extends ConsumerWidget {
             icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
             iconColor: Colors.white,
             onTap: onGo,
+            sound: KSound.timer,
           ),
         ),
         if (!hideSkip) ...<Widget>[
@@ -1465,6 +1469,7 @@ class _CircleButton extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.onTap,
+    this.sound = KSound.tap,
   });
 
   final double size;
@@ -1474,19 +1479,25 @@ class _CircleButton extends StatelessWidget {
   final Color iconColor;
   final VoidCallback onTap;
 
+  /// The two timer controls use [KSound.timer]; skip keeps the plain click.
+  final KSound sound;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-          border: Border.all(color: borderColor),
+    return PressScale(
+      scale: 0.94,
+      duration: const Duration(milliseconds: 100),
+      releaseDuration: const Duration(milliseconds: 140),
+      child: KInkSurface(
+        onTap: onTap,
+        shape: CircleBorder(side: BorderSide(color: borderColor)),
+        color: color,
+        sound: sound,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, size: size * 0.42, color: iconColor),
         ),
-        child: Icon(icon, size: size * 0.42, color: iconColor),
       ),
     );
   }
@@ -1509,7 +1520,12 @@ class _SegButton extends StatelessWidget {
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                SoundEffects.toggle();
+                onTap!();
+              },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           constraints: const BoxConstraints(minHeight: 44),
@@ -1542,19 +1558,25 @@ class _FsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          color: palette.card,
-          border: Border.all(color: palette.line),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Icon(
-          immersive ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
-          color: palette.tx,
+    return PressScale(
+      scale: 0.94,
+      duration: const Duration(milliseconds: 100),
+      releaseDuration: const Duration(milliseconds: 140),
+      child: KInkSurface(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        color: palette.card,
+        border: BorderSide(color: palette.line),
+        sound: KSound.tap,
+        child: SizedBox(
+          width: 52,
+          height: 52,
+          child: Icon(
+            immersive
+                ? Icons.fullscreen_exit_rounded
+                : Icons.fullscreen_rounded,
+            color: palette.tx,
+          ),
         ),
       ),
     );

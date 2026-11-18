@@ -410,17 +410,42 @@ path alone still works, which is why local builds update correctly.
 
 ---
 
-## 9. Audio and motion
+## 9. Audio, motion and touch
 
-- `SoundEffects` (two `AudioPlayer`s, `PlayerMode.lowLatency`): click on
-  `KButton`/`KChip` press, success chime when a step reaches 100%. Both are
-  gated by `soundEffectsEnabledProvider` and by `_ready`, so a device without an
-  audio sink degrades silently instead of throwing.
-- Motion primitives live in `core/motion`: press scale (0.97), shared durations
-  (240 ms dialogs, 360 ms theme cross-fade, 400 ms auth entry), and haptics.
-- Route transitions: `authEntryPage` = fade + scale 0.95→1.0 over 400 ms (used
-  only for `/today`, i.e. the post-login landing); `khutatiPage` = fade + 2% slide
-  for secondary routes.
+**Sounds.** `SoundEffects` owns one pre-loaded `AudioPlayer` per entry in the
+`KSound` enum (`PlayerMode.lowLatency`, `ReleaseMode.stop`, per-sound volume
+0.32–0.40). Preparation is shared through a single future, so the startup call
+in `main.dart` and the settings provider never configure the same player twice.
+
+| `KSound` | Asset | Length | Used by |
+|---|---|---|---|
+| `tap` | `sounds/click.wav` | 45 ms | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
+| `toggle` | `sounds/toggle.wav` | 60 ms | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
+| `success` | `sounds/success.wav` | 0.9 s | A step reaching 100%, a focus session completing |
+| `timer` | `sounds/timer.wav` | 220 ms | Focus start/pause and end |
+
+The sound fires inside `InkWell.onTap`, never on press-down, so a scroll that
+starts on a button stays silent. `SoundEffects.enabled` gates every call, which
+is what the settings switch flips — muting is instant and total.
+
+**Touch.** `core/design/widgets/pressable.dart` is the one tactile layer:
+
+- `KInkSurface` = `RepaintBoundary` → `Material` (fill + shape + `Clip.antiAlias`)
+  → `InkWell` (splash, sound). Its key property is *placement*: when a widget
+  animates its own background (chips, cards, nav items), the ink surface goes
+  **inside** the decorated container. A splash painted on an ancestor `Material`
+  would sit underneath that fill and be invisible.
+- `KPressable` = `Semantics(button)` → `PressScale(0.96, 100 ms down / 140 ms
+  release)` → `KInkSurface`. It owns its colour, so it is used where there is no
+  parent decoration (`KButton`).
+- Full-width `KCard`s squish to 0.98 instead of 0.96: four percent on a card the
+  width of the screen reads as a layout jump, not a press.
+
+**Motion.** Primitives live in `core/motion`: `PressScale`, shared durations
+(240 ms dialogs, 360 ms theme cross-fade, 400 ms auth entry), and haptics.
+Route transitions: `authEntryPage` = fade + scale 0.95→1.0 over 400 ms (used
+only for `/today`, i.e. the post-login landing); `khutatiPage` = fade + 2% slide
+for secondary routes.
 
 ---
 

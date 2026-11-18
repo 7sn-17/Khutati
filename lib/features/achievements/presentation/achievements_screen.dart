@@ -1104,9 +1104,9 @@ void _openBadgeSheet(BuildContext context, BadgeInfo badge) {
     enableDrag: true,
     showDragHandle: true,
     backgroundColor: Colors.transparent,
-    sheetAnimationStyle: const AnimationStyle(
-      duration: Duration(milliseconds: 200),
-      reverseDuration: Duration(milliseconds: 150),
+    sheetAnimationStyle: AnimationStyle(
+      duration: const Duration(milliseconds: 200),
+      reverseDuration: const Duration(milliseconds: 150),
     ),
     builder: (BuildContext sheetContext) {
       final KhutatiPalette palette = sheetContext.palette;

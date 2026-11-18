@@ -45,7 +45,7 @@ The app has five tabs in a persistent shell: **اليوم (Today)**, **الخط�
 | Auth | `google_sign_in 7.1.1` + `google_sign_in_android 7.0.3` | Credential Manager, **pinned** — see §8 |
 | Native | Kotlin | Foreground service + `AlarmManager` exact alarms |
 | Notifications | `flutter_local_notifications ^18.0.1` | Four channels, owned by one file |
-| Audio | `audioplayers ^6.6.0` | Two bundled WAVs, low-latency mode |
+| Audio | `audioplayers ^6.6.0` | Four bundled WAVs, pre-loaded in low-latency mode |
 | Motion | `flutter_animate ^4.5.2`, custom `AnimationController`s | |
 | Icons | `flutter_svg ^2.0.17` | Paths are parity-tested against the prototype |
 | l10n | `flutter gen-l10n`, `lib/l10n/app_ar.arb` | Arabic only, synthetic package disabled |
@@ -109,7 +109,7 @@ logic belongs in a repository instead.
    so there is no theme flash.
 4. `FocusNotifications.init(...)` with the four real preferences — channels whose
    toggle is OFF are **deleted** here, so an off switch is never cosmetic.
-5. `SoundEffects.init(enabled:)` — preloads both players.
+5. `SoundEffects.init(enabled:)` — preloads the four UI players.
 6. `SupabaseAuth.initialize()` inside `try/catch` — a build without credentials
    must still render; the login button then reports that sign-in is unconfigured.
 7. `bootstrapDatabase()` — opens SQLite and runs the idempotent import.
@@ -222,9 +222,10 @@ The dialog is a `KDialog`, never a Material alert.
 `tools/extract_tokens.mjs`, and `lib/core/design/tokens.dart` is generated from
 that. Widgets: `KButton`, `KChip`, `KCard`, `KPill`, `KTag`, `KSectionHeader`,
 `KBreakDivider`, `KProgressBar`, `KProgressRing`, `KEcgLine`, `KConfetti`,
-`KBrandMark`, `KDialog`/`showKDialog`, `showKToast`, plus `KhutatiPalette` for
-colours. Motion primitives live in `core/motion` (press scale, haptics, shared
-durations).
+`KBrandMark`, `KDialog`/`showKDialog`, `showKToast`, `KPressable`/`KInkSurface`
+(the tactile layer), plus `KhutatiPalette` for colours. Motion primitives live in
+`core/motion` (press scale, haptics, shared durations). Sounds live in
+`core/sound` — four pre-loaded `KSound` entries.
 
 ### 5.11 Settings
 
@@ -263,36 +264,46 @@ with a `KButton`, not an unlabeled icon.
    `await` inside `builder`. If a dialog needs fresh data, show it immediately
    with a loading state and let a provider fill it in.
 
-4. **Google nonce is handled server-side.**
+4. **Every tappable surface goes through the tactile layer.**
+   `core/design/widgets/pressable.dart` is the only place a press is defined:
+   `KPressable` when the surface owns its colour (`KButton`), `KInkSurface`
+   *inside* a decorated container when the background animates (`KChip`, `KCard`
+   with `onTap`, nav items). Never add a bare `GestureDetector` to something that
+   should feel pressable, and never put the ink surface *outside* the fill — the
+   splash would be painted underneath it and be invisible. Sounds fire on
+   `onTap`, not on press-down, and `SoundEffects.enabled` (the settings switch)
+   gates all of them.
+
+5. **Google nonce is handled server-side.**
    The native Credential Manager does not mint a nonce, so the Supabase Google
    provider must have **"Skip nonce check"** enabled
    (`external_google_skip_nonce_check = true`). This is a dashboard/server
    setting, not a Dart parameter. Never add a fake nonce to the client, and never
    disable the check by weakening anything else.
 
-5. **Secrets never enter git.**
+6. **Secrets never enter git.**
    The anon key is public-by-design but still injected at build time through
    `--dart-define`. The service-role key must never ship in the app. Signing
    material lives only in GitHub secrets (`README.md` §4 lists the names).
 
-6. **Drift generated code is not committed.**
+7. **Drift generated code is not committed.**
    `*.g.dart` is git-ignored and produced by
    `dart run build_runner build --delete-conflicting-outputs` (CI does this).
    Never hand-edit generated files; never reference a table class by guesswork —
    check `@DataClassName` in `lib/data/database/tables.dart` first.
 
-7. **Channel and notification ids are permanent.**
+8. **Channel and notification ids are permanent.**
    Android fixes a channel's importance the first time it is created. To change
    importance, bump the id suffix (`..._v2`) — do not edit the existing one. When
    cancelling, remember the timer channel owns **two** ids (1001 focus, 1002
    break); reminder channels own one.
 
-8. **Arabic and RTL are not optional.**
+9. **Arabic and RTL are not optional.**
    All user-facing strings are Arabic. Use `context.l10n` for shared strings and
    Arabic literals for one-off copy. Use `core/utils/format.dart` for Arabic-Indic
    digits and dates; do not call `intl` directly in a screen.
 
-9. **Track work in `bd`, not in markdown.**
+10. **Track work in `bd`, not in markdown.**
    See §9. Do not create TODO lists in files or use TodoWrite-style trackers.
 
 ---

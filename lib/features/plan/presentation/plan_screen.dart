@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
+import '../../../core/sound/sound_effects.dart';
 import '../../../core/utils/format.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_task.dart';
@@ -571,9 +572,10 @@ class _WeekChip extends StatelessWidget {
       button: true,
       selected: selected,
       label: l10n.planWeek(week.number),
-      child: InkWell(
+      child: KInkSurface(
         onTap: onTap,
         borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+        sound: KSound.toggle,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,

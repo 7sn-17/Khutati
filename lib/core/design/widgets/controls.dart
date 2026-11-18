@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../motion/press_scale.dart';
 import '../../sound/sound_effects.dart';
 import '../palette.dart';
 import '../tokens.dart';
+import 'pressable.dart';
 
 /// `.chip` — a step toggle. Two-line: bold title over a muted time range.
 ///
@@ -58,33 +60,34 @@ class KChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap == null
-              ? null
-              : () {
-                  SoundEffects.click();
-                  onTap!();
-                },
-          borderRadius: BorderRadius.circular(KMetrics.chipRadius),
-          child: AnimatedContainer(
-            duration: Duration(milliseconds: KMotion.navMs),
-            curve: Curves.easeOut,
-            constraints: const BoxConstraints(minHeight: KMetrics.chipMinHeight),
+      child: PressScale(
+        scale: 0.96,
+        enabled: onTap != null,
+        duration: const Duration(milliseconds: 100),
+        releaseDuration: const Duration(milliseconds: 140),
+        child: AnimatedContainer(
+          duration: Duration(milliseconds: KMotion.navMs),
+          curve: Curves.easeOut,
+          constraints: const BoxConstraints(minHeight: KMetrics.chipMinHeight),
+          decoration: BoxDecoration(
+            color: selected ? palette.ok : palette.card,
+            borderRadius: BorderRadius.circular(KMetrics.chipRadius),
+            border: Border.all(
+              color: borderColor,
+              width: selected ? 1.0 : 0.75,
+            ),
+            boxShadow: shadow,
+          ),
+          // The ink surface sits *inside* the decoration so the splash paints
+          // above the chip's fill instead of being hidden by it.
+          child: KInkSurface(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(KMetrics.chipRadius),
             padding: const EdgeInsets.symmetric(
               horizontal: KMetrics.chipPaddingX,
               vertical: KMetrics.chipPaddingY,
             ),
-            decoration: BoxDecoration(
-              color: selected ? palette.ok : palette.card,
-              borderRadius: BorderRadius.circular(KMetrics.chipRadius),
-              border: Border.all(
-                color: borderColor,
-                width: selected ? 1.0 : 0.75,
-              ),
-              boxShadow: shadow,
-            ),
+            sound: KSound.toggle,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -133,9 +136,7 @@ class KChip extends StatelessWidget {
                         backgroundColor: selected
                             ? KColors.dark.bg.withOpacity(0.3)
                             : palette.line,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          accentColor,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                       ),
                     ),
                   ),
@@ -159,6 +160,7 @@ class KButton extends StatelessWidget {
     this.expand = false,
     this.loading = false,
     this.icon,
+    this.sound = KSound.tap,
     super.key,
   });
 
@@ -172,6 +174,9 @@ class KButton extends StatelessWidget {
   final bool loading;
 
   final IconData? icon;
+
+  /// Override for buttons that start or stop the timer.
+  final KSound sound;
 
   @override
   Widget build(BuildContext context) {
@@ -217,34 +222,20 @@ class KButton extends StatelessWidget {
             ),
     );
 
-    return Semantics(
-      button: true,
-      enabled: onPressed != null && !loading,
-      child: InkWell(
-        onTap: loading || onPressed == null
-            ? null
-            : () {
-                SoundEffects.click();
-                onPressed!();
-              },
-        borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          constraints: const BoxConstraints(minHeight: KMetrics.buttonMinHeight),
-          padding: EdgeInsets.symmetric(
-            horizontal: primary ? KMetrics.buttonPaddingX : 18,
-            vertical: KMetrics.buttonPaddingY,
-          ),
-          decoration: BoxDecoration(
-            color: primary ? palette.red : Colors.transparent,
-            borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
-            border: primary ? null : Border.all(color: palette.line),
-          ),
-          alignment: Alignment.center,
-          width: expand ? double.infinity : null,
-          child: content,
-        ),
+    return KPressable(
+      onTap: onPressed,
+      enabled: !loading && onPressed != null,
+      borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+      color: primary ? palette.red : Colors.transparent,
+      border: primary ? null : BorderSide(color: palette.line),
+      padding: EdgeInsets.symmetric(
+        horizontal: primary ? KMetrics.buttonPaddingX : 18,
+        vertical: KMetrics.buttonPaddingY,
       ),
+      minHeight: KMetrics.buttonMinHeight,
+      expand: expand,
+      sound: sound,
+      child: content,
     );
   }
 }

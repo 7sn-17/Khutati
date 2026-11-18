@@ -783,7 +783,16 @@ class _SettingsSwitchRow extends StatelessWidget {
               ),
             ),
           ),
-          Switch(value: value, onChanged: onChanged, activeColor: palette.ok),
+          Switch(
+            value: value,
+            activeColor: palette.ok,
+            // Played after the change so the mute switch itself stays silent
+            // when it turns sound off, and ticks when it turns sound back on.
+            onChanged: (bool next) {
+              onChanged(next);
+              SoundEffects.toggle();
+            },
+          ),
         ],
       ),
     );

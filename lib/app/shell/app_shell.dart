@@ -9,8 +9,10 @@ import '../../features/focus/application/focus_controller.dart'
     show focusImmersiveProvider;
 import '../../core/design/palette.dart';
 import '../../core/design/tokens.dart';
+import '../../core/design/widgets/pressable.dart';
 import '../../core/motion/haptics.dart';
 import '../../core/motion/press_scale.dart';
+import '../../core/sound/sound_effects.dart';
 import '../../core/typography/khutati_fonts.dart';
 import '../../l10n/l10n.dart';
 
@@ -222,9 +224,16 @@ class _NavButton extends StatelessWidget {
       button: true,
       label: item.label,
       child: PressScale(
-        child: InkWell(
+        scale: 0.96,
+        duration: const Duration(milliseconds: 100),
+        releaseDuration: const Duration(milliseconds: 140),
+        // The bar's fill lives on a Container above the BackdropFilter, so an
+        // InkWell that looks up to the Scaffold's Material would paint its
+        // splash *underneath* the blur. The local Material keeps it on top.
+        child: KInkSurface(
           onTap: onTap,
           borderRadius: BorderRadius.circular(KMetrics.navItemRadius),
+          sound: KSound.tap,
           child: AnimatedContainer(
             duration: duration,
             curve: Curves.easeOut,

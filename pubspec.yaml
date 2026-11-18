@@ -66,7 +66,7 @@ flutter:
     - khutati_plan_data.json
     # Official launcher icon, shown in the About modal.
     - assets/app_icon.png
-    # UI sounds (soft tap + completion chime).
+    # UI sounds: tap, toggle, success and timer (pre-loaded, low latency).
     - assets/sounds/
 
   # Declared fonts are registered before the first frame, so the Arabic faces

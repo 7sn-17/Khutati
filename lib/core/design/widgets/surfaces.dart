@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../svg_path.dart';
+import '../../motion/press_scale.dart';
+import '../../sound/sound_effects.dart';
 import '../palette.dart';
+import '../svg_path.dart';
 import '../tokens.dart';
+import 'pressable.dart';
 
 /// A soft lift for light mode, where warm cards sit on a warm page and need a
 /// shadow to read as separate surfaces. Dark mode stays flat: the navy cards
@@ -31,6 +34,9 @@ class KCard extends StatelessWidget {
     this.accentColor,
     this.showPattern = true,
     this.borderColor,
+    this.onTap,
+    this.sound = KSound.tap,
+    this.pressScale = 0.98,
     super.key,
   });
 
@@ -41,43 +47,73 @@ class KCard extends StatelessWidget {
   final bool showPattern;
   final Color? borderColor;
 
+  /// Makes the whole card a button: clipped ripple, press squish and a sound.
+  /// Leave null for cards that only display information.
+  final VoidCallback? onTap;
+
+  /// Played on a completed tap, never on press-down.
+  final KSound sound;
+
+  /// Full-width cards squish less than a chip or a button; 0.96 on a card that
+  /// spans the screen reads as a layout jump rather than a press.
+  final double pressScale;
+
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
     final double r = radius ?? KMetrics.cardRadius;
     final BorderRadius borderRadius = BorderRadius.circular(r);
 
-    return Container(
+    Widget body = Stack(
+      children: <Widget>[
+        if (showPattern)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: HexagonPatternPainter()),
+            ),
+          ),
+        Padding(padding: padding, child: child),
+        if (accentColor != null)
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: KMetrics.timelineAccentWidth,
+              color: accentColor,
+            ),
+          ),
+      ],
+    );
+
+    // The ink surface goes *inside* the clipped stack so the splash paints
+    // above the card fill instead of being hidden underneath it.
+    if (onTap != null) {
+      body = KInkSurface(
+        onTap: onTap,
+        borderRadius: borderRadius,
+        sound: sound,
+        child: body,
+      );
+    }
+
+    final Widget card = Container(
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: borderRadius,
         border: Border.all(color: borderColor ?? palette.line),
         boxShadow: kCardShadow(context),
       ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: Stack(
-          children: <Widget>[
-            if (showPattern)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(painter: HexagonPatternPainter()),
-                ),
-              ),
-            Padding(padding: padding, child: child),
-            if (accentColor != null)
-              PositionedDirectional(
-                start: 0,
-                top: 0,
-                bottom: 0,
-                child: Container(
-                  width: KMetrics.timelineAccentWidth,
-                  color: accentColor,
-                ),
-              ),
-          ],
-        ),
-      ),
+      child: ClipRRect(borderRadius: borderRadius, child: body),
+    );
+
+    if (onTap == null) return card;
+
+    return PressScale(
+      scale: pressScale,
+      duration: const Duration(milliseconds: 100),
+      releaseDuration: const Duration(milliseconds: 140),
+      child: card,
     );
   }
 }

@@ -5,16 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/theme_mode_controller.dart' show sharedPreferencesProvider;
 
-/// Whether Khutati is allowed to play its two UI sounds.
-final NotifierProvider<SoundEffectsController, bool> soundEffectsEnabledProvider =
-    NotifierProvider<SoundEffectsController, bool>(SoundEffectsController.new);
+/// Whether Khutati is allowed to play its UI sounds.
+final NotifierProvider<SoundEffectsController, bool>
+soundEffectsEnabledProvider = NotifierProvider<SoundEffectsController, bool>(
+  SoundEffectsController.new,
+);
 
 class SoundEffectsController extends Notifier<bool> {
   @override
   bool build() {
-    final bool enabled = ref
-        .watch(sharedPreferencesProvider)
-        .getBool(SoundEffects.storageKey) ??
+    final bool enabled =
+        ref.watch(sharedPreferencesProvider).getBool(SoundEffects.storageKey) ??
         true;
     SoundEffects.enabled = enabled;
     unawaited(SoundEffects.prepare());
@@ -27,53 +28,86 @@ class SoundEffectsController extends Notifier<bool> {
     await ref
         .read(sharedPreferencesProvider)
         .setBool(SoundEffects.storageKey, value);
-    if (value) SoundEffects.click();
   }
 }
 
-/// Two tiny, bundled sounds: a soft tap and a short completion chime.
+/// The four UI sounds, each with its own pre-loaded player.
+enum KSound {
+  /// Soft wooden click: buttons, list rows, modal actions.
+  tap('sounds/click.wav', 0.38),
+
+  /// Short "tock": switches and the 4-tap step cycle.
+  toggle('sounds/toggle.wav', 0.40),
+
+  /// Gentle chime: a step or a focus session is completed.
+  success('sounds/success.wav', 0.34),
+
+  /// Soft whoosh: starting or stopping a focus session.
+  timer('sounds/timer.wav', 0.32);
+
+  const KSound(this.asset, this.volume);
+
+  final String asset;
+  final double volume;
+}
+
+/// Small, bundled sounds played through one pre-loaded player each.
 ///
-/// They are preloaded once so a button press starts the sample immediately;
-/// no network, no platform music player, no permission.
+/// All four are prepared once at startup so a tap never waits on decoding; the
+/// files are mastered quietly (peak around -10 dBFS) and the player volume is
+/// kept low, so the result is a texture rather than a noise.
 abstract final class SoundEffects {
   static const String storageKey = 'sound_effects_enabled';
 
   static bool enabled = true;
-  static final AudioPlayer _click = AudioPlayer();
-  static final AudioPlayer _success = AudioPlayer();
-  static bool _ready = false;
+
+  static final Map<KSound, AudioPlayer> _players = <KSound, AudioPlayer>{};
+  static final Set<KSound> _ready = <KSound>{};
+
+  /// Startup and the settings provider both ask for preparation; sharing one
+  /// future stops them from configuring the same player concurrently.
+  static Future<void>? _preparing;
 
   static Future<void> init({required bool enabled}) async {
     SoundEffects.enabled = enabled;
     await prepare();
   }
 
-  static Future<void> prepare() async {
-    if (_ready) return;
-    try {
-      await _click.setPlayerMode(PlayerMode.lowLatency);
-      await _click.setReleaseMode(ReleaseMode.stop);
-      await _click.setVolume(0.42);
-      await _click.setSource(AssetSource('sounds/click.wav'));
+  static Future<void> prepare() => _preparing ??= _prepareAll();
 
-      await _success.setReleaseMode(ReleaseMode.stop);
-      await _success.setVolume(0.34);
-      await _success.setSource(AssetSource('sounds/success.wav'));
-      _ready = true;
-    } catch (_) {
-      // A device without an audio sink must never break a tap.
+  static Future<void> _prepareAll() async {
+    for (final KSound sound in KSound.values) {
+      if (_ready.contains(sound)) continue;
+      final AudioPlayer player = _players[sound] ?? AudioPlayer();
+      _players[sound] = player;
+      try {
+        // Low-latency mode uses Android's SoundPool: the sample is decoded once
+        // and replayed without touching the media pipeline.
+        await player.setPlayerMode(PlayerMode.lowLatency);
+        await player.setReleaseMode(ReleaseMode.stop);
+        await player.setVolume(sound.volume);
+        await player.setSource(AssetSource(sound.asset));
+        _ready.add(sound);
+      } catch (_) {
+        // A device without an audio sink must never break a tap.
+      }
     }
   }
 
-  static void click() {
-    if (!enabled || !_ready) return;
-    unawaited(_replay(_click));
+  static void play(KSound sound) {
+    if (!enabled || !_ready.contains(sound)) return;
+    final AudioPlayer? player = _players[sound];
+    if (player == null) return;
+    unawaited(_replay(player));
   }
 
-  static void success() {
-    if (!enabled || !_ready) return;
-    unawaited(_replay(_success));
-  }
+  static void tap() => play(KSound.tap);
+
+  static void toggle() => play(KSound.toggle);
+
+  static void success() => play(KSound.success);
+
+  static void timer() => play(KSound.timer);
 
   static Future<void> _replay(AudioPlayer player) async {
     try {
@@ -85,7 +119,11 @@ abstract final class SoundEffects {
   }
 
   static Future<void> dispose() async {
-    await _click.dispose();
-    await _success.dispose();
+    for (final AudioPlayer player in _players.values) {
+      await player.dispose();
+    }
+    _players.clear();
+    _ready.clear();
+    _preparing = null;
   }
 }

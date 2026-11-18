@@ -643,7 +643,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
             Material(
               type: MaterialType.transparency,
               child: InkWell(
-                onTap: () => setState(() => _expanded = !_expanded),
+                onTap: () {
+                  SoundEffects.tap();
+                  setState(() => _expanded = !_expanded);
+                },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(

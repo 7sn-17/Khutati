@@ -104,6 +104,7 @@ interpretation. Tokens are generated, never typed by hand:
 | `showKToast` / `KConfetti` | `#toast` / `.cf` — inverted capsule, 26-piece burst |
 | `KBrandMark` | Telegram/WhatsApp marks from Simple Icons, in the About modal |
 | `KDialog` | modal surface — tinted scrim, 28px radius, `KButton` actions |
+| `KPressable` / `KInkSurface` | the tactile layer — 0.96 squish, clipped ripple, sound on tap |
 
 `/gallery` renders all of them against the live theme (opened from Today in debug
 builds). Tests compare the ECG path, ring geometry, hexagon tile and navigation
