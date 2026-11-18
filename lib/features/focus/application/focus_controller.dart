@@ -3,9 +3,11 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
 import '../../../data/database/app_database.dart';
@@ -614,6 +616,7 @@ class FocusController extends Notifier<FocusSessionState> {
   Future<void> _onTimerComplete() async {
     if (state.mode == FocusMode.free) return;
     if (_busy || !state.isRunning) return;
+    await _notifyTimerComplete(state.phase);
     _busy = true;
     try {
       _ticker?.cancel();
@@ -736,7 +739,10 @@ class FocusController extends Notifier<FocusSessionState> {
       return;
     }
     final bool nativePaused = native['paused'] == true;
-    final int nativeMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+    final int targetEndMs = (native['targetEndMs'] as num?)?.toInt() ?? 0;
+    final int nativeMs = targetEndMs > 0
+        ? (targetEndMs - DateTime.now().millisecondsSinceEpoch)
+        : ((native['remainingMs'] as num?)?.toInt() ?? 0);
     final int nativeSeconds = (nativeMs / 1000).ceil();
 
     // Service is gone / finished → end the step.
@@ -931,6 +937,35 @@ class FocusController extends Notifier<FocusSessionState> {
           .read(userStateRepositoryProvider)
           .setTaskStatus(taskId, 'in_progress');
     } catch (_) {}
+  }
+
+  Future<void> _notifyTimerComplete(FocusPhase phase) async {
+    try {
+      final bool enabled =
+          ref.read(notificationPrefsProvider).timer;
+      if (!enabled) return;
+      final FlutterLocalNotificationsPlugin plugin =
+          FlutterLocalNotificationsPlugin();
+      const AndroidNotificationDetails android = AndroidNotificationDetails(
+        'khutati_timer',
+        'مؤقت التركيز',
+        channelDescription: 'تنبيهات انتهاء جلسات التركيز',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      );
+      const NotificationDetails details = NotificationDetails(android: android);
+      final String title = phase == FocusPhase.breakTime
+          ? 'انتهت الاستراحة'
+          : 'انتهى وقت التركيز';
+      final String body = phase == FocusPhase.breakTime
+          ? 'وقت العودة للدراسة.'
+          : 'أحسنت! أكملت جلسة التركيز.';
+      await plugin.show(1001, title, body, details);
+    } catch (_) {
+      // Notifications are best-effort.
+    }
   }
 
   Future<void> _recordSession({

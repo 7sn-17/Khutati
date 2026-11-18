@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,7 +52,7 @@ class _AchievementsBodyState extends State<_AchievementsBody> {
     final AchievementsData d = widget.data;
     final KhutatiPalette palette = context.palette;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -85,12 +86,14 @@ class _HeroSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1A2D),
-        borderRadius: BorderRadius.circular(28),
-      ),
-      padding: const EdgeInsets.all(20),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: Stack(
+        children: <Widget>[
+          const Positioned.fill(child: _HexagonPattern()),
+          Container(
+            decoration: const BoxDecoration(color: Color(0xFF0D1A2D)),
+            padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -271,6 +274,9 @@ class _HeroSection extends StatelessWidget {
             ),
           ],
         ],
+      ),
+          ],
+        ),
       ),
     );
   }
@@ -1033,4 +1039,49 @@ class _BadgePainter extends CustomPainter {
   bool shouldRepaint(covariant _BadgePainter oldDelegate) {
     return oldDelegate.tier != tier || oldDelegate.icon != icon;
   }
+}
+
+class _HexagonPattern extends StatelessWidget {
+  const _HexagonPattern();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _HexagonPainter());
+  }
+}
+
+class _HexagonPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = const Color(0xFF93A1B8).withValues(alpha: 0.13)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    const double w = 56;
+    const double h = 96;
+    for (double y = -h; y < size.height + h; y += h) {
+      for (double x = -w; x < size.width + w; x += w) {
+        _drawHexagon(canvas, Offset(x, y), w / 2, paint);
+        _drawHexagon(canvas, Offset(x + w / 2, y + h / 2), w / 2, paint);
+      }
+    }
+  }
+
+  void _drawHexagon(Canvas canvas, Offset c, double r, Paint paint) {
+    final Path path = Path();
+    for (int i = 0; i < 6; i++) {
+      final double angle = (math.pi / 3) * i - math.pi / 2;
+      final Offset p = Offset(c.dx + r * math.cos(angle), c.dy + r * math.sin(angle));
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

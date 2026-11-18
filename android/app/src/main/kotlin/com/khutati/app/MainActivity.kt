@@ -2,6 +2,8 @@ package com.khutati.app
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.SharedPreferences
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
@@ -99,6 +101,25 @@ class MainActivity : FlutterActivity() {
                     }
                     "getState" -> {
                         result.success(FocusTimerService.persistedState(this))
+                    }
+                    "openBatterySettings" -> {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            try {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                }
+                                startActivity(intent)
+                                result.success(true)
+                            } catch (_: Exception) {
+                                result.success(false)
+                            }
+                        }
                     }
                     else -> result.notImplemented()
                 }

@@ -65,6 +65,7 @@ class FocusTimerService : Service() {
                 "remainingMs" to remaining,
                 "paused" to paused,
                 "phase" to (prefs.getString(KEY_PHASE, "focus") ?: "focus"),
+                "targetEndMs" to target,
             )
         }
 

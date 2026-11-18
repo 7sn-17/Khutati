@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>خطتي — إنجازاتي</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500&family=Reem+Kufi:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F1EDE4;--card:#FFFFFF;--card2:#F6F2EA;--line:#D9D2C3;--tx:#0D1A2D;--mute:#5B6A80;--ok:#1F7A5F;--gold:#9A6A12;--red:#B52A20;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0D1A2D;--card:#15263F;--card2:#1C3150;--line:#26395A;--tx:#EAE5DA;--mute:#93A1B8;--ok:#7CCBB0;--gold:#E8B65A;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0D1A2D;--card:#15263F;--card2:#1C3150;--line:#26395A;--tx:#EAE5DA;--mute:#93A1B8;--ok:#7CCBB0;--gold:#E8B65A;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;font-size:16px;line-height:1.6}
+button{font-family:inherit;font-size:14px;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+h1,h2,h3,.num{font-family:'Reem Kufi',sans-serif;margin:0}
+.wrap{max-width:440px;margin:0 auto;padding:16px 16px 120px;display:flex;flex-direction:column;gap:30px}
+.mute{color:var(--mute);font-size:14px;margin:0}
+h1{font-size:30px;padding:4px 4px 0}
+h2{font-size:21px}
+h3{font-size:18px}
+.sh{display:flex;flex-direction:column;gap:2px}
+
+/* البطاقة الرئيسية */
+.hero{position:relative;overflow:hidden;border-radius:28px;background:#0D1A2D;color:#EAE5DA;padding:22px 20px 18px;display:flex;flex-direction:column;gap:16px}
+.hero>.pat{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hero>*:not(.pat){position:relative}
+.hero .mute{color:#A9B6CB}
+.hg{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+.lab{display:block;font-size:14px;color:#A9B6CB}
+.big{font-size:60px;line-height:1.1}
+.chipx{display:inline-block;margin-top:6px;background:rgba(232,182,90,.16);color:#E8B65A;border-radius:999px;padding:2px 12px;font-size:13px}
+.wk h3{font-size:15px;font-family:'IBM Plex Sans Arabic',sans-serif;font-weight:500;margin-bottom:10px}
+.week{display:flex;justify-content:space-between;gap:4px}
+.week div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:#A9B6CB;flex:1}
+.week .tdy{color:#EAE5DA;font-weight:500}
+.dot{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #34496B;font-size:12px}
+.dot.done{background:#7CCBB0;border-color:#7CCBB0;color:#0D1A2D}
+.dot.rest{border-style:dashed}
+.dot.wait{border-color:#E8B65A}
+.dot.today{border-color:#EAE5DA;background:#1C3150}
+.lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:#A9B6CB;margin-top:10px}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #34496B;margin-inline-end:5px;vertical-align:-1px}
+.next{border-top:1px solid #26395A;padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.next .t{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.trk{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.hero .trk{background:#26395A}
+.trk i{display:block;height:100%;border-radius:4px;background:var(--gold)}
+.hero .trk i{background:#E8B65A}
+details{border-top:1px solid #26395A;padding-top:10px;font-size:14px}
+summary{cursor:pointer;color:#EAE5DA;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary .ch{display:flex;flex:none;width:28px;height:28px;border-radius:50%;background:rgba(234,229,218,.12);align-items:center;justify-content:center;transition:transform .2s}
+details[open] summary .ch{transform:rotate(180deg)}
+@media (prefers-reduced-motion:reduce){summary .ch{transition:none}}
+details ul{margin:6px 0 0;padding-inline-start:20px;color:#A9B6CB}
+details li{margin-bottom:4px}
+
+/* الأوسمة */
+.cats{display:flex;flex-direction:column;gap:12px}
+.cat{width:100%;text-align:start;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;display:grid;grid-template-columns:84px 1fr;gap:4px 14px;align-items:center}
+.cat .md{grid-row:1/3;width:84px}
+.cat svg.m{width:100%;height:auto;display:block}
+.cat .nm{display:flex;flex-direction:column;gap:0}
+.cat .lv{font-size:13px;color:var(--mute)}
+.cat .lv b{color:var(--tx);font-weight:500}
+.pg{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.pg .r{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.lad{grid-column:1/-1;display:flex;justify-content:space-between;margin-top:8px;padding-top:12px;border-top:1px solid var(--line)}
+.st{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.st small{font-size:11px;color:var(--mute)}
+.pip{width:30px;height:30px;border-radius:50%;border:2px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--mute)}
+.pip.e{border:2px solid var(--c);background:var(--l);color:#0D1A2D;font-weight:500}
+
+/* خريطة الأيام */
+.surf{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;min-width:0;overflow:hidden}
+.mh{display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px}
+.mg{display:grid;grid-template-columns:50px repeat(7,minmax(0,1fr));gap:5px;margin-top:14px;align-items:center}
+.mg .hd{font-size:11px;color:var(--mute);text-align:center}
+.mg .wl{font-size:11px;color:var(--mute);white-space:nowrap}
+.mg .cur{font-weight:500;color:var(--tx)}
+.cl{aspect-ratio:1;width:100%;min-width:0;border-radius:10px;border:1.5px solid var(--line);background:var(--card2);color:var(--mute);font-size:12px;padding:0}
+.cl.done{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.cl.wait{background:transparent;border:2px solid var(--gold);color:var(--tx)}
+.cl.today{background:var(--card);border:2.5px solid var(--tx);color:var(--tx);font-weight:500}
+.cl.rest{background:transparent;border:1.5px dashed var(--mute)}
+.cl.sel{outline:2px solid var(--gold);outline-offset:1px}
+.leg{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;font-size:12px;color:var(--mute)}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-inline-end:6px;vertical-align:-1px}
+.dd{margin-top:14px;background:var(--card2);border-radius:14px;padding:12px 14px;min-height:96px}
+.dd .ti{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dd .s3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.dd .s3 div{display:flex;flex-direction:column;font-size:12px;color:var(--mute)}
+.dd .s3 b{font-size:16px;color:var(--tx);font-weight:500}
+
+.hrs{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hrs .num{font-size:48px;line-height:1}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;background:var(--line);margin:14px 0 12px}
+.rw{display:flex;justify-content:space-between;font-size:14px;padding:3px 0}
+.rw i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:8px}
+.sub{display:flex;flex-direction:column;gap:14px}
+.sub .t{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.sub .tr{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.sub .tr i{display:block;height:100%;border-radius:4px}
+
+#sheet{position:fixed;inset:0;background:rgba(5,10,20,.6);display:none;align-items:flex-end;justify-content:center;z-index:9}
+#sheet.on{display:flex}
+.box{width:100%;max-width:440px;max-height:88dvh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:28px 28px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
+.box .m{width:110px}
+.box svg{width:100%;height:auto;display:block}
+.lvs{width:100%;display:flex;flex-direction:column;gap:2px;margin-top:8px;text-align:start}
+.lr{display:grid;grid-template-columns:30px 1fr auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.lr .a{font-size:14px}
+.lr .a span{display:block;font-size:12px;color:var(--mute)}
+.lr .z{font-size:12px;color:var(--mute)}
+.lr .z.ok{color:var(--ok);font-weight:500}
+.btn{margin-top:10px;width:100%;min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card2)}
+nav{position:fixed;inset-inline:0;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);margin:0 auto;width:min(calc(100% - 32px),440px);display:flex;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:30px;padding:6px;z-index:4}
+nav a{display:flex;flex-direction:column;align-items:center;gap:2px;width:20%;padding:8px 0;border-radius:24px;color:var(--mute);font-size:11px;text-decoration:none}
+nav a[aria-current]{background:var(--tx);color:var(--bg);font-weight:500}
+@media (min-width:760px){
+ .wrap{max-width:1000px;display:grid;grid-template-columns:1.1fr 1fr;gap:30px 36px;align-items:start;padding-bottom:48px}
+ h1,.hero{grid-column:1/-1}
+ .col{display:flex;flex-direction:column;gap:30px}
+ nav{display:none}
+}
+@media (max-width:759px){.col{display:contents}}
+</style>
+</head>
+<body>
+<main class="wrap">
+ <h1>إنجازاتي</h1>
+
+ <section class="hero" aria-label="النقاط والسلسلة">
+  <svg class="pat" aria-hidden="true"><defs><path id="hx" d="M28 0 56 16V48L28 64 0 48V16z"/><pattern id="pt" width="56" height="96" patternUnits="userSpaceOnUse"><g fill="none" stroke="#93A1B8" stroke-opacity=".13"><use href="#hx"/><use href="#hx" x="28" y="48"/><use href="#hx" x="-28" y="48"/><use href="#hx" x="28" y="-48"/><use href="#hx" x="-28" y="-48"/></g></pattern></defs><rect width="100%" height="100%" fill="url(#pt)"/></svg>
+  <div class="hg">
+   <div><span class="lab">إجمالي نقاطك</span><div class="num big" id="pts" style="color:#E8B65A"></div><span class="chipx" id="ptsToday"></span></div>
+   <div><span class="lab">سلسلتك</span><div class="num big" id="stk"></div><p class="mute" style="margin-top:6px">أيام متتالية من الإنجاز</p></div>
+  </div>
+  <div class="wk">
+   <h3>آخر 7 أيام</h3>
+   <div class="week" id="week"></div>
+   <div class="lg"><span><i style="background:#7CCBB0;border-color:#7CCBB0"></i>أنجزت يومك</span><span><i style="border-style:dashed"></i>يوم راحة</span><span><i style="border-color:#E8B65A"></i>مهام تنتظرك</span></div>
+  </div>
+  <div class="next" id="next"></div>
+  <details><summary><span>كيف تُحسب النقاط والسلسلة؟</span><span class="ch" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary><ul><li>كل فيديو تكمله يمنحك 10 نقاط، وحل أسئلة الفصل يمنحك 20 نقطة.</li><li>السلسلة هي عدد الأيام المتتالية التي أنجزت فيها مهامك. يوم الراحة المجدول لا يقطعها.</li><li>إن فاتك يوم تبدأ سلسلة جديدة، ولا تفقد نقاطك ولا أوسمتك.</li></ul></details>
+ </section>
+
+ <div class="col">
+  <section style="display:flex;flex-direction:column;gap:14px">
+   <div class="sh"><h2>الأوسمة</h2><p class="mute" id="bsub"></p></div>
+   <div class="cats" id="cats"></div>
+  </section>
+ </div>
+
+ <div class="col">
+  <section style="display:flex;flex-direction:column;gap:14px">
+   <div class="sh"><h2>خريطة الأيام</h2><p class="mute">كل مربع يوم من أيام الخطة. اضغط على أي يوم لترى تفاصيله.</p></div>
+   <div class="surf">
+    <div class="mh"><span id="mt"></span><span class="mute" id="mp"></span></div>
+    <div class="trk"><i id="mb"></i></div>
+    <div class="mg" id="mg" role="group" aria-label="أيام الخطة"></div>
+    <div class="leg"><span><i style="background:var(--ok)"></i>مكتمل</span><span><i style="border:2px solid var(--gold)"></i>تنتظرك</span><span><i style="border:2px solid var(--tx)"></i>اليوم</span><span><i style="border:1.5px dashed var(--mute)"></i>راحة</span><span><i style="background:var(--card2);border:1px solid var(--line)"></i>قادم</span></div>
+    <div class="dd" id="dd" role="status"></div>
+   </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:14px">
+   <div class="sh"><h2>ساعات الدراسة</h2><p class="mute">الوقت الذي سجّله مؤقت التركيز فعلياً.</p></div>
+   <div class="surf"><div class="hrs"><span class="num" id="hh"></span><span class="mute" id="hm"></span></div><div class="bar" id="split" role="img"></div><div id="splitRows"></div></div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:14px">
+   <div class="sh"><h2>التقدم في المواد</h2><p class="mute">نسبة المهام المنجزة في كل مادة.</p></div>
+   <div class="surf sub" id="subs"></div>
+  </section>
+ </div>
+</main>
+
+<div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sn">
+ <div class="box">
+  <div class="m" id="sm"></div>
+  <h2 id="sn"></h2>
+  <p class="mute" id="sd"></p>
+  <div class="lvs" id="lvs"></div>
+  <button class="btn" id="sx">إغلاق</button>
+ </div>
+</div>
+
+<nav aria-label="التنقل">
+ <a href="#"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>اليوم</a>
+ <a href="#"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>الخطة</a>
+ <a href="#"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 10v4l2.5 1.5M9.5 3h5"/></svg>التركيز</a>
+ <a href="#" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/></svg>إنجازاتي</a>
+ <a href="#"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>الإعدادات</a>
+</nav>
+
+<script>
+// بيانات مثال؛ في التطبيق تأتي من قاعدة البيانات
+const N=68,TODAY=32,$=s=>document.querySelector(s);
+const st=[null],hr=[0],pt=[0],tk=[0];
+for(let d=1;d<=N;d++){
+ const s=d>TODAY?'future':d===TODAY?'today':d%7===0?'rest':[12,19,25].includes(d)?'wait':'done';
+ st.push(s);hr.push(s==='done'?1.4+((d*7)%10)/10*1.2:s==='wait'?.9:s==='today'?1.2:0);
+ pt.push(s==='done'?42:s==='wait'?20:s==='today'?14:0);tk.push(s==='done'?4:s==='wait'?2:s==='today'?1:0);
+}
+const base=new Date();base.setHours(12,0,0,0);
+const dateOf=d=>new Date(base.getTime()+(d-TODAY)*864e5);
+const WD=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'],WS=['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+const MO=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const dl=d=>{const x=dateOf(d);return`${WD[x.getDay()]} ${x.getDate()} ${MO[x.getMonth()]}`};
+const hm=h=>{const a=Math.floor(h),b=Math.round((h-a)*60);return a?`${a} س${b?` و${b} د`:''}`:`${b} د`};
+const fa=n=>n.toLocaleString('en-US');
+const total=hr.reduce((a,b)=>a+b,0),points=pt.reduce((a,b)=>a+b,0);
+let streak=0;for(let d=TODAY-1;d>=1;d--){if(st[d]==='wait')break;streak++}
+const doneDays=st.filter(x=>x==='done').length;
+
+$('#pts').textContent=fa(points);$('#ptsToday').textContent=`+${pt[TODAY]} نقطة اليوم`;$('#stk').textContent=streak;
+
+// آخر 7 أيام بأسماء الأيام
+const CK='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+const SN={done:'أنجزت يومك',rest:'يوم راحة',wait:'مهام تنتظرك',today:'اليوم'};
+$('#week').innerHTML=[26,27,28,29,30,31,32].map(d=>`<div class="${d===TODAY?'tdy':''}"><span class="dot ${st[d]}" role="img" aria-label="${WD[dateOf(d).getDay()]}: ${SN[st[d]]}">${st[d]==='done'?CK:st[d]==='rest'?'–':''}</span>${d===TODAY?'اليوم':WS[dateOf(d).getDay()]}</div>`).join('');
+
+// الأوسمة: خمس فئات، كل فئة خمسة مستويات
+const IC={flame:'<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-9z"/>',star:'<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/>',clock:'<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',flag:'<path d="M6 21V4m0 1h11l-2 4 2 4H6"/>',quiz:'<circle cx="12" cy="12" r="9"/><path d="M9.3 9.3a2.8 2.8 0 1 1 4.3 2.4c-1 .6-1.6 1.2-1.6 2.3M12 17.3v.2"/>'};
+const TN=['برونزي','فضي','ذهبي','زمردي','ماسي'];
+const TC=[['#B9753F','#E8BE92'],['#8E9BAD','#E6EBF2'],['#D9A441','#F8E3A6'],['#2FA37F','#B1EAD6'],['#4F93F0','#CDE5FF']];
+const CAT=[
+ {n:'السلسلة',ic:'flame',cur:streak,u:'يوم',t:[3,7,14,30,60],w:'أيام متتالية من الإنجاز'},
+ {n:'النقاط',ic:'star',cur:points,u:'نقطة',t:[250,750,1500,3000,5000],w:'مجموع نقاطك'},
+ {n:'ساعات الدراسة',ic:'clock',cur:Math.floor(total),u:'ساعة',t:[10,25,50,100,150],w:'ساعات دراسة فعلية'},
+ {n:'إنجاز الخطة',ic:'flag',cur:doneDays,u:'يوم',t:[7,17,34,51,68],w:'أيام مكتملة من الخطة'},
+ {n:'حل الأسئلة',ic:'quiz',cur:18,u:'فصل',t:[3,8,15,25,40],w:'فصول حللت أسئلتها'}
+];
+CAT.forEach(c=>{c.lv=c.t.filter(x=>c.cur>=x).length;c.nx=c.t[c.lv];c.pv=c.lv?c.t[c.lv-1]:0;c.fr=c.nx?(c.cur-c.pv)/(c.nx-c.pv):1});
+const medal=(ic,lv)=>{const t=lv?TC[lv-1]:null;
+ return`<svg viewBox="0 0 100 118" aria-hidden="true"><polygon points="28,70 50,78 42,116 31,106 20,114" fill="${t?'#B52A20':'var(--line)'}"/><polygon points="72,70 50,78 58,116 69,106 80,114" fill="${t?'#B52A20':'var(--line)'}" fill-opacity=".85"/><circle cx="50" cy="48" r="42" fill="${t?t[0]:'var(--line)'}"/><circle cx="50" cy="48" r="35" fill="${t?t[1]:'var(--card2)'}" stroke="${t?'#fff':'var(--mute)'}" stroke-opacity=".55" stroke-width="1.5"${t?'':' stroke-dasharray="4 4"'}/><g transform="translate(28 26) scale(1.83)" fill="none" stroke="${t?'#0D1A2D':'var(--mute)'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${t?'':' opacity=".7"'}>${IC[ic]}</g></svg>`};
+const pip=(i,e)=>`<span class="pip${e?' e':''}" style="--c:${TC[i][0]};--l:${TC[i][1]}">${i+1}</span>`;
+const earned=CAT.reduce((a,c)=>a+c.lv,0),all=CAT.length*5;
+$('#bsub').textContent=`جمعت ${earned} وسام من ${all}. لكل فئة خمسة مستويات: برونزي، فضي، ذهبي، زمردي، ماسي.`;
+$('#cats').innerHTML=CAT.map((c,i)=>`<button class="cat" data-i="${i}" aria-label="${c.n}: ${c.lv?'المستوى '+TN[c.lv-1]:'لم تبدأ'}">
+ <div class="md">${medal(c.ic,c.lv)}</div>
+ <div class="nm"><h3>${c.n}</h3><span class="lv">${c.lv?`المستوى <b>${TN[c.lv-1]}</b> (${c.lv} من 5)`:'لم تبدأ بعد'}</span></div>
+ <div class="pg">${c.nx?`<div class="trk"><i style="width:${Math.max(3,c.fr*100)}%"></i></div><div class="r"><span>${fa(c.cur)} من ${fa(c.nx)} ${c.u}</span><span>التالي: ${TN[c.lv]}</span></div>`:`<span class="lv" style="color:var(--ok)">أنهيت كل المستويات. أحسنت!</span>`}</div>
+ <div class="lad">${c.t.map((x,k)=>`<div class="st">${pip(k,k<c.lv)}<small>${fa(x)}</small></div>`).join('')}</div></button>`).join('');
+$('#cats').onclick=e=>{const k=e.target.closest('.cat');if(!k)return;opener=k;const c=CAT[+k.dataset.i];
+ $('#sm').innerHTML=medal(c.ic,c.lv);$('#sn').textContent=c.n;$('#sd').textContent=`${c.w}. أنت الآن عند ${fa(c.cur)} ${c.u}.`;
+ $('#lvs').innerHTML=c.t.map((x,k)=>`<div class="lr">${pip(k,k<c.lv)}<div class="a">${TN[k]}<span>${fa(x)} ${c.u}</span></div><span class="z ${k<c.lv?'ok':''}">${k<c.lv?'مكتسب':k===c.lv?`تبقّى ${fa(x-c.cur)}`:'قادم'}</span></div>`).join('');
+ $('#sheet').classList.add('on');$('#sx').focus()};
+let opener;
+const closeS=()=>{$('#sheet').classList.remove('on');if(opener)opener.focus()};
+$('#sx').onclick=closeS;$('#sheet').onclick=e=>{if(e.target.id==='sheet')closeS()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#sheet').classList.contains('on'))closeS()});
+
+// الوسام الأقرب
+const nx=CAT.filter(c=>c.nx).sort((a,b)=>b.fr-a.fr)[0];
+if(nx)$('#next').innerHTML=`<div class="t"><span>وسامك القادم: ${TN[nx.lv]} في ${nx.n}</span><span class="mute">${fa(nx.cur)} من ${fa(nx.nx)}</span></div><div class="trk"><i style="width:${nx.fr*100}%"></i></div><p class="mute" style="font-size:13px">يتبقّى ${fa(nx.nx-nx.cur)} ${nx.u} فقط.</p>`;
+
+// خريطة الأيام: صف لكل أسبوع
+$('#mt').textContent=`${doneDays} يوماً مكتملاً من ${N}`;$('#mp').textContent=`${Math.round(doneDays/N*100)}%`;$('#mb').style.width=doneDays/N*100+'%';
+const SL={done:'مكتمل',wait:'فيه مهام تنتظرك',today:'يومك الحالي',rest:'يوم راحة مجدول',future:'قادم'};
+let g='<span></span>'+[0,1,2,3,4,5,6].map(i=>`<span class="hd">${WS[i]}</span>`).join('');
+const weeks=Math.ceil(N/7),curW=Math.floor((TODAY-1)/7);
+for(let w=0;w<weeks;w++){g+=`<span class="wl ${w===curW?'cur':''}">أسبوع ${w+1}</span>`;
+ for(let c=0;c<7;c++){const d=w*7+c+1;g+=d>N?'<span></span>':`<button class="cl ${st[d]}" data-d="${d}" aria-label="اليوم ${d}: ${SL[st[d]]}">${d}</button>`}}
+$('#mg').innerHTML=g;
+function pick(d){document.querySelectorAll('.cl').forEach(b=>b.classList.toggle('sel',+b.dataset.d===d));
+ const t=st[d];let h=`<div class="ti"><b>اليوم ${d}</b><span class="mute">${dl(d)}</span></div><p class="mute" style="margin-top:2px">${SL[t]}${t==='rest'?'. لا يقطع سلسلتك.':''}</p>`;
+ if(t==='future')h+=`<p class="mute" style="margin-top:6px">لم يبدأ بعد. تظهر تفاصيله عندما يحين موعده.</p>`;
+ else if(t!=='rest')h+=`<div class="s3"><div><b>${hm(hr[d])}</b>دراسة</div><div><b>${pt[d]}</b>نقطة</div><div><b>${tk[d]} من 4</b>مهام منجزة</div></div>`;
+ $('#dd').innerHTML=h}
+$('#mg').onclick=e=>{const b=e.target.closest('.cl');if(b)pick(+b.dataset.d)};
+pick(TODAY);
+
+// ساعات الدراسة
+$('#hh').textContent=Math.floor(total);$('#hm').textContent=`ساعة و${Math.round((total%1)*60)} دقيقة`;
+const sp=[['حضور الفيديوهات',.36,'var(--ok)'],['الدراسة',.46,'var(--gold)'],['حل الأسئلة',.18,'var(--mute)']];
+$('#split').innerHTML=sp.map(s=>`<i style="width:${s[1]*100}%;background:${s[2]}"></i>`).join('');
+$('#split').setAttribute('aria-label',sp.map(s=>`${s[0]} ${Math.round(s[1]*100)}%`).join('، '));
+$('#splitRows').innerHTML=sp.map(s=>`<div class="rw"><span><i style="background:${s[2]}"></i>${s[0]}</span><span>${hm(total*s[1])}</span></div>`).join('');
+
+// المواد
+const subj=[['الكيمياء الطبية','#6AA6FF',62,12,19],['الفيزياء','#5DD6C0',48,10,21],['الانكليزي','#F0A8C8',71,15,21],['تاريخ الطب','#E8B65A',55,6,11],['البيولوجيا','#F0766B',40,8,20]];
+$('#subs').innerHTML=subj.map(s=>`<div><div class="t"><span>${s[0]}</span><span class="mute">${s[3]} من ${s[4]} مهمة · ${s[2]}%</span></div><div class="tr"><i style="width:${s[2]}%;background:${s[1]}"></i></div></div>`).join('');
+</script>
+</body>
+</html>

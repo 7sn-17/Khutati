@@ -11,6 +11,8 @@ import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/surfaces.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
+import '../../../core/settings/theme_mode_controller.dart'
+    show sharedPreferencesProvider;
 import '../../../l10n/l10n.dart';
 import '../application/focus_controller.dart';
 import '../../../data/database/app_database.dart';
@@ -65,6 +67,45 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       controller.consumePendingAction();
       controller.syncWithNative();
     }
+  }
+
+  Future<void> _maybePromptBattery() async {
+    try {
+      final prefs = ref.read(sharedPreferencesProvider);
+      if (prefs.getBool('battery_prompt_shown') == true) return;
+      await prefs.setBool('battery_prompt_shown', true);
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            title: const Text('تحسين استخدام البطارية'),
+            content: const Text(
+              'لضمان عمل المؤقت في الخلفية دون توقف، يرجى ضبط '
+              'استخدام البطارية لهذا التطبيق على "غير مقيد" (Unrestricted).',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('لاحقاً'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  const MethodChannel channel =
+                      MethodChannel('khutati/focus_timer');
+                  try {
+                    await channel.invokeMethod('openBatterySettings');
+                  } catch (_) {}
+                },
+                child: const Text('فتح الإعدادات'),
+              ),
+            ],
+          ),
+        );
+      });
+    } catch (_) {}
   }
 
   void _applySystemUi() {
@@ -144,6 +185,16 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       final AppLocalizations l10n = context.l10n;
       if (previous.isRunning && next.isPaused) {
         showKToast(context, l10n.focusPause, kind: KToastKind.info);
+      }
+      if (previous.isIdle && next.isRunning) {
+        _maybePromptBattery();
+      }
+      if (previous.stepIndex < next.stepIndex && next.isRunning) {
+        showKToast(
+          context,
+          'تم إنهاء الحضور. بدء جلسة الدراسة الآن.',
+          kind: KToastKind.success,
+        );
       }
       if (previous.phase != next.phase && next.isRunning) {
         if (next.isBreak) {
@@ -1406,9 +1457,34 @@ class _FinishedView extends StatelessWidget {
                   color: palette.tx,
                 ),
               ),
+              if (session.taskTitle != null && session.taskTitle!.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  session.taskTitle!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: palette.tx,
+                  ),
+                ),
+              ],
+              if (session.currentStep != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  session.currentStep!.label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 13,
+                    color: palette.mute,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               Text(
-                '${_clock(session.recordedSeconds, free: session.mode == FocusMode.free)}  /  ${_clock(session.plannedSeconds, free: false)}',
+                'الوقت المدروس: ${_clock(session.recordedSeconds, free: session.mode == FocusMode.free)}',
                 textDirection: TextDirection.ltr,
                 style: TextStyle(
                   fontFamily: KTypography.bodyFamily,
@@ -1417,24 +1493,17 @@ class _FinishedView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              GestureDetector(
-                onTap: onDismiss,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: _gold,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    l10n.focusBackToSetup,
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0D1A2D),
-                    ),
-                  ),
-                ),
+              KButton(
+                label: 'الذهاب إلى الخطوة التالية',
+                expand: true,
+                onPressed: onDismiss,
+              ),
+              const SizedBox(height: 10),
+              KButton(
+                label: 'العودة إلى الشاشة الرئيسية',
+                variant: KButtonVariant.secondary,
+                expand: true,
+                onPressed: () => GoRouter.of(context).go('/today'),
               ),
             ],
           ),

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/app_info.dart';
 import '../../../core/design/khutati_icons.dart';
 import '../../../core/design/tokens.dart';
+import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/motion/press_scale.dart';
@@ -113,6 +114,23 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: ref
                     .read(notificationPrefsProvider.notifier)
                     .setTimer,
+              ),
+              const SizedBox(height: 6),
+              _SettingsActionRow(
+                title: 'تحسين استخدام البطارية',
+                icon: Icons.battery_saver_rounded,
+                trailing: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 20,
+                  color: palette.mute,
+                ),
+                onTap: () async {
+                  const MethodChannel channel =
+                      MethodChannel('khutati/focus_timer');
+                  try {
+                    await channel.invokeMethod('openBatterySettings');
+                  } catch (_) {}
+                },
               ),
               const SizedBox(height: 6),
               _SettingsHint(text: l10n.settingsNotificationsHint),
@@ -269,6 +287,12 @@ class _UpdatePanel extends ConsumerWidget {
                       context,
                       manifest: next.manifest!,
                       source: next.source,
+                    );
+                  } else if (next.status == UpdateStatus.upToDate) {
+                    showKToast(
+                      context,
+                      'أنت على أحدث إصدار',
+                      kind: KToastKind.success,
                     );
                   }
                 },

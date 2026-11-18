@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>خطتي — التركيز</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500&family=Reem+Kufi:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0D1A2D;--card:#15263F;--card2:#1C3150;--line:#26395A;--tx:#EAE5DA;--mute:#93A1B8;--red:#B52A20;--ok:#7CCBB0;--gold:#E8B65A;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%;background:var(--bg)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;font-size:16px}
+button,input{font-family:inherit;font-size:14px;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* الشبكة: عمودي افتراضياً */
+.app{--rs:min(78vw,300px);max-width:420px;margin:0 auto;min-height:100%;padding:20px 20px 24px;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr auto auto;grid-template-areas:"top" "ring" "ctl" "st";row-gap:16px;justify-items:center}
+body.full .app{--rs:min(88vw,54dvh,460px)}
+.top{grid-area:top;width:100%;display:flex;flex-direction:column;gap:16px}
+.r1{display:flex;gap:8px;align-items:center}
+.seg{flex:1;display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{flex:1;min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--mute)}
+.seg button[aria-pressed=true]{background:var(--tx);color:var(--bg);font-weight:500}
+#fs{width:52px;height:52px;flex:none;border-radius:14px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center}
+.panel{display:flex;flex-direction:column;gap:10px;min-height:96px}
+.tag{align-self:flex-start;color:#0D1A2D;font-size:13px;font-weight:500;padding:3px 12px;border-radius:999px}
+h1{margin:0;font-family:'Reem Kufi',sans-serif;font-size:24px;line-height:1.3}
+.mute{margin:0;color:var(--mute);font-size:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card)}
+.chip[aria-pressed=true]{border-color:var(--gold);background:var(--card2);color:var(--gold);font-weight:500}
+.row{display:flex;gap:12px}
+.row label{display:flex;flex-direction:column;gap:4px;flex:1;font-size:13px;color:var(--mute)}
+input[type=number]{min-height:44px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0 12px;width:100%}
+#info{display:none;justify-content:center}
+
+.ring{grid-area:ring;align-self:center;position:relative;width:var(--rs);aspect-ratio:1}
+.ring svg{width:100%;height:100%;display:block}
+.mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.time{font-family:'Reem Kufi',sans-serif;font-size:calc(var(--rs)*.225);line-height:1.05;direction:ltr;letter-spacing:1px;font-variant-numeric:tabular-nums}
+.dots{display:flex;gap:8px;margin-top:8px;min-height:6px}
+.dots i{width:20px;height:6px;border-radius:3px;background:var(--line)}
+.ctl{grid-area:ctl;display:flex;justify-content:center;align-items:flex-start;gap:28px}
+.ctl div{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--mute)}
+.rb{width:56px;height:56px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center}
+.pb{width:84px;height:84px;border-radius:50%;border:0;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.pb:active{transform:scale(.94)}
+.gone{visibility:hidden}
+#status{grid-area:st;margin:0;text-align:center;min-height:21px;color:var(--mute);font-size:14px}
+
+/* وضع ملء الشاشة: المؤقت والأزرار فقط */
+body.full #modes,body.full .panel{display:none}
+body.full #info{display:flex}
+body.full #fs{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;z-index:3}
+
+/* أفقي: الحلقة على جهة، والمعلومات والأزرار على الجهة الأخرى */
+@media (orientation:landscape){
+ .app{--rs:min(46vw,76dvh,400px);max-width:980px;padding:14px 28px;column-gap:48px;row-gap:12px;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto 1fr auto;grid-template-areas:"ring top" "ring ctl" "ring st"}
+ body.full .app{--rs:min(56vw,84dvh)}
+ .ring{grid-row:1/4}
+ .ctl{align-self:center}
+}
+@media (orientation:landscape) and (max-height:480px){.panel{min-height:0}.panel .mute{display:none}}
+@media (prefers-reduced-motion:reduce){.pb{transition:none}}
+</style>
+</head>
+<body>
+<main class="app">
+ <div class="top">
+  <div class="r1">
+   <div class="seg" id="modes" role="group" aria-label="نوع المؤقت">
+    <button data-m="task">مرتبط بالمهمة</button><button data-m="pomo">بومودورو</button><button data-m="free">مؤقت حر</button>
+   </div>
+   <button id="fs" aria-label="ملء الشاشة"></button>
+  </div>
+
+  <section class="panel" id="p-task">
+   <span class="tag" id="tag"></span>
+   <h1 id="ttl"></h1>
+   <p class="mute" id="tdet"></p>
+  </section>
+
+  <section class="panel" id="p-pomo" hidden>
+   <h1>جلسة بومودورو</h1>
+   <p class="mute">غير مرتبطة بأي مهمة.</p>
+   <div class="chips" id="presets" role="group" aria-label="مدة الجلسة">
+    <button class="chip" data-p="25,5">25 / 5</button><button class="chip" data-p="50,10">50 / 10</button><button class="chip" data-p="90,20">90 / 20</button><button class="chip" data-p="c">مخصص</button>
+   </div>
+   <div class="row" id="custom" hidden>
+    <label>التركيز (دقيقة)<input type="number" id="cf" min="1" max="180" value="30"></label>
+    <label>الاستراحة (دقيقة)<input type="number" id="cb" min="1" max="60" value="8"></label>
+   </div>
+  </section>
+
+  <section class="panel" id="p-free" hidden>
+   <h1>مؤقت حر</h1>
+   <p class="mute">يعدّ تصاعدياً حتى توقفه. الحلقة تدور كل ساعة، وكل شريحة دقيقة.</p>
+  </section>
+
+  <div id="info"><span class="tag" id="infoTag"></span></div>
+ </div>
+
+ <div class="ring">
+  <svg viewBox="0 0 320 320" role="img" aria-label="تقدّم المؤقت">
+   <defs><mask id="mk" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="320"><circle id="mc" cx="160" cy="160" r="130" fill="none" stroke="#fff" stroke-width="40"/></mask></defs>
+   <g transform="rotate(-90 160 160)">
+    <circle id="c0" cx="160" cy="160" r="130" fill="none" stroke="#26395A" stroke-width="16"/>
+    <circle id="c1" cx="160" cy="160" r="130" fill="none" stroke-width="16" mask="url(#mk)"/>
+   </g>
+  </svg>
+  <div class="mid"><span class="mute" id="lbl">تركيز</span><span class="time" id="time">00:00</span><span class="mute" id="sub"></span><div class="dots" id="dots"></div></div>
+ </div>
+
+ <div class="ctl">
+  <div><button class="rb" id="end" aria-label="إنهاء الجلسة"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3"/></svg></button>إنهاء</div>
+  <div><button class="pb" id="go"></button><span id="goL"></span></div>
+  <div id="skW"><button class="rb" id="skip"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6v12"/><path d="M15 12 6 6.5v11z" fill="currentColor"/></svg></button><span id="skipL"></span></div>
+ </div>
+
+ <p id="status" role="status"></p>
+</main>
+
+<script>
+const C=2*Math.PI*130,$=s=>document.querySelector(s);
+// المهمة تصل من شاشة اليوم؛ هذه بيانات مثال
+const task={s:'الكيمياء الطبية',c:'#6AA6FF',t:'تأسيسي الذرة 1',st:[{k:'حضور',m:23},{k:'دراسة',m:23},{k:'حل أسئلة',m:40}]};
+const S={mode:'task',step:0,run:false,last:0,el:0,phase:'focus',cycle:1,pre:[25,5],custom:false};
+let ac,wl;
+function beep(){try{ac=ac||new AudioContext();[0,.25,.5].forEach(d=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;g.gain.value=.12;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+d);o.stop(ac.currentTime+d+.15)})}catch(e){}if(navigator.vibrate)navigator.vibrate([200,100,200])}
+const fmt=s=>{s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60,p=n=>String(n).padStart(2,'0');return h?`${h}:${p(m)}:${p(x)}`:`${p(m)}:${p(x)}`};
+function total(){
+ if(S.mode==='task')return task.st[S.step].m*60;
+ if(S.mode==='pomo'){const[f,b]=S.pre;return(S.phase==='focus'?f:(S.cycle===4?b*3:b))*60}
+ return 0;
+}
+function reset(){S.run=false;S.el=0;S.phase='focus';keep()}
+const say=t=>$('#status').textContent=t;
+async function keep(){try{if(S.run&&navigator.wakeLock&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>wl=null)}else if(!S.run&&wl){await wl.release();wl=null}}catch(e){}}
+function finish(){
+ S.run=false;beep();
+ if(S.mode==='task'){S.el=total();say('انتهى الوقت');keep();return}
+ if(S.phase==='focus'){S.phase='break';say(S.cycle===4?'استراحة طويلة، أحسنت':'وقت الاستراحة')}
+ else{S.phase='focus';S.cycle=S.cycle===4?1:S.cycle+1;say('جلسة تركيز جديدة')}
+ S.el=0;S.run=true;S.last=performance.now();
+}
+function tick(){
+ const now=performance.now();
+ if(S.run){S.el+=(now-S.last)/1000;S.last=now;if(S.mode!=='free'&&S.el>=total())finish()}
+ render();
+}
+const ICON={on:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',off:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"/></svg>'};
+function render(){
+ const m=S.mode,T=total(),brk=S.phase==='break',full=document.body.classList.contains('full');
+ document.querySelectorAll('#modes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));
+ $('#p-task').hidden=m!=='task';$('#p-pomo').hidden=m!=='pomo';$('#p-free').hidden=m!=='free';
+ const color=brk?'#7CCBB0':m==='task'?task.c:m==='pomo'?'#E8B65A':'#EAE5DA';
+ let frac,txt,sub='',dots='';
+ if(m==='free'){frac=(S.el/3600)%1;txt=fmt(S.el);sub=S.run?'يعمل':'مفتوح'}
+ else{frac=Math.min(1,S.el/T);txt=fmt(Math.ceil(T-S.el))}
+ if(m==='task'){sub=`${task.st[S.step].k} · ${S.step+1} من ${task.st.length}`;task.st.forEach((_,i)=>dots+=`<i style="background:${i<S.step?'#7CCBB0':i===S.step?task.c:''}"></i>`)}
+ if(m==='pomo'){sub=brk?(S.cycle===4?'استراحة طويلة':'استراحة قصيرة'):`الجلسة ${S.cycle} من 4`;for(let i=1;i<=4;i++)dots+=`<i style="background:${i<S.cycle||(i===S.cycle&&brk)?'#7CCBB0':i===S.cycle?'#E8B65A':''}"></i>`}
+ $('#dots').innerHTML=dots;
+ $('#tag').textContent=task.s;$('#tag').style.background=task.c;$('#ttl').textContent=task.t;const cs=task.st[S.step];$('#tdet').textContent=`${cs.k} · ${cs.m} دقيقة`;
+ const it=$('#infoTag');it.style.background=color;it.textContent=m==='task'?`${task.s} — ${task.t}`:m==='pomo'?'بومودورو':'مؤقت حر';
+ const n=m==='free'?60:Math.ceil(T/60),sp=C/n,d=Math.min(5,sp*.5),da=`${d} ${sp-d}`;
+ $('#c0').setAttribute('stroke-dasharray',da);$('#c1').setAttribute('stroke-dasharray',da);$('#c1').setAttribute('stroke',color);
+ $('#mc').setAttribute('stroke-dasharray',`${frac*C} ${C}`);
+ $('#lbl').textContent=brk?'استراحة':'تركيز';$('#time').textContent=txt;$('#sub').textContent=sub;
+ $('#go').innerHTML=S.run?'<svg width="30" height="30" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg>':'<svg width="30" height="30" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 4.5v15l12-7.5z"/></svg>';
+ const lab=S.run?'إيقاف مؤقت':S.el>0?'استئناف':'ابدأ';$('#go').setAttribute('aria-label',lab);$('#goL').textContent=lab;
+ $('#skW').classList.toggle('gone',m==='free'||(m==='task'&&S.step>=task.st.length-1));
+ const sl=m==='task'?'تخطي الخطوة':brk?'تخطي الاستراحة':'ابدأ الاستراحة';$('#skip').setAttribute('aria-label',sl);$('#skipL').textContent=sl;
+ document.title=(S.run?txt+' · ':'')+'خطتي — التركيز';
+ document.querySelectorAll('#presets .chip').forEach(b=>b.setAttribute('aria-pressed',S.custom?b.dataset.p==='c':b.dataset.p===S.pre.join(',')));
+ $('#custom').hidden=!(m==='pomo'&&S.custom);
+ $('#fs').innerHTML=full?ICON.off:ICON.on;$('#fs').setAttribute('aria-label',full?'الخروج من ملء الشاشة':'ملء الشاشة');
+}
+$('#modes').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.mode=b.dataset.m;reset();say('');render()};
+$('#presets').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.p==='c'){S.custom=true;S.pre=[+$('#cf').value||30,+$('#cb').value||8]}else{S.custom=false;S.pre=b.dataset.p.split(',').map(Number)}reset();render()};
+['#cf','#cb'].forEach(i=>$(i).onchange=()=>{S.pre=[Math.max(1,+$('#cf').value||30),Math.max(1,+$('#cb').value||8)];reset();render()});
+$('#go').onclick=()=>{
+ try{ac=ac||new AudioContext()}catch(e){}
+ if(S.run){S.run=false;say('متوقف مؤقتاً')}else{if(S.mode!=='free'&&S.el>=total())S.el=0;S.run=true;S.last=performance.now();say('')}
+ keep();render();
+};
+$('#end').onclick=()=>{const m=Math.floor(S.el/60);reset();S.cycle=1;say(m?`حُفظت الجلسة: ${m} دقيقة`:'');render()};
+$('#skip').onclick=()=>{
+ if(S.mode==='task'){if(S.step<task.st.length-1){S.step++;S.el=0;S.last=performance.now();say('انتقلت إلى: '+task.st[S.step].k)}render();return}
+ if(S.mode!=='pomo')return;
+ if(S.phase==='focus')S.phase='break';else{S.phase='focus';S.cycle=S.cycle===4?1:S.cycle+1}
+ S.el=0;S.last=performance.now();render();
+};
+async function setFull(on){
+ document.body.classList.toggle('full',on);
+ try{if(on&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();else if(!on&&document.fullscreenElement)await document.exitFullscreen()}catch(e){}
+ render();
+}
+$('#fs').onclick=()=>setFull(!document.body.classList.contains('full'));
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){document.body.classList.remove('full');render()}});
+setInterval(tick,250);render();
+</script>
+</body>
+</html>
