@@ -206,6 +206,8 @@ class UserAdditions extends Table {
 class FocusSessions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get taskId => text().nullable()();
+  TextColumn get taskTitle => text().nullable()();
+  TextColumn get mode => text().withDefault(const Constant('pomodoro'))();
   TextColumn get stepId => text().nullable()();
 
   /// `focus` or `break`.

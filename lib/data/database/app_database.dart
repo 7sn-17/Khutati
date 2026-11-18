@@ -37,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -58,6 +58,11 @@ class AppDatabase extends _$AppDatabase {
           // and are read as fully done until the user taps again.
           if (from < 2) {
             await m.addColumn(userStepStates, userStepStates.progress);
+          }
+          // v3 adds mode + taskTitle to focus sessions for the history view.
+          if (from < 3) {
+            await m.addColumn(focusSessions, focusSessions.mode);
+            await m.addColumn(focusSessions, focusSessions.taskTitle);
           }
         },
         beforeOpen: (details) async {

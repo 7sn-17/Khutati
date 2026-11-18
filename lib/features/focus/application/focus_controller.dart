@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -96,7 +96,9 @@ class FocusSessionState {
       final int cycle = remainingSeconds % 3600;
       return cycle / 3600.0;
     }
-    return plannedSeconds <= 0 ? 0 : remainingSeconds / plannedSeconds;
+    if (plannedSeconds <= 0) return 0;
+    final double elapsed = (plannedSeconds - remainingSeconds) / plannedSeconds;
+    return elapsed.clamp(0.0, 1.0);
   }
 
   bool get recordedStepAsDone =>
@@ -552,6 +554,10 @@ class FocusController extends Notifier<FocusSessionState> {
           await skipPhase();
         case 'start_break':
           await startBreakNow();
+        case 'end':
+          if (state.isRunning || state.isPaused) {
+            await endStep();
+          }
       }
     } catch (_) {
       // A missing preference simply means there is nothing to consume.
@@ -654,22 +660,47 @@ class FocusController extends Notifier<FocusSessionState> {
       state = state.copyWith(remainingSeconds: remaining);
       ticks += 1;
       if (ticks % 5 == 0) {
-        unawaited(_adoptNotificationPause());
+        unawaited(syncWithNative());
       }
     });
   }
 
   /// The notification's Pause button drives the native service; adopting that
   /// here keeps the in-app UI in sync without polling every second.
-  Future<void> _adoptNotificationPause() async {
-    if (!state.isRunning) return;
-    final Map<dynamic, dynamic> native = await _nativeGetState();
-    if (native['paused'] != true) return;
-    final int remainingMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
-    if (remainingMs > 0) {
-      _pausedRemaining = (remainingMs / 1000).ceil();
+  /// Public so the UI can call it on app resume (foreground) to keep the
+  /// in-app timer in sync with the native foreground service (pause/resume/end
+  /// triggered from the notification).
+  Future<void> syncWithNative() async {
+    if (!(state.isRunning || state.isPaused)) return;
+    Map<dynamic, dynamic> native;
+    try {
+      native = await _nativeGetState();
+    } catch (_) {
+      return;
     }
-    if (state.isRunning) pause();
+    final bool nativePaused = native['paused'] == true;
+    final int nativeMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+    // Service stopped (e.g. "End" tapped from the notification) → finish.
+    if (nativeMs <= 0 && !(native['paused'] == true)) {
+      if (state.isRunning || state.isPaused) {
+        await endStep();
+      }
+      return;
+    }
+    if (nativePaused && state.isRunning) {
+      _pausedRemaining = (nativeMs / 1000).ceil();
+      pause();
+      return;
+    }
+    if (!nativePaused && state.isPaused) {
+      _pausedRemaining = (nativeMs / 1000).ceil();
+      await resume();
+      return;
+    }
+    // Keep remaining time roughly in sync.
+    if (state.isRunning) {
+      state = state.copyWith(remainingSeconds: (nativeMs / 1000).ceil());
+    }
   }
 
   int _elapsedSeconds() {
@@ -832,6 +863,8 @@ class FocusController extends Notifier<FocusSessionState> {
           .insert(
             FocusSessionsCompanion.insert(
               taskId: Value<String?>(state.taskId),
+              taskTitle: Value<String?>(state.taskTitle),
+              mode: Value<String>(state.mode.name),
               stepId: Value<String?>(state.currentStep?.id),
               phase: state.phase.wire,
               plannedSeconds: state.plannedSeconds,
@@ -918,3 +951,14 @@ final StateProvider<bool> focusImmersiveProvider = StateProvider<bool>(
 /// The plan task Today hands to the setup screen, if any.
 final StateProvider<FocusTaskDraft?> focusDraftProvider =
     StateProvider<FocusTaskDraft?>((Ref ref) => null);
+
+/// Live stream of recorded focus sessions, newest first, for the history sheet.
+final StreamProvider<List<FocusSession>> focusHistoryProvider =
+    StreamProvider<List<FocusSession>>((Ref ref) {
+  final AppDatabase db = ref.watch(appDatabaseProvider);
+  return (db.select(db.focusSessions)
+        ..orderBy(<OrderingTerm Function(FocusSessions)>[
+          (FocusSessions t) => OrderingTerm.desc(t.startedAt),
+        ]))
+      .watch();
+});

@@ -13,7 +13,11 @@ import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
 import '../../../l10n/l10n.dart';
 import '../application/focus_controller.dart';
+import '../../../data/database/app_database.dart';
 import '../application/focus_setup_controller.dart';
+import '../../today/application/today_controller.dart';
+import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/plan_step.dart';
 import '../domain/focus_setup.dart';
 
 /// Colours used by the dashed ring, mirroring the HTML reference's CSS vars.
@@ -29,12 +33,14 @@ class FocusScreen extends ConsumerStatefulWidget {
   ConsumerState<FocusScreen> createState() => _FocusScreenState();
 }
 
-class _FocusScreenState extends ConsumerState<FocusScreen> {
+class _FocusScreenState extends ConsumerState<FocusScreen>
+    with WidgetsBindingObserver {
   bool _immersive = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(focusControllerProvider.notifier).consumePendingAction();
@@ -44,10 +50,21 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_immersive) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final FocusController controller =
+          ref.read(focusControllerProvider.notifier);
+      controller.consumePendingAction();
+      controller.syncWithNative();
+    }
   }
 
   void _applySystemUi() {
@@ -104,6 +121,47 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
           showKToast(context, 'انتهى الوقت', kind: KToastKind.info);
         }
       }
+    });
+
+    // Auto-load the next task/step when the user opens the Focus tab directly
+    // in Task mode without a draft (mirrors the HTML's example task).
+    ref.listen<AsyncValue<TodayData?>>(todayDataProvider, (
+      AsyncValue<TodayData?>? previous,
+      AsyncValue<TodayData?> next,
+    ) {
+      if (!session.isIdle) return;
+      final FocusSetup setup = ref.read(focusSetupProvider);
+      if (setup.mode != FocusMode.linked) return;
+      if (ref.read(focusDraftProvider) != null) return;
+      final TodayData? data = next.valueOrNull;
+      if (data == null) return;
+      final PlanTask? task = data.nextTask;
+      if (task == null) return;
+      final List<PlanStep> steps = task.stepsInOrder;
+      final PlanStep? step = task.nextStep;
+      final int currentIndex = step == null
+          ? 0
+          : steps.indexWhere((PlanStep s) => s.id == step.id);
+      final AppLocalizations l10n = context.l10n;
+      final FocusTaskDraft draft = FocusTaskDraft(
+        taskId: task.id,
+        taskTitle: task.title,
+        subjectName: task.subjectName ?? data.subjectNames[task.subjectKey],
+        startIndex: currentIndex < 0 ? 0 : currentIndex,
+        steps: <FocusStepRef>[
+          for (final PlanStep s in steps)
+            FocusStepRef(
+              id: s.id,
+              label: s.isAttendance
+                  ? l10n.galleryAttend
+                  : s.isStudy
+                  ? l10n.galleryStudy
+                  : l10n.gallerySolve,
+              minutes: s.minutes > 0 ? s.minutes : 25,
+            ),
+        ],
+      );
+      ref.read(focusDraftProvider.notifier).state = draft;
     });
 
     if (session.isFinished) {
@@ -170,10 +228,15 @@ class _FocusView extends ConsumerWidget {
     final FocusSetupController setupController = ref.read(focusSetupProvider.notifier);
     final FocusTaskDraft? draft = ref.watch(focusDraftProvider);
 
-    final bool isFree = session.mode == FocusMode.free;
-    final bool isTask = session.mode == FocusMode.linked;
-    final bool isPomo = session.mode == FocusMode.pomodoro;
-    final bool isBreak = session.isBreak;
+    // When idle, the displayed mode comes from the setup (segmented control),
+    // not from the session (which defaults to pomodoro). This is what makes
+    // switching between Task / Pomodoro / Free actually update the UI.
+    final FocusMode effectiveMode =
+        session.isIdle ? setup.mode : session.mode;
+    final bool isFree = effectiveMode == FocusMode.free;
+    final bool isTask = effectiveMode == FocusMode.linked;
+    final bool isPomo = effectiveMode == FocusMode.pomodoro;
+    final bool isBreak = session.isBreak && !session.isIdle;
     final bool running = session.isRunning;
     final bool paused = session.isPaused;
     final Color phaseColor = isBreak
@@ -187,11 +250,24 @@ class _FocusView extends ConsumerWidget {
     final bool isLastTaskStep = isTask && session.nextStep == null;
     final bool hideSkip = isFree || isLastTaskStep;
 
+    // Idle preview duration, so the timer shows the total (e.g. 25:00) before
+    // Play instead of 00:00. Free counts up from zero, so it stays 00:00.
+    final int idlePlannedSeconds = isFree
+        ? 3600
+        : isPomo
+        ? setup.focusMinutes * 60
+        : (draft?.minutes ?? 25) * 60;
+    final int displayPlannedSeconds =
+        session.isIdle ? idlePlannedSeconds : session.plannedSeconds;
+    final int displayRemainingSeconds = session.isIdle
+        ? (isFree ? 0 : idlePlannedSeconds)
+        : session.remainingSeconds;
+
     final int segments = isFree
         ? 60
-        : (session.plannedSeconds / 60).ceil().clamp(1, 360);
+        : (displayPlannedSeconds / 60).ceil().clamp(1, 360);
 
-    final String timeText = _clock(session.remainingSeconds, free: isFree);
+    final String timeText = _clock(displayRemainingSeconds, free: isFree);
 
     final String goLabel = running
         ? l10n.focusPause
@@ -267,10 +343,23 @@ class _FocusView extends ConsumerWidget {
       }
     }
 
-    // Header: large title + subtitle on the right, fullscreen icon on the left.
+    // Header: large title + subtitle on the right, history + fullscreen on the left.
     final Widget fsButton = _FsButton(
       immersive: immersive,
       onTap: onToggleImmersive,
+    );
+    final Widget historyButton = _HistoryButton(
+      onTap: () {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: palette.card,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (BuildContext ctx) => _FocusHistorySheet(palette: palette),
+        );
+      },
     );
 
     final Widget header = Row(
@@ -301,6 +390,8 @@ class _FocusView extends ConsumerWidget {
             ],
           ),
         ),
+        historyButton,
+        const SizedBox(width: 8),
         fsButton,
       ],
     );
@@ -336,7 +427,7 @@ class _FocusView extends ConsumerWidget {
 
     // Panel
     final Widget panel = _PanelSwitcher(
-      mode: session.mode,
+      mode: effectiveMode,
       draft: draft,
       setup: setup,
       setupController: setupController,
@@ -375,8 +466,8 @@ class _FocusView extends ConsumerWidget {
       trackColor: _trackColor,
       time: timeText,
       label: isBreak ? 'استراحة' : 'تركيز',
-      sub: _subText(session, draft, l10n),
-      dots: _dots(session, draft),
+      sub: _subText(session, draft, l10n, effectiveMode),
+      dots: _dots(session, draft, effectiveMode),
       size: immersive
           ? (landscape ? 360.0 : 320.0)
           : (landscape ? 280.0 : 260.0),
@@ -1342,14 +1433,19 @@ class _AmbientBackdrop extends StatelessWidget {
   }
 }
 
-String _subText(FocusSessionState session, FocusTaskDraft? draft, AppLocalizations l10n) {
-  if (session.mode == FocusMode.linked) {
+String _subText(
+  FocusSessionState session,
+  FocusTaskDraft? draft,
+  AppLocalizations l10n,
+  FocusMode mode,
+) {
+  if (mode == FocusMode.linked) {
     if (session.isBreak) return '';
     final FocusStepRef? step = session.currentStep;
     if (step == null) return '';
     return '${step.label} · ${step.minutes} دقيقة';
   }
-  if (session.mode == FocusMode.pomodoro) {
+  if (mode == FocusMode.pomodoro) {
     if (session.isBreak) {
       return session.rounds >= 3 ? 'استراحة طويلة' : 'استراحة قصيرة';
     }
@@ -1358,8 +1454,12 @@ String _subText(FocusSessionState session, FocusTaskDraft? draft, AppLocalizatio
   return session.isRunning ? 'يعمل' : 'مفتوح';
 }
 
-List<Widget> _dots(FocusSessionState session, FocusTaskDraft? draft) {
-  if (session.mode == FocusMode.linked) {
+List<Widget> _dots(
+  FocusSessionState session,
+  FocusTaskDraft? draft,
+  FocusMode mode,
+) {
+  if (mode == FocusMode.linked) {
     final int total = session.steps.length;
     if (total == 0) return <Widget>[];
     return List<Widget>.generate(total, (int i) {
@@ -1369,7 +1469,7 @@ List<Widget> _dots(FocusSessionState session, FocusTaskDraft? draft) {
       return _Dot(color: c);
     });
   }
-  if (session.mode == FocusMode.pomodoro) {
+  if (mode == FocusMode.pomodoro) {
     final int cycle = (session.rounds % 4) + 1;
     return List<Widget>.generate(4, (int i) {
       Color c = _trackColor;
@@ -1407,13 +1507,271 @@ Color _subjectColor(FocusTaskDraft d) {
 
 String _clock(int totalSeconds, {required bool free}) {
   final int safe = totalSeconds < 0 ? 0 : totalSeconds;
-  if (free && safe >= 3600) {
-    final int h = safe ~/ 3600;
-    final int m = (safe % 3600) ~/ 60;
-    final int s = safe % 60;
+  final int h = safe ~/ 3600;
+  final int m = (safe % 3600) ~/ 60;
+  final int s = safe % 60;
+  if (h > 0) {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
-  final int minutes = safe ~/ 60;
-  final int seconds = safe % 60;
-  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+
+class _HistoryButton extends StatelessWidget {
+  const _HistoryButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: palette.card,
+          border: Border.all(color: palette.line),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(Icons.history_rounded, color: palette.tx),
+      ),
+    );
+  }
+}
+
+class _FocusHistorySheet extends ConsumerWidget {
+  const _FocusHistorySheet({required this.palette});
+  final KhutatiPalette palette;
+
+  String _modeLabel(String mode) {
+    switch (mode) {
+      case 'linked':
+        return 'مرتبط بمهمة';
+      case 'free':
+        return 'مؤقت حر';
+      default:
+        return 'بومودورو';
+    }
+  }
+
+  Color _modeColor(String mode) {
+    switch (mode) {
+      case 'linked':
+        return const Color(0xFF6AA6FF);
+      case 'free':
+        return const Color(0xFFEAE5DA);
+      default:
+        return const Color(0xFFE8B65A);
+    }
+  }
+
+  IconData _modeIcon(String mode) {
+    switch (mode) {
+      case 'linked':
+        return Icons.task_alt_rounded;
+      case 'free':
+        return Icons.all_inclusive_rounded;
+      default:
+        return Icons.timer_rounded;
+    }
+  }
+
+  String _dateLabel(DateTime date, AppLocalizations l10n) {
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime d = DateTime(date.year, date.month, date.day);
+    final int diff = today.difference(d).inDays;
+    if (diff == 0) return 'اليوم';
+    if (diff == 1) return 'أمس';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _fmtDuration(int seconds) {
+    final int m = seconds ~/ 60;
+    final int s = seconds % 60;
+    if (m == 0) return '$s ثانية';
+    if (s == 0) return '$m دقيقة';
+    return '$m دقيقة $s ثانية';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final AsyncValue<List<FocusSession>> history = ref.watch(focusHistoryProvider);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (BuildContext ctx, ScrollController scroll) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: palette.line,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'سجل التركيز',
+                style: TextStyle(
+                  fontFamily: KTypography.displayFamily,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: palette.tx,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: history.when(
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                  error: (Object e, StackTrace st) => Center(
+                    child: Text(
+                      'تعذّر تحميل السجل',
+                      style: TextStyle(color: palette.mute),
+                    ),
+                  ),
+                  data: (List<FocusSession> sessions) {
+                    if (sessions.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              Icons.history_toggle_off_rounded,
+                              size: 56,
+                              color: palette.mute,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'لم تبدأ أي جلسات تركيز بعد. ابدأ الآن!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: KTypography.bodyFamily,
+                                fontSize: 15,
+                                color: palette.mute,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    // Group by date.
+                    final Map<String, List<FocusSession>> groups =
+                        <String, List<FocusSession>>{};
+                    for (final FocusSession s in sessions) {
+                      final String key = _dateLabel(s.startedAt, l10n);
+                      groups.putIfAbsent(key, () => <FocusSession>[]).add(s);
+                    }
+                    final List<String> keys = groups.keys.toList();
+                    return ListView.builder(
+                      controller: scroll,
+                      itemCount: keys.length,
+                      itemBuilder: (BuildContext c, int gi) {
+                        final String key = keys[gi];
+                        final List<FocusSession> items = groups[key]!;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                key,
+                                style: TextStyle(
+                                  fontFamily: KTypography.displayFamily,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: palette.gold,
+                                ),
+                              ),
+                            ),
+                            ...items.map((FocusSession s) {
+                              final String mode = s.mode;
+                              final String title =
+                                  (s.taskTitle != null && s.taskTitle!.isNotEmpty)
+                                  ? s.taskTitle!
+                                  : (s.taskId != null ? 'مهمة' : _modeLabel(mode));
+                              final String typeLabel = _modeLabel(mode);
+                              final String status =
+                                  s.completed ? 'مكتمل' : 'متوقف';
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: palette.bg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: palette.line),
+                                ),
+                                child: Row(
+                                  children: <Widget>[
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: _modeColor(mode).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        _modeIcon(mode),
+                                        color: _modeColor(mode),
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Text(
+                                            title,
+                                            style: TextStyle(
+                                              fontFamily: KTypography.bodyFamily,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w500,
+                                              color: palette.tx,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '$typeLabel · ${_fmtDuration(s.actualSeconds)} · $status',
+                                            style: TextStyle(
+                                              fontFamily: KTypography.bodyFamily,
+                                              fontSize: 12,
+                                              color: palette.mute,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }

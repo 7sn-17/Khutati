@@ -135,6 +135,10 @@ class FocusTimerService : Service() {
                 }
             }
             ACTION_STOP -> {
+                getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("flutter.pending_focus_action", "end")
+                    .apply()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 clearPersisted(this)
