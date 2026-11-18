@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,10 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     with WidgetsBindingObserver {
   bool _immersive = false;
 
+  /// Completed when the app resumes while `_ensureExactAlarms` is waiting on
+  /// the system settings screen.
+  Completer<void>? _resumedFromSettings;
+
   @override
   void initState() {
     super.initState();
@@ -77,7 +82,46 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       );
       controller.consumePendingAction();
       controller.syncWithNative();
+      // Wakes `_ensureExactAlarms` up when the user comes back from the system
+      // "Alarms & reminders" screen.
+      final Completer<void>? waiter = _resumedFromSettings;
+      _resumedFromSettings = null;
+      if (waiter != null && !waiter.isCompleted) waiter.complete();
     }
+  }
+
+  /// `SCHEDULE_EXACT_ALARM` on Android 12+ is what lets the completion alert
+  /// fire at the exact second instead of "sometime soon" after Doze.
+  ///
+  /// Returns `true` when the permission is available. When it is missing the
+  /// dialog opens the system screen and this future waits for the resume that
+  /// follows, so a returning user can carry on into their session instead of
+  /// having to press Start a second time.
+  Future<bool> _ensureExactAlarms() async {
+    if (await ExactAlarmPermission.canSchedule()) return true;
+    if (!mounted) return false;
+
+    final bool opened = await _showExactAlarmDialog(context);
+    if (!opened || !mounted) return false;
+
+    final Completer<void> waiter = Completer<void>();
+    _resumedFromSettings = waiter;
+    await waiter.future.timeout(
+      const Duration(minutes: 3),
+      onTimeout: () {},
+    );
+    _resumedFromSettings = null;
+    if (!mounted) return false;
+
+    final bool granted = await ExactAlarmPermission.canSchedule();
+    if (!granted && mounted) {
+      showKToast(
+        context,
+        'لم تُفعّل صلاحية المنبهات بعد. فعّلها من إعدادات التطبيق ليعمل المؤقت بدقة.',
+        kind: KToastKind.error,
+      );
+    }
+    return granted;
   }
 
   /// Asks once for the battery exemption — but only when the app actually is
@@ -290,6 +334,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
                     session: session,
                     immersive: _immersive,
                     onToggleImmersive: () => _setImmersive(!_immersive),
+                    ensureExactAlarms: _ensureExactAlarms,
                     landscape: orientation == Orientation.landscape,
                   );
                 },
@@ -307,12 +352,14 @@ class _FocusView extends ConsumerWidget {
     required this.session,
     required this.immersive,
     required this.onToggleImmersive,
+    required this.ensureExactAlarms,
     required this.landscape,
   });
 
   final FocusSessionState session;
   final bool immersive;
   final VoidCallback onToggleImmersive;
+  final Future<bool> Function() ensureExactAlarms;
   final bool landscape;
 
   @override
@@ -383,18 +430,13 @@ class _FocusView extends ConsumerWidget {
 
     Future<void> startSession() async {
       haptics.selection();
-      // Android 12+: exact alarms are required for the background timer to
-      // fire accurately. Ask once, gracefully, instead of silently falling
-      // back to inexact alarms.
+      // Android 12+: exact alarms are what make the completion alert fire at
+      // the right second in the background. Ask gracefully instead of silently
+      // degrading to inexact alarms.
       if (Theme.of(context).platform == TargetPlatform.android) {
-        final bool allowed = await ExactAlarmPermission.canSchedule();
-        if (!allowed) {
-          if (!context.mounted) return;
-          await _showExactAlarmDialog(context);
-          return;
-        }
+        final bool allowed = await ensureExactAlarms();
+        if (!allowed || !context.mounted) return;
       }
-      if (!context.mounted) return;
       if (isTask) {
         if (draft == null || draft.steps.isEmpty) {
           showKToast(context, l10n.focusNoTaskTitle, kind: KToastKind.info);
@@ -427,7 +469,9 @@ class _FocusView extends ConsumerWidget {
         haptics.selection();
         controller.resume();
       } else {
-        startSession();
+        // Fire-and-forget: the permission dialog can suspend this future for
+        // as long as the user spends in system settings.
+        unawaited(startSession());
       }
     }
 
@@ -2161,10 +2205,11 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
 }
 
 /// Premium dialog shown when `SCHEDULE_EXACT_ALARM` is not granted on
-/// Android 12+. Opens the system settings screen and returns afterwards.
-Future<void> _showExactAlarmDialog(BuildContext context) async {
+/// Android 12+. Resolves to `true` when the user asked to open the system
+/// settings screen for the permission.
+Future<bool> _showExactAlarmDialog(BuildContext context) async {
   final KhutatiPalette palette = context.palette;
-  await showDialog<void>(
+  final bool? opened = await showDialog<bool>(
     context: context,
     builder: (BuildContext ctx) => AlertDialog(
       backgroundColor: palette.card,
@@ -2190,7 +2235,7 @@ Future<void> _showExactAlarmDialog(BuildContext context) async {
       ),
       actions: <Widget>[
         TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
+          onPressed: () => Navigator.of(ctx).pop(false),
           child: Text(
             'لاحقاً',
             style: TextStyle(color: palette.mute),
@@ -2198,12 +2243,15 @@ Future<void> _showExactAlarmDialog(BuildContext context) async {
         ),
         FilledButton(
           onPressed: () async {
+            // Pop first so the settings screen is not stacked behind a dialog
+            // that would still be animating when the app is backgrounded.
+            Navigator.of(ctx).pop(true);
             await ExactAlarmPermission.request();
-            if (ctx.mounted) Navigator.of(ctx).pop();
           },
-          child: const Text('فتح الإعدادات'),
+          child: Text('فتح الإعدادات'),
         ),
       ],
     ),
   );
+  return opened ?? false;
 }

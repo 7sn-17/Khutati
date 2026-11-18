@@ -1233,7 +1233,6 @@ class _Medal extends StatelessWidget {
             icon: icon,
             level: level,
             line: context.palette.line,
-            card2: context.palette.card2,
             mute: context.palette.mute,
           ),
         ),
@@ -1247,14 +1246,12 @@ class _MedalPainter extends CustomPainter {
     required this.icon,
     required this.level,
     required this.line,
-    required this.card2,
     required this.mute,
   });
 
   final String icon;
   final int level;
   final Color line;
-  final Color card2;
   final Color mute;
 
   static Color _ribbonTop = Color(0xFFD3453A);
@@ -1505,7 +1502,6 @@ class _MedalPainter extends CustomPainter {
       oldDelegate.icon != icon ||
       oldDelegate.level != level ||
       oldDelegate.line != line ||
-      oldDelegate.card2 != card2 ||
       oldDelegate.mute != mute;
 }
 
@@ -1643,10 +1639,11 @@ class _DayGrid extends StatelessWidget {
   final int selectedDay;
   final ValueChanged<int> onSelect;
 
-  /// Width of the week-label gutter. 58dp fits `أسبوع 10` above `28 نوفمبر` at
-  /// 9px without ellipsis on a 360dp screen.
-  static double _labelWidth = 58;
-  static double _gap = 5;
+  /// Width of the week-label gutter. Only `أسبوع N` is shown now, so the gutter
+  /// is narrow: every dp it takes is a dp the seven day cells lose, and cramped
+  /// cells are what clipped the weekday headers.
+  static const double _labelWidth = 40;
+  static const double _gap = 5;
 
   @override
   Widget build(BuildContext context) {
