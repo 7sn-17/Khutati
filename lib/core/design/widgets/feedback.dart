@@ -137,6 +137,13 @@ class _KToastOverlayState extends State<_KToastOverlay>
                             fontWeight: FontWeight.w500,
                             color: palette.tx,
                             height: 1.45,
+                            // The overlay has no Material ancestor, so make
+                            // sure no inherited debug decoration can paint a
+                            // yellow underline under the toast text.
+                            decoration: TextDecoration.none,
+                            decorationColor: Colors.transparent,
+                            decorationStyle: TextDecorationStyle.solid,
+                            decorationThickness: 0,
                           ),
                         ),
                       ),

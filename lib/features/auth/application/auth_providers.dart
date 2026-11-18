@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/supabase_auth.dart';
+import 'guest_mode.dart';
 
 /// Broadcast stream of Supabase auth events. Empty when the build has no
 /// Supabase credentials, so the login screen still renders in development.
@@ -26,17 +27,27 @@ final Provider<bool> isSignedInProvider = Provider<bool>((Ref ref) {
 });
 
 final Provider<AuthController> authControllerProvider =
-    Provider<AuthController>((Ref ref) => const AuthController());
+    Provider<AuthController>((Ref ref) => AuthController(ref));
 
 /// UI-facing auth actions. Every method throws [AuthFailure] with a message
 /// that is ready for a KToast.
 class AuthController {
-  const AuthController();
+  AuthController(this._ref);
 
-  Future<void> signInWithGoogle() => SupabaseAuth.signInWithGoogle();
+  final Ref _ref;
+
+  /// A successful Google account picker signs the user in and upgrades them
+  /// from guest mode, so signing out later returns to the login screen.
+  Future<void> signInWithGoogle() async {
+    await SupabaseAuth.signInWithGoogle();
+    await _ref.read(guestModeProvider.notifier).leave();
+  }
 
   Future<void> updateDisplayName(String name) =>
       SupabaseAuth.updateDisplayName(name);
 
-  Future<void> signOut() => SupabaseAuth.signOut();
+  Future<void> signOut() async {
+    await SupabaseAuth.signOut();
+    await _ref.read(guestModeProvider.notifier).leave();
+  }
 }

@@ -3,9 +3,13 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/design/tokens.dart';
-import '../../../core/design/widgets/feedback.dart';
+import '../../../core/motion/haptics.dart';
+import '../../../core/motion/press_scale.dart';
+import '../application/guest_mode.dart';
 import 'google_sign_in_button.dart';
 
 /// Login — a direct Flutter translation of `design/login_reference.html`.
@@ -76,60 +80,69 @@ class _LoginScreenState extends State<LoginScreen>
                         ],
                       )
                     : null,
-                child: ClipRect(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      Positioned.fill(child: _Sky(colors: colors)),
-                      Positioned(
-                        top: media.padding.top + 40,
-                        right: 24,
-                        child: _Wordmark(colors: colors),
-                      ),
-                      Positioned(
-                        top: media.padding.top + 12,
-                        left: 20,
-                        child: _GuestChip(colors: colors),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: mountainHeight,
-                        child: RepaintBoundary(
-                          child: AnimatedBuilder(
-                            animation: _rise,
-                            builder: (BuildContext context, Widget? child) {
-                              final bool reduce =
-                                  MediaQuery.maybeDisableAnimationsOf(
-                                    context,
-                                  ) ??
-                                  false;
-                              final double elapsed = reduce ? 1 : _rise.value;
-                              return CustomPaint(
-                                painter: _MountainsPainter(
-                                  // cubic-bezier(.2,.8,.2,1), 1.6s each,
-                                  // delayed by 0 / 0.15 / 0.3 seconds.
-                                  back: reduce ? 1 : _layer(elapsed, 0),
-                                  middle: reduce ? 1 : _layer(elapsed, 150),
-                                  front: reduce ? 1 : _layer(elapsed, 300),
-                                  mt1: colors.mt1,
-                                  mt2: colors.mt2,
-                                  mt3: colors.mt3,
-                                  mast: colors.tx,
-                                  flag: _LoginColors.flag,
-                                ),
-                              );
-                            },
+                child: Column(
+                  children: <Widget>[
+                    // The reference keeps the mountains inside the sky and
+                    // pulls the sheet up by 20px. Flutter has no negative
+                    // margin, so the sky is the exact remaining space and the
+                    // mountain hero is allowed to paint 20px below its bounds:
+                    // the opaque sheet then overlaps it by exactly 20px.
+                    Expanded(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        clipBehavior: Clip.none,
+                        children: <Widget>[
+                          Positioned.fill(child: _Sky(colors: colors)),
+                          Positioned(
+                            top: media.padding.top + 40,
+                            right: 24,
+                            child: _Wordmark(colors: colors),
                           ),
-                        ),
+                          Positioned(
+                            top: media.padding.top + 12,
+                            left: 20,
+                            child: _GuestChip(colors: colors),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: -20,
+                            height: mountainHeight,
+                            child: RepaintBoundary(
+                              child: AnimatedBuilder(
+                                animation: _rise,
+                                builder: (BuildContext context, Widget? child) {
+                                  final bool reduce =
+                                      MediaQuery.maybeDisableAnimationsOf(
+                                        context,
+                                      ) ??
+                                      false;
+                                  final double elapsed = reduce
+                                      ? 1
+                                      : _rise.value;
+                                  return CustomPaint(
+                                    painter: _MountainsPainter(
+                                      // cubic-bezier(.2,.8,.2,1), 1.6s each,
+                                      // delayed by 0 / 0.15 / 0.3 seconds.
+                                      back: reduce ? 1 : _layer(elapsed, 0),
+                                      middle: reduce ? 1 : _layer(elapsed, 150),
+                                      front: reduce ? 1 : _layer(elapsed, 300),
+                                      mt1: colors.mt1,
+                                      mt2: colors.mt2,
+                                      mt3: colors.mt3,
+                                      mast: colors.tx,
+                                      flag: _LoginColors.flag,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: _Sheet(colors: colors, dark: dark),
-                      ),
-                    ],
-                  ),
+                    ),
+                    _Sheet(colors: colors, dark: dark),
+                  ],
                 ),
               ),
             );
@@ -206,40 +219,50 @@ class _Wordmark extends StatelessWidget {
   }
 }
 
-class _GuestChip extends StatelessWidget {
+class _GuestChip extends ConsumerWidget {
   const _GuestChip({required this.colors});
 
   final _LoginColors colors;
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Material(
-          color: colors.bg.withValues(alpha: 0.60),
-          child: InkWell(
-            onTap: () => showKToast(
-              context,
-              'سجّل الدخول بحساب Google لتبقى خطتك معك على كل هاتف.',
-              kind: KToastKind.info,
-            ),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: colors.line),
-              ),
-              child: Text(
-                'المتابعة كزائر',
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: colors.tx,
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PressScale(
+      scale: 0.95,
+      duration: const Duration(milliseconds: 100),
+      releaseDuration: const Duration(milliseconds: 280),
+      pressCurve: Curves.easeOutCubic,
+      releaseCurve: Curves.easeOutBack,
+      onPressed: () => ref.read(hapticsProvider).light(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Material(
+            color: colors.bg.withValues(alpha: 0.60),
+            child: InkWell(
+              onTap: () async {
+                // Guest mode is a first-class entry point: persist the choice
+                // and open Today immediately. No warning toast and no Google
+                // account is required for the local-first experience.
+                await ref.read(guestModeProvider.notifier).enter();
+                if (context.mounted) context.go('/today');
+              },
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 44),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: colors.line),
+                ),
+                child: Text(
+                  'المتابعة كزائر',
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: colors.tx,
+                  ),
                 ),
               ),
             ),

@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/feedback.dart';
+import '../../../core/motion/haptics.dart';
 import '../../../core/motion/press_scale.dart';
 import '../application/auth_providers.dart';
 import '../data/supabase_auth.dart';
@@ -81,7 +82,13 @@ class _GoogleSignInButtonState extends ConsumerState<GoogleSignInButton> {
       button: true,
       label: widget.label,
       child: PressScale(
-        scale: 0.98,
+        scale: 0.95,
+        duration: const Duration(milliseconds: 100),
+        releaseDuration: const Duration(milliseconds: 280),
+        pressCurve: Curves.easeOutCubic,
+        releaseCurve: Curves.easeOutBack,
+        enabled: !_busy,
+        onPressed: () => ref.read(hapticsProvider).light(),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
