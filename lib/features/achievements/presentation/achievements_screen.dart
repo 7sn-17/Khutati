@@ -273,12 +273,8 @@ class _HeroSection extends StatelessWidget {
               ),
             ),
           ],
-        ],
-      ),
-          ],
         ),
-      ),
-    );
+      );
   }
 }
 

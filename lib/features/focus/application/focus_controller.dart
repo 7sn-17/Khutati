@@ -361,7 +361,6 @@ class FocusController extends Notifier<FocusSessionState> {
       _ticker?.cancel();
       final int recorded = _elapsedSeconds();
       final FocusPhase phase = state.phase;
-      final bool wasPaused = state.isPaused;
       if (phase == FocusPhase.focus) {
         await _markCurrentStepComplete();
       }
