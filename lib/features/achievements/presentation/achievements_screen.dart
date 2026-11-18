@@ -27,14 +27,11 @@ import '../application/achievements_controller.dart';
 
 /// `.hero { background:#0D1A2D; color:#EAE5DA; border-radius:28px;
 ///          padding:22px 20px 18px; gap:16px }`
+///
+/// Only the dark surface is taken from the reference; every foreground colour
+/// inside the hero comes from the theme palette, because the reference is
+/// dark-only and a light-mode build needs dark text on the cream surface.
 const Color _heroBg = Color(0xFF0D1A2D);
-const Color _heroText = Color(0xFFEAE5DA);
-const Color _heroMute = Color(0xFFA9B6CB);
-const Color _heroGold = Color(0xFFE8B65A);
-const Color _heroLine = Color(0xFF26395A);
-const Color _heroDotLine = Color(0xFF34496B);
-const Color _heroCard2 = Color(0xFF1C3150);
-const Color _heroOk = Color(0xFF7CCBB0);
 
 /// `.wrap { padding:16px 16px 120px; gap:30px }`
 const EdgeInsets _wrapPadding = EdgeInsets.fromLTRB(16, 16, 16, 120);
@@ -184,7 +181,7 @@ class AchievementsScreen extends ConsumerWidget {
 }
 
 class _AchievementsBody extends StatefulWidget {
-  _AchievementsBody({required this.data});
+  const _AchievementsBody({required this.data});
 
   final AchievementsData data;
 
@@ -253,17 +250,28 @@ class _AchievementsBodyState extends State<_AchievementsBody> {
 // ---------------------------------------------------------------------------
 
 class _HeroCard extends StatelessWidget {
-  _HeroCard({required this.data});
+  const _HeroCard({required this.data});
 
   final AchievementsData data;
 
   @override
   Widget build(BuildContext context) {
+    // The hero follows the theme: the reference's navy card in dark mode, a
+    // raised cream surface in light mode. Painting the navy card in light mode
+    // is what made the themed (dark) hero text unreadable.
+    final KhutatiPalette palette = context.palette;
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: Stack(
         children: <Widget>[
-          Container(color: _heroBg),
+          Container(
+            decoration: BoxDecoration(
+              color: dark ? _heroBg : palette.card2,
+              borderRadius: BorderRadius.circular(28),
+              border: dark ? null : Border.all(color: palette.line),
+            ),
+          ),
           // `.hero > .pat { position:absolute; inset:0 }`
           Positioned.fill(
             child: IgnorePointer(
@@ -300,7 +308,7 @@ class _HeroCard extends StatelessWidget {
 }
 
 class _PointsColumn extends StatelessWidget {
-  _PointsColumn({required this.data});
+  const _PointsColumn({required this.data});
 
   final AchievementsData data;
 
@@ -356,7 +364,7 @@ class _PointsColumn extends StatelessWidget {
 }
 
 class _StreakColumn extends StatelessWidget {
-  _StreakColumn({required this.data});
+  const _StreakColumn({required this.data});
 
   final AchievementsData data;
 
@@ -409,7 +417,7 @@ class _StreakColumn extends StatelessWidget {
 
 /// `.week` — seven dots, one per day, with `.dot.done/.rest/.wait/.today`.
 class _WeekStrip extends StatelessWidget {
-  _WeekStrip({required this.data});
+  const _WeekStrip({required this.data});
 
   final AchievementsData data;
 
@@ -454,7 +462,7 @@ class _WeekStrip extends StatelessWidget {
           spacing: 14,
           runSpacing: 4,
           children: <Widget>[
-            _LegendDot(color: _heroOk, label: 'أنجزت يومك'),
+            _LegendDot(color: palette.ok, filled: true, label: 'أنجزت يومك'),
             _LegendDot(dashed: true, label: 'يوم راحة'),
             _LegendDot(color: palette.gold, label: 'مهام تنتظرك'),
           ],
@@ -465,7 +473,7 @@ class _WeekStrip extends StatelessWidget {
 }
 
 class _DayDot extends StatelessWidget {
-  _DayDot({required this.status, required this.isToday, this.date});
+  const _DayDot({required this.status, required this.isToday, this.date});
 
   final String status;
   final bool isToday;
@@ -479,11 +487,11 @@ class _DayDot extends StatelessWidget {
     final bool dashed;
     switch (status) {
       case 'done':
-        line = _heroOk;
-        fill = _heroOk;
+        line = palette.ok;
+        fill = palette.ok;
         dashed = false;
       case 'rest':
-        line = _heroDotLine;
+        line = palette.line;
         fill = Colors.transparent;
         dashed = true;
       case 'wait':
@@ -492,10 +500,10 @@ class _DayDot extends StatelessWidget {
         dashed = false;
       case 'today':
         line = palette.tx;
-        fill = _heroCard2;
+        fill = palette.card;
         dashed = false;
       default:
-        line = _heroDotLine;
+        line = palette.line;
         fill = Colors.transparent;
         dashed = false;
     }
@@ -518,7 +526,7 @@ class _DayDot extends StatelessWidget {
             ),
             child: Center(
               child: status == 'done'
-                  ? _CheckMark(size: 16)
+                  ? _CheckMark(size: 16, color: palette.bg)
                   : status == 'rest'
                   ? Text(
                       '–',
@@ -553,17 +561,20 @@ class _DayDot extends StatelessWidget {
 class _LegendDot extends StatelessWidget {
   const _LegendDot({
     required this.label,
-    this.color = _heroDotLine,
+    this.color,
+    this.filled = false,
     this.dashed = false,
   });
 
   final String label;
-  final Color color;
+  final Color? color;
+  final bool filled;
   final bool dashed;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final Color dot = color ?? palette.mute;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -572,8 +583,8 @@ class _LegendDot extends StatelessWidget {
           height: 10,
           child: CustomPaint(
             painter: _CirclePainter(
-              color: color,
-              fill: color == _heroOk ? _heroOk : Colors.transparent,
+              color: dot,
+              fill: filled ? dot : Colors.transparent,
               strokeWidth: 2,
               dashed: dashed,
             ),
@@ -596,7 +607,7 @@ class _LegendDot extends StatelessWidget {
 
 /// `.next { border-top:1px solid #26395A; padding-top:14px; gap:8px }`
 class _NextBadgeBlock extends StatelessWidget {
-  _NextBadgeBlock({required this.data});
+  const _NextBadgeBlock({required this.data});
 
   final AchievementsData data;
 
@@ -608,14 +619,14 @@ class _NextBadgeBlock extends StatelessWidget {
       return Container(
         padding: EdgeInsets.only(top: 14),
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: _heroLine)),
+          border: Border(top: BorderSide(color: palette.line)),
         ),
         child: Text(
           'أكملت كل الأوسمة. أحسنت!',
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
             fontSize: 14,
-            color: _heroOk,
+            color: palette.ok,
             height: 1.6,
           ),
         ),
@@ -630,7 +641,7 @@ class _NextBadgeBlock extends StatelessWidget {
     return Container(
       padding: EdgeInsets.only(top: 14),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: _heroLine)),
+        border: Border(top: BorderSide(color: palette.line)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -664,7 +675,7 @@ class _NextBadgeBlock extends StatelessWidget {
           SizedBox(height: 8),
           _Track(
             fraction: next.fraction,
-            background: _heroLine,
+            background: palette.line,
             fill: palette.gold,
           ),
           SizedBox(height: 8),
@@ -685,7 +696,7 @@ class _NextBadgeBlock extends StatelessWidget {
 
 /// `<details>` — a 44px summary row with a rotating chevron and three rules.
 class _HowItWorks extends StatefulWidget {
-  _HowItWorks();
+  const _HowItWorks();
 
   @override
   State<_HowItWorks> createState() => _HowItWorksState();
@@ -699,7 +710,7 @@ class _HowItWorksState extends State<_HowItWorks> {
     final KhutatiPalette palette = context.palette;
     return Container(
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: _heroLine)),
+        border: Border(top: BorderSide(color: palette.line)),
       ),
       padding: EdgeInsets.only(top: 10),
       child: Column(
@@ -769,7 +780,7 @@ class _HowItWorksState extends State<_HowItWorks> {
 }
 
 class _Bullet extends StatelessWidget {
-  _Bullet(this.text);
+  const _Bullet(this.text);
 
   final String text;
 
@@ -810,7 +821,7 @@ class _Bullet extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _BadgesSection extends StatelessWidget {
-  _BadgesSection({required this.data});
+  const _BadgesSection({required this.data});
 
   final AchievementsData data;
 
@@ -860,7 +871,7 @@ class _BadgesSection extends StatelessWidget {
 }
 
 class _BadgeCard extends StatelessWidget {
-  _BadgeCard({required this.badge});
+  const _BadgeCard({required this.badge});
 
   final BadgeInfo badge;
 
@@ -1028,7 +1039,7 @@ class _BadgeCard extends StatelessWidget {
 ///         border:2px dashed var(--line) }`
 /// `.pip.e { border:2px solid var(--c); background:var(--l); color:#0D1A2D }`
 class _Pip extends StatelessWidget {
-  _Pip({required this.index, required this.earned});
+  const _Pip({required this.index, required this.earned});
 
   final int index;
   final bool earned;
@@ -1218,7 +1229,7 @@ void _openBadgeSheet(BuildContext context, BadgeInfo badge) {
 // ---------------------------------------------------------------------------
 
 class _Medal extends StatelessWidget {
-  _Medal({required this.icon, required this.level});
+  const _Medal({required this.icon, required this.level});
 
   final String icon;
   final int level;
@@ -1242,7 +1253,7 @@ class _Medal extends StatelessWidget {
 }
 
 class _MedalPainter extends CustomPainter {
-  _MedalPainter({
+  const _MedalPainter({
     required this.icon,
     required this.level,
     required this.line,
@@ -1510,7 +1521,7 @@ class _MedalPainter extends CustomPainter {
 // ---------------------------------------------------------------------------
 
 class _DayMapSection extends StatelessWidget {
-  _DayMapSection({
+  const _DayMapSection({
     required this.data,
     required this.selectedDay,
     required this.onSelect,
@@ -1629,7 +1640,7 @@ class _DayMapSection extends StatelessWidget {
 }
 
 class _DayGrid extends StatelessWidget {
-  _DayGrid({
+  const _DayGrid({
     required this.data,
     required this.selectedDay,
     required this.onSelect,
@@ -1692,8 +1703,6 @@ class _DayGrid extends StatelessWidget {
     ];
 
     for (int w = 0; w < weeks; w++) {
-      final int first = w * 7 - offset + 1;
-      final int last = first + 6;
       rows.add(
         Row(
           spacing: _gap,
@@ -1702,9 +1711,6 @@ class _DayGrid extends StatelessWidget {
               width: _labelWidth,
               child: _WeekLabel(
                 index: w,
-                firstDay: first.clamp(1, total),
-                lastDay: last.clamp(1, total),
-                data: data,
                 current: w == currentWeek,
                 palette: palette,
               ),
@@ -1739,50 +1745,43 @@ class _DayGrid extends StatelessWidget {
   }
 }
 
-/// `أسبوع 3` over `12–18 نوفمبر` — the week number alone told the reader
-/// nothing about which dates the row covers, and the last row is usually a
-/// partial week, so the range is computed from the real plan dates.
+/// `أسبوع 3` — the week number only. The date range that used to sit under it
+/// was removed at the product owner's request; the weekday headers above each
+/// column already carry the real dates.
 class _WeekLabel extends StatelessWidget {
-  _WeekLabel({
+  const _WeekLabel({
     required this.index,
-    required this.firstDay,
-    required this.lastDay,
-    required this.data,
     required this.current,
     required this.palette,
   });
 
   final int index;
-  final int firstDay;
-  final int lastDay;
-  final AchievementsData data;
   final bool current;
   final KhutatiPalette palette;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          'أسبوع ${index + 1}',
-          maxLines: 1,
-          style: TextStyle(
-            fontFamily: KTypography.bodyFamily,
-            fontSize: 11,
-            height: 1.35,
-            color: current ? palette.tx : palette.mute,
-            fontWeight: current ? FontWeight.w600 : FontWeight.w400,
-          ),
+    // The gutter is narrow, so `أسبوع 10` scales down instead of ellipsising.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: Text(
+        'أسبوع ${index + 1}',
+        maxLines: 1,
+        style: TextStyle(
+          fontFamily: KTypography.bodyFamily,
+          fontSize: 11,
+          height: 1.35,
+          color: current ? palette.tx : palette.mute,
+          fontWeight: current ? FontWeight.w600 : FontWeight.w400,
         ),
-      ],
+      ),
     );
   }
 }
 
 class _DayCell extends StatelessWidget {
-  _DayCell({
+  const _DayCell({
     required this.day,
     required this.total,
     required this.status,
@@ -1874,7 +1873,7 @@ class _DayCell extends StatelessWidget {
 }
 
 class _MapLegend extends StatelessWidget {
-  _MapLegend({
+  const _MapLegend({
     required this.color,
     required this.label,
     this.fill = Colors.transparent,
@@ -1925,7 +1924,7 @@ class _MapLegend extends StatelessWidget {
 /// `.dd { background:var(--card2); border-radius:14px; padding:12px 14px;
 ///        min-height:96px; margin-top:14px }`
 class _DayDetail extends StatelessWidget {
-  _DayDetail({required this.data, required this.day});
+  const _DayDetail({required this.data, required this.day});
 
   final AchievementsData data;
   final int day;
@@ -2038,7 +2037,7 @@ class _DayDetail extends StatelessWidget {
 }
 
 class _DetailStat extends StatelessWidget {
-  _DetailStat({required this.value, required this.label});
+  const _DetailStat({required this.value, required this.label});
 
   final String value;
   final String label;
@@ -2078,7 +2077,7 @@ class _DetailStat extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _StudyHoursSection extends StatelessWidget {
-  _StudyHoursSection({required this.data});
+  const _StudyHoursSection({required this.data});
 
   final AchievementsData data;
 
@@ -2206,7 +2205,7 @@ class _StudyHoursSection extends StatelessWidget {
 }
 
 class _SplitRow extends StatelessWidget {
-  _SplitRow({
+  const _SplitRow({
     required this.color,
     required this.label,
     required this.value,
@@ -2263,7 +2262,7 @@ class _SplitRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _SubjectsSection extends StatelessWidget {
-  _SubjectsSection({required this.data});
+  const _SubjectsSection({required this.data});
 
   final AchievementsData data;
 
@@ -2323,7 +2322,7 @@ class _SubjectsSection extends StatelessWidget {
 }
 
 class _SubjectRow extends StatelessWidget {
-  _SubjectRow({required this.subject});
+  const _SubjectRow({required this.subject});
 
   final SubjectProgress subject;
 
@@ -2375,7 +2374,7 @@ class _SubjectRow extends StatelessWidget {
 /// `.surf { background:var(--card); border:1px solid var(--line);
 ///          border-radius:22px; padding:16px }`
 class _Surface extends StatelessWidget {
-  _Surface({required this.child});
+  const _Surface({required this.child});
 
   final Widget child;
 
@@ -2397,7 +2396,7 @@ class _Surface extends StatelessWidget {
 /// `.trk { height:8px; border-radius:4px; background:var(--line) }
 ///  .trk i { display:block; height:100%; border-radius:4px }`
 class _Track extends StatelessWidget {
-  _Track({
+  const _Track({
     required this.fraction,
     required this.background,
     required this.fill,
@@ -2443,7 +2442,7 @@ class _Track extends StatelessWidget {
 
 /// `border-radius:50%` with optional dash pattern, for `.dot`, `.pip` and `.lg i`.
 class _CirclePainter extends CustomPainter {
-  _CirclePainter({
+  const _CirclePainter({
     required this.color,
     required this.fill,
     required this.strokeWidth,
@@ -2484,7 +2483,7 @@ class _CirclePainter extends CustomPainter {
 /// `.cl { border-radius:10px; border:1.5px solid var(--line) }` plus the four
 /// state variants from the reference's day-map CSS.
 class _CellPainter extends CustomPainter {
-  _CellPainter({
+  const _CellPainter({
     required this.fill,
     required this.border,
     required this.borderWidth,
@@ -2525,7 +2524,7 @@ class _CellPainter extends CustomPainter {
 /// The hero texture: `<pattern id="pt" width="56" height="96">` with five
 /// `<use>` calls of `M28 0 56 16V48L28 64 0 48V16z`, stroked #93A1B8 at 13%.
 class _HexPattern extends CustomPainter {
-  _HexPattern();
+  const _HexPattern();
 
   static double _tileWidth = 56;
   static double _tileHeight = 96;
@@ -2578,7 +2577,7 @@ class _HexPattern extends CustomPainter {
 
 /// `m5 12.5 4.5 4.5L19 7.5` with `stroke-width="3"`, 16x16.
 class _CheckMark extends StatelessWidget {
-  const _CheckMark({required this.size, this.color = _heroBg});
+  const _CheckMark({required this.size, required this.color});
 
   final double size;
   final Color color;
@@ -2594,7 +2593,7 @@ class _CheckMark extends StatelessWidget {
 }
 
 class _CheckPainter extends CustomPainter {
-  _CheckPainter({required this.color});
+  const _CheckPainter({required this.color});
 
   final Color color;
 
@@ -2622,7 +2621,7 @@ class _CheckPainter extends CustomPainter {
 
 /// `<path d="m6 9 6 6 6-6"/>` — the details chevron.
 class _Chevron extends StatelessWidget {
-  _Chevron({required this.size, required this.color});
+  const _Chevron({required this.size, required this.color});
 
   final double size;
   final Color color;
@@ -2638,7 +2637,7 @@ class _Chevron extends StatelessWidget {
 }
 
 class _ChevronPainter extends CustomPainter {
-  _ChevronPainter({required this.color});
+  const _ChevronPainter({required this.color});
 
   final Color color;
 
