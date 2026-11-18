@@ -10,6 +10,7 @@ import '../core/device/exact_alarm_prompt.dart';
 import '../core/notifications/focus_notifications.dart';
 import '../core/settings/theme_mode_controller.dart';
 import '../data/sync/sync_bootstrap.dart';
+import '../features/onboarding/application/onboarding_controller.dart';
 import '../features/updates/presentation/update_bootstrap.dart';
 import '../l10n/l10n.dart';
 import 'router.dart';
@@ -57,18 +58,18 @@ class KhutatiApp extends ConsumerWidget {
   }
 }
 
-class _NotificationPermissionBootstrap extends StatefulWidget {
+class _NotificationPermissionBootstrap extends ConsumerStatefulWidget {
   const _NotificationPermissionBootstrap({required this.child});
 
   final Widget child;
 
   @override
-  State<_NotificationPermissionBootstrap> createState() =>
+  ConsumerState<_NotificationPermissionBootstrap> createState() =>
       _NotificationPermissionBootstrapState();
 }
 
 class _NotificationPermissionBootstrapState
-    extends State<_NotificationPermissionBootstrap>
+    extends ConsumerState<_NotificationPermissionBootstrap>
     with WidgetsBindingObserver {
   bool _requested = false;
   bool _exactRetryScheduled = false;
@@ -98,6 +99,8 @@ class _NotificationPermissionBootstrapState
 
   Future<void> _recheckAfterResume() async {
     if (!mounted) return;
+    // Never stack a permission flow on top of the welcome screens.
+    if (!ref.read(onboardingSeenProvider)) return;
     if (!await FocusNotifications.areEnabled()) return;
     if (!mounted) return;
     await _ensureExactAlarms();
@@ -105,6 +108,10 @@ class _NotificationPermissionBootstrapState
 
   Future<void> _request() async {
     if (_requested) return;
+    // A system permission dialog on top of the first welcome screen would
+    // derail the flow before the user knows what the app is. Wait for the
+    // onboarding to finish; the listener in build() calls us again.
+    if (!ref.read(onboardingSeenProvider)) return;
     _requested = true;
 
     // Ask immediately on every cold start until the permission is granted, so
@@ -178,5 +185,10 @@ class _NotificationPermissionBootstrapState
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<bool>(onboardingSeenProvider, (bool? previous, bool next) {
+      if (next && previous != true) unawaited(_request());
+    });
+    return widget.child;
+  }
 }

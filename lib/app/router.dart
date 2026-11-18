@@ -11,6 +11,8 @@ import '../features/auth/data/supabase_auth.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/focus/presentation/focus_screen.dart';
 import '../features/gallery/presentation/widget_gallery_screen.dart';
+import '../features/onboarding/application/onboarding_controller.dart';
+import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/plan/presentation/plan_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/today/presentation/past_tasks_screen.dart';
@@ -33,13 +35,34 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
   final _AuthRefresh refresh = _AuthRefresh();
   final bool guestAtLaunch = ref.read(guestModeProvider);
+  final bool onboardingSeen = ref.read(onboardingSeenProvider);
+  final String initialLocation;
+  if (!onboardingSeen) {
+    initialLocation = '/onboarding';
+  } else if (SupabaseAuth.currentSession == null && !guestAtLaunch) {
+    initialLocation = '/login';
+  } else {
+    initialLocation = '/today';
+  }
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: SupabaseAuth.currentSession == null && !guestAtLaunch
-        ? '/login'
-        : '/today',
+    initialLocation: initialLocation,
     refreshListenable: refresh,
     redirect: (BuildContext context, GoRouterState state) {
+      final bool onOnboarding = state.matchedLocation == '/onboarding';
+      // First launch is a hard gate: nothing else is reachable until the user
+      // has been through the welcome screens.
+      if (!ref.read(onboardingSeenProvider)) {
+        return onOnboarding ? null : '/onboarding';
+      }
+      if (onOnboarding) {
+        // Completing the flow lands on the same destination a normal launch
+        // would have used.
+        return SupabaseAuth.currentSession != null ||
+                ref.read(guestModeProvider)
+            ? '/today'
+            : '/login';
+      }
       final bool signedIn = SupabaseAuth.currentSession != null;
       final bool guest = ref.read(guestModeProvider);
       final bool onLogin = state.matchedLocation == '/login';
@@ -48,6 +71,12 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
       return null;
     },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        builder: (BuildContext context, GoRouterState state) =>
+            const OnboardingScreen(),
+      ),
       GoRoute(
         path: '/login',
         name: 'login',

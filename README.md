@@ -74,13 +74,13 @@ lib/
   core/       design system, device bridges, notifications, settings, sound
   data/       Drift tables + repositories + plan import + cloud sync
   domain/     pure Dart rules (calendar, progress, step state)
-  features/   today · plan · focus · achievements · settings · auth · updates
+  features/   onboarding · today · plan · focus · achievements · settings · auth · updates
 android/      Kotlin: MainActivity, FocusTimerService, FocusAlarmReceiver, FocusEvents
 supabase/     SQL migrations (sync tables, update manifest)
 design/       tokens.json + HTML reference screens
 tools/        Node guards for tokens, dataset, version, launcher icons
 docs/         focused notes: date resolution, updates, APK size, signing
-test/         100 tests (domain, data, design parity, widgets)
+test/         122 tests (domain, data, design parity, updates, onboarding, widgets)
 ```
 
 ## 4. Design system

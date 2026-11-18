@@ -122,11 +122,15 @@ Then `lib/app/app.dart` wraps the routed child in, outermost first:
 `SyncBootstrap` starts the 5-minute sync clock and flushes on lifecycle changes.
 `UpdateBootstrap` is the single app-level update presenter. The notification
 bootstrap asks for `POST_NOTIFICATIONS`, and the instant it is granted it checks
-`AlarmManager.canScheduleExactAlarms()` and prompts if needed.
+`AlarmManager.canScheduleExactAlarms()` and prompts if needed. It waits until
+onboarding is finished: asking for a permission on top of the first slide is the
+worst possible moment.
 
-Router start location: `/login` when there is no Supabase session **and** no
-persisted guest choice, otherwise `/today`. `redirect` re-runs on every auth
-event, so signing in or out clears the stack in both directions.
+Router start location: `/onboarding` while `onboarding_seen_v1` is false;
+otherwise `/login` when there is no Supabase session **and** no persisted guest
+choice, otherwise `/today`. `redirect` re-runs on every auth event, so signing in
+or out clears the stack in both directions, and the onboarding gate is evaluated
+first so a fresh install can never land on a login screen behind the slides.
 
 ---
 
@@ -237,6 +241,19 @@ that. Widgets: `KButton`, `KChip`, `KCard`, `KPill`, `KTag`, `KSectionHeader`,
 Theme (light/dark/system), UI sound toggle, four notification toggles, battery
 optimisation row, update panel, About and Developer modals. Every modal closes
 with a `KButton`, not an unlabeled icon.
+
+### 5.12 Onboarding (`lib/features/onboarding`)
+
+Three slides ("منهاجك كله في 68 يوماً" / "يوم واحد في كل مرة" / "شاهد نفسك
+تتقدم"), shown once on first launch and never again. Everything is painted with
+`CustomPainter` — no SVG library — so the road, nodes, clock, task rows, bars and
+trend line animate at frame rate. A static `HillsPainter` per slide lives in its
+own `RepaintBoundary` and never repaints; only the foreground scene is driven by
+two tickers (a 2400 ms `enter` that replays when a slide becomes active, and a
+12 s `loop` for the ambient motion). Swiping applies parallax + fade + scale via
+`AnimatedBuilder` with the slide passed as `child`, so a drag rebuilds only the
+transform. `onboarding_seen_v1` is written on Skip/ابدأ, and the router gate plus
+the notification-permission bootstrap both key off it. Details: ARCHITECTURE §10.
 
 ---
 

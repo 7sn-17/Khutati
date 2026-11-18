@@ -439,8 +439,9 @@ path alone still works, which is why local builds update correctly.
 
 **Sounds.** `SoundEffects` owns one pre-loaded `AudioPlayer` per entry in the
 `KSound` enum (`PlayerMode.lowLatency`, `ReleaseMode.stop`, per-sound volume
-0.32–0.40). Preparation is shared through a single future, so the startup call
-in `main.dart` and the settings provider never configure the same player twice.
+0.14–0.22 — low enough to sit under the app rather than over it). Preparation is
+shared through a single future, so the startup call in `main.dart` and the
+settings provider never configure the same player twice.
 
 | `KSound` | Asset | Length | Used by |
 |---|---|---|---|
@@ -474,7 +475,72 @@ for secondary routes.
 
 ---
 
-## 10. Performance rules ("zero jank")
+## 10. Onboarding (`lib/features/onboarding`)
+
+Three slides, shown exactly once, before login. `khutati-onboarding.html` is the
+visual source; the Flutter version replaces its inline SVG and CSS keyframes with
+canvas painting and tickers, so the same scene runs at 120 Hz without a
+`flutter_svg` decode on the first frame.
+
+**Gate.** `onboardingSeenProvider` (`OnboardingController`, `Notifier<bool>`)
+reads `onboarding_seen_v1` from `SharedPreferences` synchronously inside
+`build()`, so `initialLocation` can be computed before the first frame. While the
+flag is false, `redirect` sends every route except `/onboarding` to
+`/onboarding`; once `complete()` flips it, `/onboarding` resolves to `/today` or
+`/login` depending on the session. The flag is written on Skip or ابدأ only —
+never on a swipe.
+
+**Art.** Each slide is exactly two painters:
+
+- `HillsPainter` — the static backdrop (back hill, front hill, clipped radial
+  glow at 0.32, 56×64 hexagon tile at 6% white). It sits in its own
+  `RepaintBoundary` and `shouldRepaint` returns `false`: rasterised once per
+  size, never touched again.
+- the slide's foreground painter, constructed with
+  `super(repaint: Listenable.merge([enter, loop]))`.
+
+`enterDesignSpace(canvas, size)` reproduces the SVG's
+`preserveAspectRatio="xMidYMax meet"` for a 390×540 box, so every coordinate in
+the painters is the literal number from the HTML. The hills stretch full-bleed
+instead, so no aspect ratio leaves an unpainted edge.
+
+**Motion.** Two controllers per slide: `enter` (2400 ms, one shot, replayed when
+the slide becomes active again) and `loop` (12 s, repeating — flag wave, halos,
+star orbit). The reveal curve is `Curves.easeOutCubic`; `elastic(t)` in
+`onboarding_art.dart` is a clamped `Curves.elasticOut` for node pops. With
+reduced motion (`MediaQuery.maybeDisableAnimationsOf`), `enter` jumps to 1 and
+`loop` stays at rest.
+
+Shared helpers: `segment(t, start, end)` normalises a slice of the timeline,
+`dashPath` uses `PathMetric.extractPath` for the road's dashed centre line, and
+`paintText` lays Arabic out with `TextPainter` anchored by `maxIntrinsicWidth`
+(`width` is the layout constraint, not the ink extent).
+
+**Transitions.** `PageView` + `PageController`. `_ParallaxPage` wraps each slide
+in `AnimatedBuilder(animation: controller, child: slide)` — the `child` is passed
+through, so a drag never rebuilds the slide subtree. With the signed page delta
+`d = index - page`:
+
+| Property | Formula |
+|---|---|
+| translate | `Offset(-0.18 * d * width, 0)` |
+| opacity | `1 - 0.9 * abs(d)` |
+| scale | `1 - 0.05 * abs(d)` |
+
+A page's slot already travels one full width with the scroll, so the counter
+translation makes the outgoing page trail the finger (net 0.82 of a width) while
+the incoming page leads it (1.18). The incoming page enters at 0.95 and 10%
+opacity and settles at 1.0, so the layers separate in depth instead of sliding as
+one sheet.
+
+**Chrome.** The skip pill (`onboarding-skip`) fades out on the last page. `_Dots`
+animate 8→28 px, `redSoft` when active, and expose `Semantics(selected:, label:
+'الشاشة n')`. The primary button (`onboarding-primary`) reads التالي and becomes
+ابدأ on page 3.
+
+---
+
+## 11. Performance rules ("zero jank")
 
 The app is only tested in release/profile, so debug-mode smoothness proves
 nothing. These are the rules that keep the release build at 60 fps:
@@ -517,9 +583,9 @@ scrolling list items; they are rasterised per item per frame.
 
 ---
 
-## 11. Testing strategy
+## 12. Testing strategy
 
-`flutter test` runs 100 tests across:
+`flutter test` runs the suite across:
 
 | Area | File(s) | What is pinned |
 |---|---|---|
@@ -529,6 +595,8 @@ scrolling list items; they are rasterised per item per frame.
 | Plan engine | `test/plan_engine_test.dart`, `plan_calendar_matrix_test.dart`, `plan_today_resolution_test.dart` | date mapping, midnight, totals |
 | Design parity | `test/design/*` | SVG paths and tokens match the prototype |
 | Formatting | `test/core/format_test.dart` | Arabic digits, durations |
+| Updates | `test/updates/update_repository_test.dart`, `update_controller_test.dart` | `If-None-Match`/304, 403 → Atom fallback, both-fail throws, 60-minute cooldown, silent background failure, honest manual failure, cached ETag |
+| Onboarding | `test/onboarding/onboarding_test.dart` | next→start, skip and start persist the flag, dot jump, `complete()` idempotence |
 | Widgets | `test/design/widgets_test.dart`, `test/today/task_card_layout_test.dart` | layout invariants |
 
 Rules for new tests: database tests use `AppDatabase.memory()` and close in
@@ -537,7 +605,7 @@ Rules for new tests: database tests use `AppDatabase.memory()` and close in
 
 ---
 
-## 12. Error-handling philosophy
+## 13. Error-handling philosophy
 
 - **User actions never fail visibly because of infrastructure.** A failed sync,
   a missing audio sink, a denied permission or a missing native channel is
