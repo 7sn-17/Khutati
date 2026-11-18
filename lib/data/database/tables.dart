@@ -203,6 +203,7 @@ class UserAdditions extends Table {
 }
 
 @DataClassName('FocusSessionRow')
+@DataClassName('FocusSession')
 class FocusSessions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get taskId => text().nullable()();

@@ -17,7 +17,6 @@ import '../../../data/database/app_database.dart';
 import '../application/focus_setup_controller.dart';
 import '../../today/application/today_controller.dart';
 import '../../../domain/plan/plan_task.dart';
-import '../../../domain/plan/plan_step.dart';
 import '../domain/focus_setup.dart';
 
 /// Colours used by the dashed ring, mirroring the HTML reference's CSS vars.
