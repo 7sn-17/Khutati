@@ -171,18 +171,31 @@ class _PlanBodyState extends ConsumerState<_PlanBody> {
           const SizedBox(height: 14),
           Builder(
             builder: (BuildContext context) {
-              final AchievementsData? ach = ref.watch(achievementsProvider).valueOrNull;
-              final TodayData? td = ref.watch(todayDataProvider).valueOrNull;
-              if (ach == null && td == null) return const SizedBox.shrink();
+              // Only these two numbers are used here, so selecting them keeps
+              // this row out of unrelated achievements/today rebuilds.
+              final int? points = ref.watch(
+                achievementsProvider.select(
+                  (AsyncValue<AchievementsData?> value) =>
+                      value.valueOrNull?.totalPoints,
+                ),
+              );
+              final int? streak = ref.watch(
+                todayDataProvider.select(
+                  (AsyncValue<TodayData?> value) => value.valueOrNull?.streak,
+                ),
+              );
+              if (points == null && streak == null) {
+                return const SizedBox.shrink();
+              }
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: <Widget>[
-                    if (ach != null)
-                      KPill(label: 'نقاطك', value: '${ach.totalPoints}'),
-                    if (ach != null && td != null) const SizedBox(width: 8),
-                    if (td != null)
-                      KPill(label: 'سلسلتك', value: '${td.streak}'),
+                    if (points != null) KPill(label: 'نقاطك', value: '$points'),
+                    if (points != null && streak != null)
+                      const SizedBox(width: 8),
+                    if (streak != null)
+                      KPill(label: 'سلسلتك', value: '$streak'),
                   ],
                 ),
               );
@@ -347,11 +360,15 @@ class _OverallRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KProgressRing(
-      progress: data.overall.fraction,
-      numeral: '${(data.overall.fraction * 100).round()}%',
-      size: 78,
-      color: context.palette.gold,
+    // The ring repaints whenever the plan percentage changes; its own layer
+    // keeps that away from the surrounding card and header.
+    return RepaintBoundary(
+      child: KProgressRing(
+        progress: data.overall.fraction,
+        numeral: '${(data.overall.fraction * 100).round()}%',
+        size: 78,
+        color: context.palette.gold,
+      ),
     );
   }
 }
@@ -1343,7 +1360,6 @@ class _TaskLine extends ConsumerWidget {
                       color: palette.mute,
                     ),
                   ),
-
               ],
             ),
           ),
@@ -1362,7 +1378,9 @@ class _TaskLine extends ConsumerWidget {
             tooltip: l10n.planTaskStatusTooltip,
             onSelected: (PlanTaskStatus status) async {
               ref.read(hapticsProvider).selection();
-              await ref.read(planActionsProvider).setTaskStatus(task.id, status);
+              await ref
+                  .read(planActionsProvider)
+                  .setTaskStatus(task.id, status);
               if (!context.mounted) return;
               if (status == PlanTaskStatus.completed) {
                 showKToast(context, l10n.galleryToast);
@@ -1544,7 +1562,6 @@ class _PlanError extends ConsumerWidget {
     );
   }
 }
-
 
 String _planTaskStatusLabel(AppLocalizations l10n, PlanTaskStatus status) {
   switch (status) {

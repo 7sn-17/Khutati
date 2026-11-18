@@ -260,13 +260,34 @@ app start
   └─ _NotificationPermissionBootstrap._request()
        ├─ requestPermission() → POST_NOTIFICATIONS (Android 13+)
        ├─ if granted OR areEnabled():
-       │     └─ _ensureExactAlarms()
-       │           ├─ canScheduleExactAlarms() == true  → done
-       │           └─ false → showExactAlarmDialog() → openExactAlarmSettings()
+       │     └─ _ensureExactAlarms()          (retries once if the router has
+       │           │                           not produced a navigator yet)
+       │           └─ maybePromptExactAlarms(rootNavigatorKey.currentContext)
+       │                 ├─ canSchedule() == true  → done
+       │                 └─ false → KDialog → "فتح الإعدادات" → openExactAlarmSettings()
        └─ else → KDialog rationale → "السماح" → request again
-on resume (returning from system settings)
-  └─ re-check exact alarms once
+on resume
+  └─ if notifications are enabled → _ensureExactAlarms() (silent re-check)
+Focus tab opened
+  └─ maybePromptExactAlarms(context)            (no force, at most once/process)
+Settings → "تذكير المهام" / "تنبيهات الجلسات" turned ON
+  └─ maybePromptExactAlarms(context, force: true)
 ```
+
+`maybePromptExactAlarms` is the only place that decides to show the dialog. It
+guards against stacking (`_showing`) and against nagging a user who chose
+"لاحقاً" (`_prompted`), and re-checks `context.mounted` after every `await`.
+
+**The manifest must declare `SCHEDULE_EXACT_ALARM` only.** `USE_EXACT_ALARM` is
+auto-granted by Android 13+, which forces `canScheduleExactAlarms()` to return
+`true` forever: the system hides the "Alarms & reminders" toggle, the app never
+prompts, and the timer silently degrades to inexact alarms. It is also reserved
+for alarm-clock/calendar apps on Play. Removing it is what makes the prompt fire.
+
+`MainActivity.openExactAlarmSettings()` launches
+`Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM` with `package:<applicationId>`,
+and falls back to the app's details page when an OEM blocks that screen. It
+returns `false` only when every option failed, so the caller can report it.
 
 ---
 
@@ -403,7 +424,50 @@ path alone still works, which is why local builds update correctly.
 
 ---
 
-## 10. Testing strategy
+## 10. Performance rules ("zero jank")
+
+The app is only tested in release/profile, so debug-mode smoothness proves
+nothing. These are the rules that keep the release build at 60 fps:
+
+**Modals.** `showKDialog` never blurs the backdrop. A full-screen
+`BackdropFilter` inside an animated route re-runs a GPU pass over the whole
+window on every frame of the entry transition — that was the reported "freeze".
+The scrim is a static `ModalBarrier` tint (painted once, then composited), and
+only the card fades/scales for 200 ms. The card's own surface is
+`RepaintBoundary`-wrapped inside its decorated box so a repaint caused by the
+dialog (typing, a loading button) cannot dirty the page.
+
+**Persistent blur.** The only remaining `BackdropFilter` in a scrolling context
+is the floating nav bar. It is wrapped in `RepaintBoundary` and kept at sigma 10
+(it re-runs whenever content scrolls behind it, so the radius is a direct cost).
+The login button's blur is on a static screen and can stay.
+
+**Repaint isolation.** Widgets that animate or repaint independently are in their
+own layers: `KEcgLine` (Today), `KProgressRing` (Plan), the focus ring + numeral
+(repaints every second while a session runs), the nav bar, and every dialog card.
+
+**Rebuild isolation.** `ref.watch(...).select(...)` is used where a widget needs
+one field of a large read model (e.g. the Plan header's points/streak pills), so
+it does not rebuild on unrelated changes. The focus timer is the one provider
+that emits at 1 Hz; the screen genuinely needs that state, and its repaint is
+confined to the ring.
+
+**Lists.** Every unbounded list is lazy: the plan week strip is a horizontal
+`ListView.separated`, the focus history is a `ListView.builder`, and the
+achievements day map is bounded by design (68 cells). Day-sized `Column`s inside
+an outer `ListView` are intentional — converting them to shrink-wrapped lists
+would build the same widgets and add layout cost.
+
+**CustomPainter.** Every `shouldRepaint` compares the fields it actually paints
+(the hexagon pattern returns `false` unconditionally). Never return `true` "to be
+safe": that repaints on every ancestor rebuild.
+
+**Shadows.** Two `BoxShadow`s exist in feature code. Do not add shadows to
+scrolling list items; they are rasterised per item per frame.
+
+---
+
+## 11. Testing strategy
 
 `flutter test` runs 100 tests across:
 
@@ -423,7 +487,7 @@ Rules for new tests: database tests use `AppDatabase.memory()` and close in
 
 ---
 
-## 11. Error-handling philosophy
+## 12. Error-handling philosophy
 
 - **User actions never fail visibly because of infrastructure.** A failed sync,
   a missing audio sink, a denied permission or a missing native channel is

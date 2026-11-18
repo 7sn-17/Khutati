@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import '../palette.dart';
@@ -155,7 +153,21 @@ class KDialog extends StatelessWidget {
   }
 }
 
-/// Opens a [KDialog] with a blurred, dimmed backdrop and a fade+scale entry.
+/// Opens a [KDialog] with a dimmed scrim and a fast fade+scale entry.
+///
+/// Performance notes (this route is opened dozens of times per session):
+///
+/// * The backdrop is a **flat tint**, not a `BackdropFilter`. Blurring the whole
+///   screen costs a GPU pass over the full window on every animation frame, and
+///   the dialog content sits on top of that same layer — on mid-range phones
+///   this was the single cause of the "freeze" while a modal opened. A flat
+///   tint gives the same perceived depth for a fraction of the cost.
+/// * Only the card animates (fade + 0.95→1.0 scale, 200 ms, `easeOut`). The
+///   scrim is painted once by the route barrier and then merely composited, so
+///   opening never re-rasterises the screen behind the dialog.
+/// * The card is wrapped in a [RepaintBoundary]; a repaint inside the dialog
+///   (typing a name, a button switching to its loading state) cannot dirty the
+///   page underneath.
 Future<T?> showKDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -163,26 +175,27 @@ Future<T?> showKDialog<T>({
   bool useRootNavigator = true,
 }) {
   final KhutatiPalette palette = context.palette;
+  // A scrim has to *darken* in both themes. `bg` is navy in dark mode but cream
+  // in light mode, so using it everywhere would wash the light theme out; the
+  // ink colour (`tx`) is the correct veil there.
+  final bool isDark = Theme.of(context).brightness == Brightness.dark;
+  final Color scrim = (isDark ? palette.bg : palette.tx).withValues(
+    alpha: isDark ? 0.66 : 0.30,
+  );
   return showGeneralDialog<T>(
     context: context,
     useRootNavigator: useRootNavigator,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: palette.bg.withValues(alpha: 0.55),
-    transitionDuration: const Duration(milliseconds: 240),
-    pageBuilder: (
-      BuildContext context,
-      Animation<double> animation,
-      Animation<double> secondaryAnimation,
-    ) {
-      return Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: const ColoredBox(color: Colors.transparent),
-          ),
-          SafeArea(
+    barrierColor: scrim,
+    transitionDuration: const Duration(milliseconds: 200),
+    pageBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+        ) {
+          return SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
@@ -195,34 +208,34 @@ Future<T?> showKDialog<T>({
                 ),
               ),
             ),
-          ),
-        ],
-      );
-    },
-    transitionBuilder: (
-      BuildContext context,
-      Animation<double> animation,
-      Animation<double> secondaryAnimation,
-      Widget child,
-    ) {
-      final CurvedAnimation curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.94, end: 1).animate(curved),
-          child: child,
-        ),
-      );
-    },
+          );
+        },
+    transitionBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+          Widget child,
+        ) {
+          final CurvedAnimation curved = CurvedAnimation(
+            parent: animation,
+            // A short, decelerating curve reads as "instant" without a visible pop.
+            curve: Curves.easeOut,
+            reverseCurve: Curves.easeIn,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.95, end: 1).animate(curved),
+              child: child,
+            ),
+          );
+        },
   );
 }
 
-/// The actual frosted card. Public so the update dialog can reuse the exact
-/// same surface without nesting a second route.
+/// The dialog card itself. Public so the update dialog can reuse the exact same
+/// surface without nesting a second route.
 class KDialogSurface extends StatelessWidget {
   const KDialogSurface({required this.child, super.key});
 
@@ -240,30 +253,43 @@ class _DialogSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-          decoration: BoxDecoration(
-            color: palette.card.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: palette.gold.withValues(alpha: 0.26)),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: palette.bg.withValues(alpha: 0.52),
-                blurRadius: 40,
-                offset: const Offset(0, 18),
-              ),
-            ],
+    // Deliberately opaque-ish: the card no longer sits behind a blurred
+    // backdrop, so its own fill has to carry the contrast. 0.97 keeps the
+    // scrim from bleeding through text while still reading as a surface.
+    final Color fill = palette.card.withValues(alpha: 0.97);
+    final BorderRadius radius = BorderRadius.circular(28);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: radius,
+        border: Border.all(color: palette.gold.withValues(alpha: 0.26)),
+        // A tighter shadow than before: the old 40 px radius was rasterised on
+        // every scale frame, which is pure cost during the entry animation.
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: palette.bg.withValues(alpha: 0.45),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
-          child: Material(
-            // A dialog route is not wrapped in a Material by default. Without
-            // this, every InkWell (the close button and each KButton) throws
-            // "No Material widget found" the first time it is tapped.
-            type: MaterialType.transparency,
-            child: child,
+        ],
+      ),
+      child: RepaintBoundary(
+        // The boundary sits *inside* the decorated box on purpose: the shadow
+        // and border are painted in the route's own layer (a cached boundary
+        // would clip them at the card edge), while any repaint caused by the
+        // dialog's content stays inside this boundary.
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+            child: Material(
+              // A dialog route is not wrapped in a Material by default. Without
+              // this, every InkWell (the close button and each KButton) throws
+              // "No Material widget found" the first time it is tapped.
+              type: MaterialType.transparency,
+              child: child,
+            ),
           ),
         ),
       ),

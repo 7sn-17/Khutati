@@ -1104,139 +1104,145 @@ void _openBadgeSheet(BuildContext context, BadgeInfo badge) {
     enableDrag: true,
     showDragHandle: true,
     backgroundColor: Colors.transparent,
+    sheetAnimationStyle: const AnimationStyle(
+      duration: Duration(milliseconds: 200),
+      reverseDuration: Duration(milliseconds: 150),
+    ),
     builder: (BuildContext sheetContext) {
       final KhutatiPalette palette = sheetContext.palette;
       final int level = badge.level;
       final int current = badge.current;
 
-      return ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
-        ),
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: palette.card,
-            border: Border.all(color: palette.line),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      return RepaintBoundary(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
           ),
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            24 + MediaQuery.paddingOf(sheetContext).bottom,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                SizedBox(
-                  width: 110,
-                  child: _Medal(icon: badge.icon, level: level),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  badge.name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: KTypography.displayFamily,
-                    fontSize: _h2Size,
-                    fontWeight: FontWeight.w700,
-                    color: palette.tx,
-                    height: 1.5,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: palette.card,
+              border: Border.all(color: palette.line),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              24 + MediaQuery.paddingOf(sheetContext).bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  SizedBox(
+                    width: 110,
+                    child: _Medal(icon: badge.icon, level: level),
                   ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  '${badge.name}. أنت الآن عند ${_fa(current)} ${badge.unit}.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: 14,
-                    color: palette.mute,
-                    height: 1.6,
-                  ),
-                ),
-                SizedBox(height: 8),
-                // `.lr { grid-template-columns:30px 1fr auto; gap:12px;
-                //        border-top:1px solid var(--line); padding:10px 0 }`
-                for (int i = 0; i < badge.thresholds.length; i++)
-                  Container(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: palette.line)),
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        _Pip(index: i, earned: i < level),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                _tierNames[i],
-                                style: TextStyle(
-                                  fontFamily: KTypography.bodyFamily,
-                                  fontSize: 14,
-                                  color: palette.tx,
-                                  height: 1.6,
-                                ),
-                              ),
-                              Text(
-                                '${_fa(badge.thresholds[i])} ${badge.unit}',
-                                style: TextStyle(
-                                  fontFamily: KTypography.bodyFamily,
-                                  fontSize: 12,
-                                  color: palette.mute,
-                                  height: 1.6,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          i < level
-                              ? 'مكتسب'
-                              : i == level
-                              ? 'تبقّى ${_fa(badge.thresholds[i] - current)}'
-                              : 'قادم',
-                          style: TextStyle(
-                            fontFamily: KTypography.bodyFamily,
-                            fontSize: 12,
-                            color: i < level ? palette.ok : palette.mute,
-                            fontWeight: i < level
-                                ? FontWeight.w500
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ],
+                  SizedBox(height: 6),
+                  Text(
+                    badge.name,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: KTypography.displayFamily,
+                      fontSize: _h2Size,
+                      fontWeight: FontWeight.w700,
+                      color: palette.tx,
+                      height: 1.5,
                     ),
                   ),
-                SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.fromHeight(48),
-                      backgroundColor: palette.card2,
-                      side: BorderSide(color: palette.line),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  SizedBox(height: 6),
+                  Text(
+                    '${badge.name}. أنت الآن عند ${_fa(current)} ${badge.unit}.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: 14,
+                      color: palette.mute,
+                      height: 1.6,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  // `.lr { grid-template-columns:30px 1fr auto; gap:12px;
+                  //        border-top:1px solid var(--line); padding:10px 0 }`
+                  for (int i = 0; i < badge.thresholds.length; i++)
+                    Container(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: palette.line)),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          _Pip(index: i, earned: i < level),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  _tierNames[i],
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 14,
+                                    color: palette.tx,
+                                    height: 1.6,
+                                  ),
+                                ),
+                                Text(
+                                  '${_fa(badge.thresholds[i])} ${badge.unit}',
+                                  style: TextStyle(
+                                    fontFamily: KTypography.bodyFamily,
+                                    fontSize: 12,
+                                    color: palette.mute,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            i < level
+                                ? 'مكتسب'
+                                : i == level
+                                ? 'تبقّى ${_fa(badge.thresholds[i] - current)}'
+                                : 'قادم',
+                            style: TextStyle(
+                              fontFamily: KTypography.bodyFamily,
+                              fontSize: 12,
+                              color: i < level ? palette.ok : palette.mute,
+                              fontWeight: i < level
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Text(
-                      'إغلاق',
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: 16,
-                        color: palette.tx,
+                  SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      style: TextButton.styleFrom(
+                        minimumSize: Size.fromHeight(48),
+                        backgroundColor: palette.card2,
+                        side: BorderSide(color: palette.line),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'إغلاق',
+                        style: TextStyle(
+                          fontFamily: KTypography.bodyFamily,
+                          fontSize: 16,
+                          color: palette.tx,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

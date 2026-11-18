@@ -119,7 +119,12 @@ class _TodayBody extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 10, bottom: 2),
-            child: KEcgLine(progress: data.progress.fraction),
+            // The ECG line animates itself for 600 ms on every progress change;
+            // keeping it in its own layer stops that repaint from touching the
+            // rest of the hero card.
+            child: RepaintBoundary(
+              child: KEcgLine(progress: data.progress.fraction),
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -254,10 +259,11 @@ class _TodayBody extends ConsumerWidget {
       'حسبي الله ونعم الوكيل',
       'اللهم إني أسألك العلم النافع والعمل الصالح',
     ];
-    final int day = DateTime(now.year, now.month, now.day)
-        .difference(DateTime(2026))
-        .inDays
-        .abs();
+    final int day = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(2026)).inDays.abs();
     return phrases[day % phrases.length];
   }
 }
@@ -886,13 +892,10 @@ class _StepChipsState extends ConsumerState<StepChips> {
     // One chain per step: every tap appends its write, so the database sees
     // partialUp → completed → partialDown → notStarted in order instead of
     // four concurrent updates racing to the same final row.
-    final Future<void> previous =
-        _writes[step.id] ?? Future<void>.value();
+    final Future<void> previous = _writes[step.id] ?? Future<void>.value();
     final Future<void> write = previous
         .then(
-          (_) => ref
-              .read(todayActionsProvider)
-              .setStepCompleted(step.id, next),
+          (_) => ref.read(todayActionsProvider).setStepCompleted(step.id, next),
         )
         .catchError((Object _) {});
     _writes[step.id] = write;

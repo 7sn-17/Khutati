@@ -66,91 +66,100 @@ class AppShell extends ConsumerWidget {
                       padding: const EdgeInsets.only(
                         bottom: KMetrics.navBottom,
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(KMetrics.navRadius),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                          child: Container(
-                            padding: const EdgeInsets.all(KMetrics.navPadding),
-                            decoration: BoxDecoration(
-                              color: palette.card.withValues(alpha: 0.84),
-                              borderRadius: BorderRadius.circular(
-                                KMetrics.navRadius,
+                      child: RepaintBoundary(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                            KMetrics.navRadius,
+                          ),
+                          child: BackdropFilter(
+                            // The body scrolls behind this bar (`extendBody`),
+                            // so the filter re-runs on every scroll frame.
+                            // 18 was expensive for no visible gain at this size.
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: const EdgeInsets.all(
+                                KMetrics.navPadding,
                               ),
-                              border: Border.all(color: palette.line),
-                            ),
-                            child: LayoutBuilder(
-                              builder:
-                                  (
-                                    BuildContext context,
-                                    BoxConstraints constraints,
-                                  ) {
-                                    final int count = items.length;
-                                    final double slotWidth =
-                                        constraints.maxWidth / count;
-                                    final int index =
-                                        navigationShell.currentIndex;
-                                    return Stack(
-                                      children: <Widget>[
-                                        // Springy sliding selection pill behind the tabs. Uses the
-                                        // directional variant so the highlight follows the tapped tab
-                                        // exactly under RTL (Arabic) layouts.
-                                        AnimatedPositionedDirectional(
-                                          duration: const Duration(
-                                            milliseconds: 220,
-                                          ),
-                                          curve: Curves.easeOutBack,
-                                          start: index * slotWidth,
-                                          top: 0,
-                                          bottom: 0,
-                                          width: slotWidth,
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(2),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: palette.tx,
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                      KMetrics.navItemRadius,
-                                                    ),
+                              decoration: BoxDecoration(
+                                color: palette.card.withValues(alpha: 0.84),
+                                borderRadius: BorderRadius.circular(
+                                  KMetrics.navRadius,
+                                ),
+                                border: Border.all(color: palette.line),
+                              ),
+                              child: LayoutBuilder(
+                                builder:
+                                    (
+                                      BuildContext context,
+                                      BoxConstraints constraints,
+                                    ) {
+                                      final int count = items.length;
+                                      final double slotWidth =
+                                          constraints.maxWidth / count;
+                                      final int index =
+                                          navigationShell.currentIndex;
+                                      return Stack(
+                                        children: <Widget>[
+                                          // Springy sliding selection pill behind the tabs. Uses the
+                                          // directional variant so the highlight follows the tapped tab
+                                          // exactly under RTL (Arabic) layouts.
+                                          AnimatedPositionedDirectional(
+                                            duration: const Duration(
+                                              milliseconds: 220,
+                                            ),
+                                            curve: Curves.easeOutBack,
+                                            start: index * slotWidth,
+                                            top: 0,
+                                            bottom: 0,
+                                            width: slotWidth,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(2),
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: palette.tx,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        KMetrics.navItemRadius,
+                                                      ),
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        Row(
-                                          children: <Widget>[
-                                            for (
-                                              int i = 0;
-                                              i < items.length;
-                                              i++
-                                            )
-                                              Expanded(
-                                                child: _NavButton(
-                                                  item: items[i],
-                                                  selected:
-                                                      navigationShell
-                                                          .currentIndex ==
-                                                      i,
-                                                  palette: palette,
-                                                  onTap: () {
-                                                    ref
-                                                        .read(hapticsProvider)
-                                                        .selection();
-                                                    navigationShell.goBranch(
-                                                      i,
-                                                      initialLocation:
-                                                          i ==
-                                                          navigationShell
-                                                              .currentIndex,
-                                                    );
-                                                  },
+                                          Row(
+                                            children: <Widget>[
+                                              for (
+                                                int i = 0;
+                                                i < items.length;
+                                                i++
+                                              )
+                                                Expanded(
+                                                  child: _NavButton(
+                                                    item: items[i],
+                                                    selected:
+                                                        navigationShell
+                                                            .currentIndex ==
+                                                        i,
+                                                    palette: palette,
+                                                    onTap: () {
+                                                      ref
+                                                          .read(hapticsProvider)
+                                                          .selection();
+                                                      navigationShell.goBranch(
+                                                        i,
+                                                        initialLocation:
+                                                            i ==
+                                                            navigationShell
+                                                                .currentIndex,
+                                                      );
+                                                    },
+                                                  ),
                                                 ),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    );
-                                  },
+                                            ],
+                                          ),
+                                        ],
+                                      );
+                                    },
+                              ),
                             ),
                           ),
                         ),

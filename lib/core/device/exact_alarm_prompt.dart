@@ -5,6 +5,42 @@ import '../design/widgets/controls.dart';
 import '../design/widgets/dialogs.dart';
 import 'exact_alarm_permission.dart';
 
+/// Guards against stacking the same dialog from three entry points (startup,
+/// the Focus tab, and a Settings toggle) and against re-asking a user who
+/// already tapped "لاحقاً" in this process.
+bool _prompted = false;
+bool _showing = false;
+
+/// Shows the "Alarms & reminders" dialog when exact alarms are denied.
+///
+/// Safe to call from any `initState` or tap handler:
+///
+/// * returns `false` immediately when the permission is already granted;
+/// * never opens a second copy while one is visible;
+/// * asks at most once per process unless [force] is set, which is what the
+///   Settings toggles use because turning a reminder on is an explicit intent.
+///
+/// Returns `true` when the system settings screen was opened.
+Future<bool> maybePromptExactAlarms(
+  BuildContext context, {
+  bool force = false,
+}) async {
+  if (_showing || !context.mounted) return false;
+  // The platform check is async; the caller can be disposed while it runs, so
+  // every await is followed by a mounted check before touching the context.
+  if (await ExactAlarmPermission.canSchedule()) return false;
+  if (!context.mounted) return false;
+  if (!force && _prompted) return false;
+
+  _showing = true;
+  _prompted = true;
+  try {
+    return await showExactAlarmDialog(context);
+  } finally {
+    _showing = false;
+  }
+}
+
 /// The one premium explanation for Android's "Alarms & reminders" grant.
 ///
 /// Returns `true` when the system settings screen was opened. The caller can

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/device/battery_optimization.dart';
+import '../../../core/device/exact_alarm_prompt.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -80,9 +81,7 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsSwitchRow(
                 title: 'المؤثرات الصوتية',
                 value: soundEnabled,
-                onChanged: ref
-                    .read(soundEffectsEnabledProvider.notifier)
-                    .set,
+                onChanged: ref.read(soundEffectsEnabledProvider.notifier).set,
               ),
             ],
           ),
@@ -94,9 +93,16 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsSwitchRow(
                 title: l10n.settingsNotifTasks,
                 value: prefs.tasks,
-                onChanged: ref
-                    .read(notificationPrefsProvider.notifier)
-                    .setTasks,
+                onChanged: (bool value) async {
+                  await ref
+                      .read(notificationPrefsProvider.notifier)
+                      .setTasks(value);
+                  // Turning reminders on is an explicit request for scheduled
+                  // alerts; without exact alarms they arrive late or not at all.
+                  if (value && context.mounted) {
+                    await maybePromptExactAlarms(context, force: true);
+                  }
+                },
               ),
               _SettingsSwitchRow(
                 title: l10n.settingsNotifDaily,
@@ -115,9 +121,15 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsSwitchRow(
                 title: l10n.settingsNotifTimer,
                 value: prefs.timer,
-                onChanged: ref
-                    .read(notificationPrefsProvider.notifier)
-                    .setTimer,
+                onChanged: (bool value) async {
+                  await ref
+                      .read(notificationPrefsProvider.notifier)
+                      .setTimer(value);
+                  // The session alert is the one that must be exact.
+                  if (value && context.mounted) {
+                    await maybePromptExactAlarms(context, force: true);
+                  }
+                },
               ),
               const SizedBox(height: 6),
               _SettingsActionRow(

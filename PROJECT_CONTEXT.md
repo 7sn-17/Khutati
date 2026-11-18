@@ -249,12 +249,19 @@ with a `KButton`, not an unlabeled icon.
    call Supabase directly from a widget, controller or screen. Do not await the
    network on a tap.
 
-3. **No default Material dialogs.**
-   Use `showKDialog` + `KDialog` + `KDialogAction` (blurred barrier, 28 px radius,
+3. **No default Material dialogs, and modals must open instantly.**
+   Use `showKDialog` + `KDialog` + `KDialogAction` (tinted scrim, 28 px radius,
    `KButton` actions). Zero `showDialog`/`AlertDialog` calls exist in `lib/`; keep
    it that way. If you show a dialog from a widget that lives in
    `MaterialApp.builder` (above the Navigator), anchor it to
    `rootNavigatorKey.currentContext`, not the builder context.
+   Performance contract, learned the hard way: never put a `BackdropFilter` (or
+   any full-screen blur) inside an animated route — it re-blurs the whole window
+   on every frame of the entry transition and reads as a freeze. The scrim is a
+   flat tint; only the card fades/scales (200 ms, `easeOut`, 0.95→1.0). Builders
+   must be pure: pass already-loaded objects in, and never run a database query or
+   `await` inside `builder`. If a dialog needs fresh data, show it immediately
+   with a loading state and let a provider fill it in.
 
 4. **Google nonce is handled server-side.**
    The native Credential Manager does not mint a nonce, so the Supabase Google
@@ -339,6 +346,11 @@ the four Node checks → `flutter analyze --no-fatal-infos --no-fatal-warnings`
   Code `1` is `partialUp` (what older builds wrote for their single half state).
 - **Focus timer authority.** Never trust a Dart `Timer` for completion. The
   native `targetEndMs` and the exact alarm are authoritative; Dart reconciles.
+- **`USE_EXACT_ALARM` must stay out of the manifest.** It is auto-granted on
+  Android 13+, so `canScheduleExactAlarms()` returns `true` forever, the system
+  hides the "Alarms & reminders" toggle, and the app never prompts. Only
+  `SCHEDULE_EXACT_ALARM` is declared; that is what makes the permission flow
+  reachable (see `ARCHITECTURE.md` §5.4).
 
 ---
 

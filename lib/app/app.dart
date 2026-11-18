@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../core/design/widgets/controls.dart';
 import '../core/design/widgets/dialogs.dart';
-import '../core/device/exact_alarm_permission.dart';
 import '../core/device/exact_alarm_prompt.dart';
 import '../core/notifications/focus_notifications.dart';
 import '../core/settings/theme_mode_controller.dart';
@@ -72,7 +71,7 @@ class _NotificationPermissionBootstrapState
     extends State<_NotificationPermissionBootstrap>
     with WidgetsBindingObserver {
   bool _requested = false;
-  bool _exactPrompted = false;
+  bool _exactRetryScheduled = false;
 
   @override
   void initState() {
@@ -90,12 +89,18 @@ class _NotificationPermissionBootstrapState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // The user may have just returned from the Alarms & reminders screen.
-      if (_exactPrompted) {
-        _exactPrompted = false;
-        unawaited(_ensureExactAlarms());
-      }
+      // The user may have granted notifications — or exact alarms — in system
+      // settings while the app was backgrounded. Neither grant reaches Dart on
+      // its own, so re-evaluate every time we come back.
+      unawaited(_recheckAfterResume());
     }
+  }
+
+  Future<void> _recheckAfterResume() async {
+    if (!mounted) return;
+    if (!await FocusNotifications.areEnabled()) return;
+    if (!mounted) return;
+    await _ensureExactAlarms();
   }
 
   Future<void> _request() async {
@@ -155,13 +160,21 @@ class _NotificationPermissionBootstrapState
   /// fire at an exact minute. This is deliberately immediate: a timer that is
   /// merely "roughly 25 minutes" is not a timer.
   Future<void> _ensureExactAlarms() async {
-    if (!mounted || _exactPrompted) return;
-    if (await ExactAlarmPermission.canSchedule()) return;
     if (!mounted) return;
     final BuildContext? dialogContext = rootNavigatorKey.currentContext;
-    if (dialogContext == null || !dialogContext.mounted) return;
-    _exactPrompted = true;
-    await showExactAlarmDialog(dialogContext);
+    if (dialogContext == null || !dialogContext.mounted) {
+      // On a cold start the router may still be resolving its initial redirect,
+      // so the root navigator has no context yet. Retry once on the next frame
+      // instead of silently skipping the prompt (which is what used to happen).
+      if (_exactRetryScheduled) return;
+      _exactRetryScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _exactRetryScheduled = false;
+        unawaited(_ensureExactAlarms());
+      });
+      return;
+    }
+    await maybePromptExactAlarms(dialogContext);
   }
 
   @override

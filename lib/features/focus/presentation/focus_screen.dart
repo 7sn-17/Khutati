@@ -61,6 +61,10 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       controller.syncWithNative();
       _tryAutoLoadTask();
       _applySystemUi();
+      // Opening the tab is an intent to use the timer, so surface the missing
+      // grant here as well as at startup. The helper de-duplicates, so this can
+      // never stack a second dialog on top of the startup one.
+      unawaited(maybePromptExactAlarms(context));
     });
   }
 
@@ -520,10 +524,17 @@ class _FocusView extends ConsumerWidget {
           context: context,
           isScrollControlled: true,
           backgroundColor: palette.card,
+          // 200 ms instead of the 250 ms default: the sheet is a read-only
+          // list, so a longer entry animation only reads as latency.
+          sheetAnimationStyle: const AnimationStyle(
+            duration: Duration(milliseconds: 200),
+            reverseDuration: Duration(milliseconds: 150),
+          ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          builder: (BuildContext ctx) => _FocusHistorySheet(palette: palette),
+          builder: (BuildContext ctx) =>
+              RepaintBoundary(child: _FocusHistorySheet(palette: palette)),
         );
       },
     );
@@ -1257,66 +1268,70 @@ class _FocusRing extends StatelessWidget {
         return SizedBox(
           width: ringSize,
           height: ringSize,
-          child: Stack(
-            alignment: Alignment.center,
-            children: <Widget>[
-              CustomPaint(
-                size: Size.square(ringSize),
-                painter: _FocusRingPainter(
-                  fraction: fraction,
-                  segments: segments,
-                  color: color,
-                  trackColor: trackColor,
+          // The ring and its numeral repaint every second while a session runs.
+          // Isolating them keeps the rest of the screen out of that repaint.
+          child: RepaintBoundary(
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                CustomPaint(
+                  size: Size.square(ringSize),
+                  painter: _FocusRingPainter(
+                    fraction: fraction,
+                    segments: segments,
+                    color: color,
+                    trackColor: trackColor,
+                  ),
                 ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 14,
-                      color: palette.mute,
-                    ),
-                  ),
-                  SizedBox(
-                    width: textWidth,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        time,
-                        maxLines: 1,
-                        textDirection: TextDirection.ltr,
-                        style: TextStyle(
-                          fontFamily: KTypography.displayFamily,
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.w700,
-                          height: 1.05,
-                          color: palette.tx,
-                          fontFeatures: const <FontFeature>[
-                            FontFeature.tabularFigures(),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (sub.isNotEmpty)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
                     Text(
-                      sub,
+                      label,
                       style: TextStyle(
                         fontFamily: KTypography.bodyFamily,
-                        fontSize: 13,
+                        fontSize: 14,
                         color: palette.mute,
                       ),
                     ),
-                  if (dots.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Row(mainAxisSize: MainAxisSize.min, children: dots),
+                    SizedBox(
+                      width: textWidth,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          time,
+                          maxLines: 1,
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(
+                            fontFamily: KTypography.displayFamily,
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w700,
+                            height: 1.05,
+                            color: palette.tx,
+                            fontFeatures: const <FontFeature>[
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (sub.isNotEmpty)
+                      Text(
+                        sub,
+                        style: TextStyle(
+                          fontFamily: KTypography.bodyFamily,
+                          fontSize: 13,
+                          color: palette.mute,
+                        ),
+                      ),
+                    if (dots.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Row(mainAxisSize: MainAxisSize.min, children: dots),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
