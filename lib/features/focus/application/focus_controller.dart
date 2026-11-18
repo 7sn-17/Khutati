@@ -8,6 +8,7 @@ import 'package:drift/drift.dart';
 
 import '../../../data/database/app_database.dart';
 import '../../../data/database/database_provider.dart';
+import '../../../data/providers.dart';
 import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_task.dart';
 import '../../../domain/plan/step_progress.dart';
