@@ -278,6 +278,15 @@
   "planTaskStatusTooltip": "تغيير حالة المهمة",
   "pastTasksTitle": "المهام المتأخرة",
   "pastTasksEmpty": "لا توجد مهام متأخرة. أحسنت!",
+  "pastTasksOverdueCount": "{count, plural, =0{لا مهام متأخرة} =1{مهمة متأخرة واحدة} =2{مهمتان متأخرتان} few{{count} مهام متأخرة} many{{count} مهمة متأخرة} other{{count} مهمة متأخرة}}",
+  "@pastTasksOverdueCount": {
+    "description": "Badge on a collapsed overdue day, e.g. 7 مهام متأخرة.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "pastTasksReview": "مراجعة المهام المتأخرة",
   "todayStepPartialToast": "سُجِّلت الخطوة جزئياً — اضغط مرة أخرى لإكمالها",
   "todayStepCompleteToast": "أحسنت، أكملت الخطوة",

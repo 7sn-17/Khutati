@@ -162,6 +162,10 @@ update dialog and the notification prompt wait for it instead of a timer.
 - Rotating dhikr in the quote section, keyed by local day index (stable while the
   user reads, changes at midnight).
 - Overdue alert opens `/past-tasks?day=N`.
+- `/past-tasks` is a list of day accordions, all closed on load: each header is a
+  card with the day title, a red count badge («٧ مهام متأخرة») and a chevron that
+  turns 180°. Tapping expands the day's `TaskCard`s over 320 ms `easeInOut`; the
+  one exception is the `?day=N` drill-down, which opens that single day.
 
 ### 5.3 Plan (`lib/features/plan`)
 

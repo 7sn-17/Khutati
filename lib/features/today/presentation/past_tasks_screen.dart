@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
+import '../../../core/sound/sound_effects.dart';
 import '../../../core/utils/format.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_task.dart';
@@ -62,8 +63,7 @@ class _PastTasksBody extends ConsumerWidget {
             day.date.month,
             day.date.day,
           );
-          return date.isBefore(today) ||
-              day.status == PlanDayStatus.overdue;
+          return date.isBefore(today) || day.status == PlanDayStatus.overdue;
         })
         .toList(growable: false);
 
@@ -78,55 +78,34 @@ class _PastTasksBody extends ConsumerWidget {
       if (openTasks.isEmpty) continue;
       hasTasks = true;
 
+      final int firstNumber = number + 1;
+      number += openTasks.length;
+
       children.add(
         Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 6),
-          child: Row(
-            children: <Widget>[
-              Text(
-                l10n.planSearchDay(day.day.dayNumber, KhutatiFormat.planDate(day.date)),
-                style: TextStyle(
-                  fontFamily: KTypography.displayFamily,
-                  fontSize: KTypography.h2Size,
-                  fontWeight: FontWeight.w700,
-                  color: palette.tx,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                l10n.planTaskCount(openTasks.length),
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: KTypography.smallSize,
-                  color: palette.mute,
-                ),
-              ),
-            ],
+          padding: const EdgeInsets.only(bottom: KMetrics.cardGap),
+          child: _DayAccordion(
+            key: ValueKey<int>(day.day.dayNumber),
+            title: l10n.planSearchDay(
+              day.day.dayNumber,
+              KhutatiFormat.planDate(day.date),
+            ),
+            tasks: openTasks,
+            firstNumber: firstNumber,
+            accents: day.subjectAccents,
+            format: format,
+            // The list always opens fully collapsed. The only exception is the
+            // single-day drill-down (`/past-tasks?day=N`), where the user has
+            // already asked for that one day and a closed card would just be
+            // an extra tap.
+            initiallyExpanded: dayNumber != null,
           ),
         ),
       );
-
-      for (final PlanTask task in openTasks) {
-        number += 1;
-        children.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: KMetrics.cardGap),
-            child: TaskCard(
-              key: ValueKey<String>(task.id),
-              task: task,
-              number: number,
-              accent: day.subjectAccents[task.subjectKey] ?? palette.gold,
-              format: format,
-            ),
-          ),
-        );
-      }
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.pastTasksTitle),
-      ),
+      appBar: AppBar(title: Text(l10n.pastTasksTitle)),
       body: children.isEmpty || !hasTasks
           ? Center(
               child: Padding(
@@ -151,6 +130,169 @@ class _PastTasksBody extends ConsumerWidget {
               ),
               children: children,
             ),
+    );
+  }
+}
+
+/// One collapsible day: a compact header that expands into its task cards.
+///
+/// Everything starts closed so the screen is a short, scannable list of days
+/// rather than a long scroll of tasks. Expansion is a plain [AnimatedSize] over
+/// `Curves.easeInOut` — the child is only built while open, so a collapsed day
+/// costs one header row and nothing else.
+class _DayAccordion extends StatefulWidget {
+  const _DayAccordion({
+    required this.title,
+    required this.tasks,
+    required this.firstNumber,
+    required this.accents,
+    required this.format,
+    this.initiallyExpanded = false,
+    super.key,
+  });
+
+  final String title;
+  final List<PlanTask> tasks;
+
+  /// Number of the first task in the screen-wide sequence, so the numbers stay
+  /// continuous across days whether a day is open or closed.
+  final int firstNumber;
+  final Map<String, Color> accents;
+  final KhutatiFormat format;
+  final bool initiallyExpanded;
+
+  @override
+  State<_DayAccordion> createState() => _DayAccordionState();
+}
+
+class _DayAccordionState extends State<_DayAccordion> {
+  static const Duration _duration = Duration(milliseconds: 320);
+
+  late bool _open = widget.initiallyExpanded;
+
+  void _toggle() => setState(() => _open = !_open);
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    final BorderRadius radius = BorderRadius.circular(KMetrics.cardRadius);
+    final String countLabel = context.l10n.pastTasksOverdueCount(
+      widget.tasks.length,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: radius,
+        border: Border.all(color: palette.line),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            KInkSurface(
+              onTap: _toggle,
+              borderRadius: radius,
+              sound: KSound.toggle,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Semantics(
+                button: true,
+                expanded: _open,
+                label: widget.title,
+                value: countLabel,
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: KTypography.displayFamily,
+                          fontSize: KTypography.h2Size,
+                          fontWeight: FontWeight.w700,
+                          color: palette.tx,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.red.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(
+                          KMetrics.pillRadius,
+                        ),
+                      ),
+                      child: Text(
+                        countLabel,
+                        style: TextStyle(
+                          fontFamily: KTypography.bodyFamily,
+                          fontSize: KTypography.tagSize,
+                          fontWeight: FontWeight.w500,
+                          color: palette.redtx,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    AnimatedRotation(
+                      turns: _open ? 0.5 : 0,
+                      duration: _duration,
+                      curve: Curves.easeInOut,
+                      child: Icon(
+                        Icons.expand_more_rounded,
+                        size: 22,
+                        color: palette.mute,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            AnimatedSize(
+              duration: _duration,
+              curve: Curves.easeInOut,
+              alignment: AlignmentDirectional.topStart,
+              child: _open
+                  ? _buildTasks(palette)
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTasks(KhutatiPalette palette) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(height: 1, color: palette.line),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+          child: Column(
+            children: <Widget>[
+              for (int i = 0; i < widget.tasks.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: KMetrics.cardGap),
+                  child: TaskCard(
+                    key: ValueKey<String>(widget.tasks[i].id),
+                    task: widget.tasks[i],
+                    number: widget.firstNumber + i,
+                    accent:
+                        widget.accents[widget.tasks[i].subjectKey] ??
+                        palette.gold,
+                    format: widget.format,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
