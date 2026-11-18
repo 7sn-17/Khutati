@@ -34,16 +34,16 @@ class SoundEffectsController extends Notifier<bool> {
 /// The four UI sounds, each with its own pre-loaded player.
 enum KSound {
   /// Soft wooden click: buttons, list rows, modal actions.
-  tap('sounds/click.wav', 0.38),
+  tap('sounds/click.wav', 0.20),
 
   /// Short "tock": switches and the 4-tap step cycle.
-  toggle('sounds/toggle.wav', 0.40),
+  toggle('sounds/toggle.wav', 0.22),
 
   /// Gentle chime: a step or a focus session is completed.
-  success('sounds/success.wav', 0.34),
+  success('sounds/success.wav', 0.16),
 
   /// Soft whoosh: starting or stopping a focus session.
-  timer('sounds/timer.wav', 0.32);
+  timer('sounds/timer.wav', 0.14);
 
   const KSound(this.asset, this.volume);
 

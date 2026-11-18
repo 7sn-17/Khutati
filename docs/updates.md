@@ -14,21 +14,39 @@ The app checks for a newer APK without blocking startup or breaking offline use.
 
 Both sources are consulted and the newest version wins, so a stale Supabase row
 can never hide a newer GitHub release; Supabase wins ties. A failed source is
-ignored when the other one succeeds. If both fail, the UI shows a soft message
-and the plan keeps working offline.
+ignored when the other one succeeds. Only when **every** source fails does the
+check throw, and then the UI says so plainly.
+
+GitHub's anonymous API allows 60 requests per hour per IP, so the GitHub path
+has two extra layers:
+
+3. **Conditional requests** — the ETag of the last successful response is stored
+   and sent as `If-None-Match`. `304 Not Modified` is a successful check with no
+   update and costs no quota.
+4. **Atom fallback** — if the API fails (typically `403` rate limiting), the
+   static `https://github.com/<repo>/releases.atom` feed is read instead. It has
+   no asset list, so the APK URL is reconstructed as
+   `releases/download/<tag>/Khutati.apk`; the tag keeps its `v`. The release page
+   is kept as a secondary link.
 
 ## Client behaviour
 
 - `UpdateBootstrap` runs a silent check after the first frame and whenever the
-  app returns to the foreground.
-- Checks are throttled to once every 6 hours (`update_last_check_ms`); a failed
-  check retries after 15 minutes (`update_last_attempt_ms`) so offline launches
-  do not hammer the network. While either window is active no request is made.
+  app returns to the foreground — **only** if the last successful check is older
+  than 60 minutes (`update_last_check_ms`).
+- A failed background check is silent, leaves `update_last_check_ms` untouched
+  (so the next resume retries), and never changes what the user sees. There is
+  no separate failure throttle: an offline launch fails fast and tries again on
+  the next resume.
+- A manual check from Settings bypasses the cooldown, shows the button spinner
+  immediately, and reports the real outcome: "أنت تستخدم أحدث إصدار" only on
+  success, and "تعذر التحقق من التحديثات. يرجى التحقق من اتصالك بالإنترنت" on
+  failure. A failure is never rendered as "up to date".
 - When a newer release is found, the shared branded dialog opens over the app.
   It shows the version, its Arabic "what's new" notes and the update/later/skip
   actions. Settings offers the same dialog through "عرض التحديث".
 - A skipped version is stored in `update_skipped_version_code`; "check now" in
-  Settings bypasses the skip and the throttle.
+  Settings bypasses the skip and the cooldown.
 - Versions compare semantically first, then by Android `versionCode`, so a
   rebuilt APK with the same marketing version can still be delivered.
 - Only `https://` APK URLs are accepted. The app ships a single `Khutati.apk`

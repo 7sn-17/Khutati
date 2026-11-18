@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../palette.dart';
 import '../tokens.dart';
 import 'controls.dart';
+import 'pressable.dart';
 
 /// One action rendered inside a [KDialog].
 class KDialogAction {
@@ -81,17 +82,22 @@ class KDialog extends StatelessWidget {
                         fontFamily: KTypography.bodyFamily,
                         fontSize: KTypography.tagSize,
                         fontWeight: FontWeight.w600,
+                        height: 1.4,
                         color: tint,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    // Arabic display faces have tall ascenders; without this
+                    // gap the title's hamza touches the eyebrow's baseline.
+                    const SizedBox(height: 6),
                   ],
                   Text(
                     title,
                     style: TextStyle(
                       fontFamily: KTypography.displayFamily,
                       fontSize: 21,
-                      height: 1.35,
+                      // 1.35 clipped the top of «تحديث جديد جاهز» on device;
+                      // 1.5 gives the hamza and the dots their own room.
+                      height: 1.5,
                       fontWeight: FontWeight.w700,
                       color: palette.tx,
                     ),
@@ -100,14 +106,16 @@ class KDialog extends StatelessWidget {
               ),
             ),
             if (onClose != null)
-              Semantics(
-                button: true,
-                label: 'إغلاق',
-                child: InkWell(
-                  onTap: onClose,
-                  customBorder: const CircleBorder(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(6),
+              Padding(
+                // Sits on the header's first line, with a real 36dp target.
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Semantics(
+                  button: true,
+                  label: 'إغلاق',
+                  child: KInkSurface(
+                    onTap: onClose,
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(8),
                     child: Icon(
                       Icons.close_rounded,
                       size: 20,
@@ -130,10 +138,7 @@ class KDialog extends StatelessWidget {
             ),
           ),
         ],
-        if (child != null) ...<Widget>[
-          const SizedBox(height: 14),
-          child!,
-        ],
+        if (child != null) ...<Widget>[const SizedBox(height: 14), child!],
         if (actions.isNotEmpty) ...<Widget>[
           const SizedBox(height: 18),
           for (int i = 0; i < actions.length; i++) ...<Widget>[
@@ -282,7 +287,9 @@ class _DialogSurface extends StatelessWidget {
         child: ClipRRect(
           borderRadius: radius,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+            // 24 at the top keeps the title clear of the card edge even with
+            // the display face's tall ascenders.
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
             child: Material(
               // A dialog route is not wrapped in a Material by default. Without
               // this, every InkWell (the close button and each KButton) throws

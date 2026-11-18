@@ -391,10 +391,13 @@ Key behaviours:
 ## 8. In-app updates
 
 ```
-UpdateController (6 h interval, 15 min failure retry)
-   └─ UpdateRepository.check(timeout: 8 s)
-        ├─ Supabase: GET {url}/rest/v1/app_updates?platform=eq.android&channel=eq.stable&order=published_at.desc&limit=1
-        └─ GitHub:   GET api.github.com/repos/{repo}/releases   (https enforced)
+UpdateController (60 min cooldown on the last SUCCESSFUL check)
+   └─ UpdateRepository.check(etag: stored)        (timeout: 8 s)
+        ├─ Supabase: GET {url}/rest/v1/app_updates?...&limit=1
+        └─ GitHub:   GET api.github.com/repos/{repo}/releases
+        │              If-None-Match: <etag>  → 304 = success, zero quota
+        │              any failure (403 rate limit, 5xx, timeout, DNS)
+        │                 └─ fallback: GET github.com/{repo}/releases.atom
         ↓  both raced in parallel; failures collected, not thrown
    pick the newer manifest by (versionCode, then versionName)
         ↓
@@ -404,8 +407,30 @@ UpdateController (6 h interval, 15 min failure retry)
         └─ KDialog → open apkUrl / pageUrl via url_launcher
 ```
 
+**Quota discipline.** GitHub allows 60 anonymous requests per hour per IP, so
+the app must not spend one per launch:
+
+- `maybeCheck()` (cold start, resume) returns immediately while
+  `update_last_check_ms` is younger than 60 minutes. A **failed** background
+  check never writes that key, so the next resume retries instead of going
+  quiet for an hour.
+- The repository sends the stored ETag (`update_etag`) as `If-None-Match`. A
+  `304` is a successful check with no update, and costs no quota.
+- If the API fails, `releases.atom` (a static file on github.com, outside the
+  API quota) supplies the newest tag. It has no asset list, so the APK URL is
+  reconstructed from the CI convention `releases/download/<tag>/Khutati.apk`;
+  the tag keeps its `v`.
+- Only a total failure throws. `null` (nothing published) and `304` are
+  successes — the controller must never turn either into an error, and must
+  never report a failure as "up to date".
+
+**Honest UI.** A manual check bypasses the cooldown, shows the button spinner
+immediately, and reports the outcome: `updateUpToDate` on success, `updateFailed`
+("تعذر التحقق من التحديثات…") on failure. Background failures are silent and
+restore the previous state, so a previously found update stays visible.
+
 `skip()` persists `update_skipped_version_code`; a `force` check from Settings
-ignores both the throttle and the skip. If Supabase is unconfigured the GitHub
+ignores both the cooldown and the skip. If Supabase is unconfigured the GitHub
 path alone still works, which is why local builds update correctly.
 
 ---

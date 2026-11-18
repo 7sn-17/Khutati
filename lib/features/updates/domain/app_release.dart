@@ -246,6 +246,34 @@ class UpdateCheck {
   final UpdateSource source;
 }
 
+/// The outcome of one successful check.
+///
+/// A check can succeed without finding anything new in two different ways, and
+/// the UI must not confuse them with a failure:
+///
+/// * [check] is null and [notModified] is false — every source answered and no
+///   release exists yet (a brand-new repo).
+/// * [notModified] is true — GitHub answered `304`, so the release list has not
+///   changed since the stored ETag. This is a *successful* check that cost zero
+///   API quota.
+class UpdateCheckResult {
+  const UpdateCheckResult({this.check, this.etag, this.notModified = false});
+
+  const UpdateCheckResult.notModified({this.etag})
+    : check = null,
+      notModified = true;
+
+  final UpdateCheck? check;
+
+  /// ETag to persist for the next conditional request. Null when the response
+  /// did not carry one, or when the fallback feed answered instead.
+  final String? etag;
+
+  final bool notModified;
+
+  bool get hasRelease => check != null;
+}
+
 // Tolerant readers shared with the repository. Kept here so all manifest
 // shapes (Supabase row, generated `update.json`, GitHub release) agree.
 String? _firstString(Map<String, dynamic> map, List<String> keys) {

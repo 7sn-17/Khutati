@@ -307,19 +307,21 @@ class _UpdatePanel extends ConsumerWidget {
                   if (next.status == UpdateStatus.upToDate) {
                     showKToast(
                       context,
-                      'أنت على أحدث إصدار',
+                      l10n.updateUpToDate,
                       kind: KToastKind.success,
                     );
                   } else if (next.status == UpdateStatus.failed) {
+                    // The check did not happen. Saying "up to date" here would
+                    // be a lie the user cannot detect.
                     showKToast(
                       context,
-                      'تعذّر التحقق من التحديثات. تحقق من الإنترنت.',
+                      l10n.updateFailed,
                       kind: KToastKind.error,
                     );
                   }
                 },
         ),
-        if (state.hasUpdate && manifest != null) ...<Widget>[
+        if (manifest != null) ...<Widget>[
           const SizedBox(height: 10),
           KButton(
             label: l10n.updateView,

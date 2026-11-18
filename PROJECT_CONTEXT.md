@@ -212,9 +212,14 @@ the native alarm through `setNotificationsEnabled`.
 ### 5.9 In-app updates
 
 `UpdateRepository` races Supabase (`app_updates` table) and the GitHub Releases
-API in parallel, picks the newer manifest, and enforces `https`. Checks run at
-most every 6 h, retry after 15 min on failure, and support "skip this version".
-The dialog is a `KDialog`, never a Material alert.
+API in parallel, picks the newer manifest, and enforces `https`. Background
+checks run at most once every 60 minutes (measured from the last **successful**
+check; failures do not reset the clock), send `If-None-Match` with the stored
+ETag so an unchanged list answers `304`, and fall back to the static
+`releases.atom` feed when the API is rate limited. A manual check bypasses the
+cooldown and must report the real outcome: up to date on success, an explicit
+error on failure — never "up to date" when nothing was checked. "Skip this
+version" is supported. The dialog is a `KDialog`, never a Material alert.
 
 ### 5.10 Design system (`lib/core/design`)
 

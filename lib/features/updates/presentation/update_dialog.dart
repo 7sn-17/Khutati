@@ -97,14 +97,32 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  l10n.updateWhatsNew,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.smallSize,
-                    fontWeight: FontWeight.w600,
-                    color: palette.tx,
-                  ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        l10n.updateWhatsNew,
+                        style: TextStyle(
+                          fontFamily: KTypography.bodyFamily,
+                          fontSize: KTypography.smallSize,
+                          fontWeight: FontWeight.w600,
+                          color: palette.tx,
+                        ),
+                      ),
+                    ),
+                    // The version belongs to the notes it describes, and the
+                    // gold echoes the dialog's accent without a new badge.
+                    Text(
+                      'v${widget.manifest.versionName}',
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.smallSize,
+                        fontWeight: FontWeight.w600,
+                        color: palette.gold,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 ConstrainedBox(
