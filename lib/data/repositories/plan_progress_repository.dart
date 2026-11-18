@@ -1,5 +1,3 @@
-import 'package:drift/drift.dart';
-
 import '../../domain/plan/plan_progress.dart';
 import '../../domain/plan/step_progress.dart';
 import '../database/app_database.dart';

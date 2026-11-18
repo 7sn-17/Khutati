@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
@@ -9,7 +8,6 @@ import '../../../core/utils/format.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_task.dart';
 import '../../../features/plan/application/plan_browser_controller.dart';
-import '../../../features/today/application/today_controller.dart';
 import '../../../features/today/presentation/today_screen.dart';
 import '../../../l10n/l10n.dart';
 

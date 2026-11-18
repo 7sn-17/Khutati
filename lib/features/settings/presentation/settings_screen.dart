@@ -782,14 +782,12 @@ class _SettingsActionRow extends StatelessWidget {
   const _SettingsActionRow({
     required this.title,
     required this.icon,
-    this.badge,
     this.trailing,
     this.onTap,
   });
 
   final String title;
   final IconData icon;
-  final String? badge;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -813,23 +811,6 @@ class _SettingsActionRow extends StatelessWidget {
               ),
             ),
           ),
-          if (badge != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: palette.card2,
-                borderRadius: BorderRadius.circular(KMetrics.pillRadius),
-                border: Border.all(color: palette.line),
-              ),
-              child: Text(
-                badge!,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: KTypography.tagSize,
-                  color: palette.mute,
-                ),
-              ),
-            ),
           if (trailing != null) trailing!,
         ],
       ),

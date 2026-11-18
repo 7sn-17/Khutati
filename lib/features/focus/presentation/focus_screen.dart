@@ -14,9 +14,7 @@ import '../../../core/device/exact_alarm_permission.dart';
 import '../../../core/device/exact_alarm_prompt.dart';
 import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
-import '../../../core/design/widgets/surfaces.dart';
 import '../../../core/motion/haptics.dart';
-import '../../../core/utils/format.dart';
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
 import '../../../l10n/l10n.dart';

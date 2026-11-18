@@ -1,17 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/time/local_day_clock.dart';
 import '../../../data/database/app_database.dart';
-import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/plan_progress_repository.dart';
 import '../../../data/repositories/template_repository.dart';
 import '../../../data/repositories/user_state_repository.dart';
-import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../features/today/application/today_controller.dart';
 import '../../../features/focus/application/focus_controller.dart';
@@ -123,7 +118,6 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
   final PlanProgressRepository progress = ref.watch(
     planProgressRepositoryProvider,
   );
-  final AppDatabase db = ref.watch(appDatabaseProvider);
 
   final List<DayRow> allDays = await template.allDays();
   final List<SubjectRow> subjects = await template.allSubjects();

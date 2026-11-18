@@ -544,22 +544,6 @@ class FocusController extends Notifier<FocusSessionState> {
     }
   }
 
-  Future<void> _beginFocus() async {
-    final int minutes = state.focusMinutes > 0 ? state.focusMinutes : 25;
-    final DateTime now = DateTime.now();
-    state = state.copyWith(
-      stage: FocusStage.running,
-      phase: FocusPhase.focus,
-      plannedSeconds: minutes * 60,
-      remainingSeconds: minutes * 60,
-      startedAt: now,
-      endsAt: now.add(Duration(minutes: minutes)),
-    );
-    _startTicker();
-    await _nativeStart(phase: FocusPhase.focus, seconds: minutes * 60);
-    _persist();
-  }
-
   /// Leaves the completion screen and returns to the setup screen.
   ///
   /// The Today draft follows the session: a completed step advances it to the

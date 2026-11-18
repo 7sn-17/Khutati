@@ -34,7 +34,7 @@ class SyncQueueRepository {
           // Drift would only handle a primary-key clash and a repeated edit
           // would throw on the unique index instead of replacing the snapshot.
           onConflict: DoUpdate(
-            (SyncQueue old) => SyncQueueCompanion(
+            (SyncQueueRow old) => SyncQueueCompanion(
               payload: Value<String>(jsonEncode(payload)),
               enqueuedAt: Value<DateTime>(now),
               attempts: const Value<int>(0),
@@ -50,10 +50,10 @@ class SyncQueueRepository {
   Future<List<SyncQueueRow>> pending({int limit = 400}) {
     return (_db.select(_db.syncQueue)
           ..orderBy(<OrderingTerm Function($SyncQueueTable)>[
-            (SyncQueue t) => OrderingTerm.asc(t.enqueuedAt),
+            ($SyncQueueTable t) => OrderingTerm.asc(t.enqueuedAt),
             // Taps inside the same millisecond must still drain in the order
             // they happened; the auto-increment id is the stable tiebreaker.
-            (SyncQueue t) => OrderingTerm.asc(t.id),
+            ($SyncQueueTable t) => OrderingTerm.asc(t.id),
           ])
           ..limit(limit))
         .get();
@@ -71,7 +71,7 @@ class SyncQueueRepository {
     final List<int> values = ids.toList(growable: false);
     if (values.isEmpty) return;
     await (_db.delete(_db.syncQueue)
-          ..where((SyncQueue t) => t.id.isIn(values)))
+          ..where(($SyncQueueTable t) => t.id.isIn(values)))
         .go();
   }
 
@@ -83,7 +83,9 @@ class SyncQueueRepository {
       variables: <Variable>[
         for (final int id in values) Variable<int>(id),
       ],
-      updates: <TableUpdate>{TableUpdate.onTable(_db.syncQueue)},
+      // A raw UPDATE still has to name the table it touches, or Drift cannot
+      // invalidate the `pending()` query streams that depend on it.
+      updates: <ResultSetImplementation<dynamic, dynamic>>{_db.syncQueue},
     );
   }
 }
