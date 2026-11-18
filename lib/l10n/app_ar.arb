@@ -308,6 +308,7 @@
   "focusGoToday": "الذهاب إلى اليوم",
   "focusPresetClassic": "25 / 5",
   "focusPresetDeep": "50 / 10",
+  "focusPresetLong": "90 / 20",
   "focusPresetCustom": "مخصص",
   "focusFocusLength": "مدة التركيز",
   "focusBreakLength": "مدة الاستراحة",

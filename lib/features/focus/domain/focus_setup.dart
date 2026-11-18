@@ -21,6 +21,7 @@ enum FocusMode {
 enum PomodoroPreset {
   classic(focusMinutes: 25, breakMinutes: 5),
   deep(focusMinutes: 50, breakMinutes: 10),
+  long(focusMinutes: 90, breakMinutes: 20),
   custom(focusMinutes: 25, breakMinutes: 5);
 
   const PomodoroPreset({

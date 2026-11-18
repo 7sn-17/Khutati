@@ -34,6 +34,7 @@ class FocusSessionState {
     this.startedAt,
     this.endsAt,
     this.breakMinutes = 0,
+    this.focusMinutes = 25,
     this.autoBreak = false,
     this.recordedSeconds = 0,
     this.reason,
@@ -59,6 +60,7 @@ class FocusSessionState {
   final DateTime? endsAt;
 
   final int breakMinutes;
+  final int focusMinutes;
   final bool autoBreak;
 
   /// Seconds actually spent, captured when the session reaches `finished`.
@@ -87,8 +89,15 @@ class FocusSessionState {
   bool get hasNextStep => nextStep != null;
 
   /// 1 → full arc (just started), 0 → empty arc.
-  double get progress =>
-      plannedSeconds <= 0 ? 0 : remainingSeconds / plannedSeconds;
+  ///
+  /// Free mode counts up, so the ring rotates once per hour.
+  double get progress {
+    if (mode == FocusMode.free) {
+      final int cycle = remainingSeconds % 3600;
+      return cycle / 3600.0;
+    }
+    return plannedSeconds <= 0 ? 0 : remainingSeconds / plannedSeconds;
+  }
 
   bool get recordedStepAsDone =>
       mode == FocusMode.linked &&
@@ -109,6 +118,7 @@ class FocusSessionState {
     DateTime? startedAt,
     DateTime? endsAt,
     int? breakMinutes,
+    int? focusMinutes,
     bool? autoBreak,
     int? recordedSeconds,
     FocusEndReason? reason,
@@ -128,6 +138,7 @@ class FocusSessionState {
       startedAt: startedAt ?? this.startedAt,
       endsAt: endsAt ?? this.endsAt,
       breakMinutes: breakMinutes ?? this.breakMinutes,
+      focusMinutes: focusMinutes ?? this.focusMinutes,
       autoBreak: autoBreak ?? this.autoBreak,
       recordedSeconds: recordedSeconds ?? this.recordedSeconds,
       reason: reason ?? this.reason,
@@ -154,6 +165,7 @@ class FocusSessionState {
       plannedSeconds: plannedSeconds,
       remainingSeconds: 0,
       breakMinutes: breakMinutes,
+      focusMinutes: focusMinutes,
       autoBreak: autoBreak,
       recordedSeconds: recordedSeconds,
       reason: reason,
@@ -177,6 +189,7 @@ class FocusSessionState {
     'startedAt': startedAt?.toIso8601String(),
     'endsAt': endsAt?.toIso8601String(),
     'breakMinutes': breakMinutes,
+    'focusMinutes': focusMinutes,
     'autoBreak': autoBreak,
     'rounds': rounds,
   };
@@ -212,6 +225,7 @@ class FocusSessionState {
       startedAt: _parseDate(json['startedAt']),
       endsAt: _parseDate(json['endsAt']),
       breakMinutes: intOf(json['breakMinutes']),
+      focusMinutes: intOf(json['focusMinutes'], 25),
       autoBreak: json['autoBreak'] == true,
       rounds: intOf(json['rounds']),
     );
@@ -253,7 +267,7 @@ class FocusController extends Notifier<FocusSessionState> {
   // ---------------------------------------------------------------- lifecycle
 
   /// Starts an idle-state session. [draft] is only meaningful for
-  /// [FocusMode.linked]; the other modes run a bare countdown.
+  /// [FocusMode.linked]; [FocusMode.free] counts up instead of down.
   Future<void> start({
     required FocusMode mode,
     required int minutes,
@@ -261,13 +275,14 @@ class FocusController extends Notifier<FocusSessionState> {
     bool autoBreak = false,
     FocusTaskDraft? draft,
   }) async {
-    if (minutes <= 0) return;
+    if (minutes <= 0 && mode != FocusMode.free) return;
     _ticker?.cancel();
     _busy = false;
     _pausedRemaining = 0;
 
     final DateTime now = DateTime.now();
-    final int seconds = minutes * 60;
+    final bool free = mode == FocusMode.free;
+    final int seconds = free ? 0 : minutes * 60;
     state = FocusSessionState(
       stage: FocusStage.running,
       phase: FocusPhase.focus,
@@ -277,15 +292,18 @@ class FocusController extends Notifier<FocusSessionState> {
       subjectName: draft?.subjectName,
       steps: draft?.steps ?? const <FocusStepRef>[],
       stepIndex: draft?.startIndex ?? 0,
-      plannedSeconds: seconds,
-      remainingSeconds: seconds,
+      plannedSeconds: free ? 3600 : seconds,
+      remainingSeconds: free ? 0 : seconds,
       startedAt: now,
-      endsAt: now.add(Duration(seconds: seconds)),
+      endsAt: free ? null : now.add(Duration(seconds: seconds)),
       breakMinutes: breakMinutes,
+      focusMinutes: minutes,
       autoBreak: autoBreak,
     );
     _startTicker();
-    await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+    if (!free) {
+      await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+    }
     await _markTaskInProgress();
     _persist();
   }
@@ -301,12 +319,16 @@ class FocusController extends Notifier<FocusSessionState> {
 
   Future<void> resume() async {
     if (!state.isPaused) return;
+    if (state.mode == FocusMode.free) {
+      state = state.copyWith(stage: FocusStage.running);
+      _startTicker();
+      _persist();
+      return;
+    }
     final int seconds = _pausedRemaining > 0
         ? _pausedRemaining
         : state.remainingSeconds;
     if (seconds <= 0) {
-      // Paused right on zero (for example by the notification button): resolve
-      // the phase instead of parking the machine on a dead timer.
       state = state.copyWith(stage: FocusStage.running, remainingSeconds: 0);
       await _onTimerComplete();
       return;
@@ -395,6 +417,84 @@ class FocusController extends Notifier<FocusSessionState> {
     );
   }
 
+  /// Advances the running session to its next phase without leaving the timer
+  /// screen (mirrors the HTML skip button).
+  Future<void> skipPhase() async {
+    if (_busy || !state.isRunning) return;
+    _busy = true;
+    try {
+      _ticker?.cancel();
+      final int recorded = _elapsedSeconds();
+      await _recordSession(completed: false, actualSeconds: recorded);
+
+      if (state.mode == FocusMode.linked) {
+        final FocusStepRef? next = state.nextStep;
+        if (next == null || next.minutes <= 0) {
+          _busy = false;
+          return;
+        }
+        final DateTime now = DateTime.now();
+        final int seconds = next.minutes * 60;
+        state = state.copyWith(
+          stepIndex: state.stepIndex + 1,
+          plannedSeconds: seconds,
+          remainingSeconds: seconds,
+          startedAt: now,
+          endsAt: now.add(Duration(seconds: seconds)),
+        );
+        _startTicker();
+        await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
+        _persist();
+        return;
+      }
+
+      if (state.mode == FocusMode.pomodoro) {
+        if (state.phase == FocusPhase.focus) {
+          if (state.autoBreak && state.breakMinutes > 0) {
+            await _beginBreak();
+          } else {
+            await _beginBreak();
+          }
+          return;
+        }
+        // Break -> next focus round.
+        final int minutes = state.focusMinutes > 0 ? state.focusMinutes : 25;
+        final DateTime now = DateTime.now();
+        state = state.copyWith(
+          stage: FocusStage.running,
+          phase: FocusPhase.focus,
+          plannedSeconds: minutes * 60,
+          remainingSeconds: minutes * 60,
+          startedAt: now,
+          endsAt: now.add(Duration(minutes: minutes)),
+          rounds: state.rounds + 1,
+        );
+        _startTicker();
+        await _nativeStart(phase: FocusPhase.focus, seconds: minutes * 60);
+        _persist();
+        return;
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _beginFocus() async {
+    final int minutes = state.focusMinutes > 0 ? state.focusMinutes : 25;
+    final DateTime now = DateTime.now();
+    state = state.copyWith(
+      stage: FocusStage.running,
+      phase: FocusPhase.focus,
+      plannedSeconds: minutes * 60,
+      remainingSeconds: minutes * 60,
+      startedAt: now,
+      endsAt: now.add(Duration(minutes: minutes)),
+    );
+    _startTicker();
+    await _nativeStart(phase: FocusPhase.focus, seconds: minutes * 60);
+    _persist();
+  }
+
   /// Leaves the completion screen and returns to the setup screen.
   ///
   /// The Today draft follows the session: a completed step advances it to the
@@ -449,7 +549,7 @@ class FocusController extends Notifier<FocusSessionState> {
       await prefs.remove(pendingActionKey);
       switch (action) {
         case 'skip_step':
-          await skipStep();
+          await skipPhase();
         case 'start_break':
           await startBreakNow();
       }
@@ -479,6 +579,7 @@ class FocusController extends Notifier<FocusSessionState> {
   /// Guards against the ticker and the native mirror both reporting the end of
   /// the same phase.
   Future<void> _onTimerComplete() async {
+    if (state.mode == FocusMode.free) return;
     if (_busy || !state.isRunning) return;
     _busy = true;
     try {
@@ -493,6 +594,26 @@ class FocusController extends Notifier<FocusSessionState> {
           phase == FocusPhase.focus && state.autoBreak && state.breakMinutes > 0;
       if (wantsBreak) {
         await _beginBreak();
+        return;
+      }
+      // Pomodoro break -> next focus round (seamless, mirrors the HTML).
+      if (state.mode == FocusMode.pomodoro &&
+          phase == FocusPhase.breakTime &&
+          state.autoBreak) {
+        final int minutes = state.focusMinutes > 0 ? state.focusMinutes : 25;
+        final DateTime now = DateTime.now();
+        state = state.copyWith(
+          stage: FocusStage.running,
+          phase: FocusPhase.focus,
+          plannedSeconds: minutes * 60,
+          remainingSeconds: minutes * 60,
+          startedAt: now,
+          endsAt: now.add(Duration(minutes: minutes)),
+          rounds: state.rounds + 1,
+        );
+        _startTicker();
+        await _nativeStart(phase: FocusPhase.focus, seconds: minutes * 60);
+        _persist();
         return;
       }
       _finish(FocusEndReason.completed, planned);
@@ -512,6 +633,13 @@ class FocusController extends Notifier<FocusSessionState> {
 
   void _startTicker() {
     _ticker?.cancel();
+    if (state.mode == FocusMode.free) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
+        if (!state.isRunning) return;
+        state = state.copyWith(remainingSeconds: state.remainingSeconds + 1);
+      });
+      return;
+    }
     int ticks = 0;
     _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
       if (!state.isRunning) return;
@@ -545,6 +673,9 @@ class FocusController extends Notifier<FocusSessionState> {
   }
 
   int _elapsedSeconds() {
+    if (state.mode == FocusMode.free) {
+      return state.remainingSeconds;
+    }
     if (state.isPaused) {
       final int elapsed = state.plannedSeconds - _pausedRemaining;
       return elapsed.clamp(0, state.plannedSeconds);
@@ -591,6 +722,19 @@ class FocusController extends Notifier<FocusSessionState> {
       // No native timer: either the user paused and the service died, or the
       // phase ran out while the app was gone.
       if (saved.isPaused && saved.remainingSeconds > 0) {
+        _pausedRemaining = saved.remainingSeconds;
+        state = saved.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: saved.remainingSeconds,
+        );
+        _persist();
+        unawaited(consumePendingAction());
+        return;
+      }
+
+      // A free session that was running when the app died is parked as paused
+      // with its elapsed time intact, instead of being auto-finished.
+      if (saved.mode == FocusMode.free) {
         _pausedRemaining = saved.remainingSeconds;
         state = saved.copyWith(
           stage: FocusStage.paused,
@@ -691,7 +835,9 @@ class FocusController extends Notifier<FocusSessionState> {
               stepId: Value<String?>(state.currentStep?.id),
               phase: state.phase.wire,
               plannedSeconds: state.plannedSeconds,
-              actualSeconds: actualSeconds.clamp(0, state.plannedSeconds),
+              actualSeconds: state.mode == FocusMode.free
+                  ? actualSeconds
+                  : actualSeconds.clamp(0, state.plannedSeconds),
               startedAt: startedAt,
               endedAt: Value<DateTime>(DateTime.now()),
               completed: Value<bool>(completed),

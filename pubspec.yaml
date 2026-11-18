@@ -1,7 +1,7 @@
 name: khutati
 description: "خطتي — an Arabic-first, offline-first study plan app for the 68-day Professor MedX plan."
 publish_to: "none"
-version: 0.3.3+16
+version: 0.3.4+17
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
