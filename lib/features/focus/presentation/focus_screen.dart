@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/device/battery_optimization.dart';
+import '../../../core/device/exact_alarm_permission.dart';
 import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/design/widgets/surfaces.dart';
@@ -380,8 +381,20 @@ class _FocusView extends ConsumerWidget {
         ? l10n.focusSkipBreak
         : l10n.focusStartBreak;
 
-    void startSession() {
+    Future<void> startSession() async {
       haptics.selection();
+      // Android 12+: exact alarms are required for the background timer to
+      // fire accurately. Ask once, gracefully, instead of silently falling
+      // back to inexact alarms.
+      if (Theme.of(context).platform == TargetPlatform.android) {
+        final bool allowed = await ExactAlarmPermission.canSchedule();
+        if (!allowed) {
+          if (!context.mounted) return;
+          await _showExactAlarmDialog(context);
+          return;
+        }
+      }
+      if (!context.mounted) return;
       if (isTask) {
         if (draft == null || draft.steps.isEmpty) {
           showKToast(context, l10n.focusNoTaskTitle, kind: KToastKind.info);
@@ -550,8 +563,7 @@ class _FocusView extends ConsumerWidget {
       haptics: haptics,
     );
 
-    final Widget infoTag = Align(
-      alignment: AlignmentDirectional.centerStart,
+    final Widget infoTag = Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
@@ -651,7 +663,7 @@ class _FocusView extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  header,
+                  if (!immersive) header,
                   if (!immersive) ...<Widget>[
                     const SizedBox(height: 12),
                     segmented,
@@ -679,7 +691,7 @@ class _FocusView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          header,
+          if (!immersive) header,
           if (!immersive) ...<Widget>[
             const SizedBox(height: 12),
             segmented,
@@ -1158,14 +1170,25 @@ class _FocusRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          CustomPaint(
-            size: Size.square(size),
+    // Three-digit durations (100:00+) need a larger ring so the dashes do not
+    // crowd the text. LayoutBuilder lets the ring grow with the available
+    // space instead of clipping the fitted text.
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool threeDigits = time.length >= 6;
+        final double base = size * (threeDigits ? 1.25 : 1.0);
+        final double effective = constraints.hasBoundedWidth
+            ? math.min(base, constraints.maxWidth)
+            : base;
+        final double ringSize = effective.clamp(120.0, 420.0).toDouble();
+        return SizedBox(
+          width: ringSize,
+          height: ringSize,
+          child: Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              CustomPaint(
+                size: Size.square(ringSize),
             painter: _FocusRingPainter(
               fraction: fraction,
               segments: segments,
@@ -1185,7 +1208,7 @@ class _FocusRing extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                width: size * 0.78,
+                width: ringSize * 0.72,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
@@ -1193,7 +1216,7 @@ class _FocusRing extends StatelessWidget {
                     textDirection: TextDirection.ltr,
                     style: TextStyle(
                       fontFamily: KTypography.displayFamily,
-                      fontSize: size * 0.225,
+                      fontSize: ringSize * 0.20,
                       fontWeight: FontWeight.w700,
                       height: 1.05,
                       color: palette.tx,
@@ -1222,6 +1245,8 @@ class _FocusRing extends StatelessWidget {
         ],
       ),
     );
+  }
+);
   }
 }
 
@@ -2133,4 +2158,52 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
       ),
     );
   }
+}
+
+/// Premium dialog shown when `SCHEDULE_EXACT_ALARM` is not granted on
+/// Android 12+. Opens the system settings screen and returns afterwards.
+Future<void> _showExactAlarmDialog(BuildContext context) async {
+  final KhutatiPalette palette = context.palette;
+  await showDialog<void>(
+    context: context,
+    builder: (BuildContext ctx) => AlertDialog(
+      backgroundColor: palette.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
+        'المنبهات والتذكيرات',
+        style: TextStyle(
+          fontFamily: KTypography.displayFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: palette.tx,
+        ),
+      ),
+      content: Text(
+        'لضمان انتهاء المؤقت بدقة في الخلفية، يحتاج التطبيق إلى صلاحية '
+        '"المنبهات والتذكيرات" (Alarms & Reminders). يرجى تفعيلها من الإعدادات.',
+        style: TextStyle(
+          fontFamily: KTypography.bodyFamily,
+          fontSize: 14,
+          color: palette.mute,
+          height: 1.6,
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(
+            'لاحقاً',
+            style: TextStyle(color: palette.mute),
+          ),
+        ),
+        FilledButton(
+          onPressed: () async {
+            await ExactAlarmPermission.request();
+            if (ctx.mounted) Navigator.of(ctx).pop();
+          },
+          child: const Text('فتح الإعدادات'),
+        ),
+      ],
+    ),
+  );
 }

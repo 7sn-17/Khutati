@@ -1,5 +1,6 @@
 package com.khutati.app
 
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -135,6 +136,18 @@ class MainActivity : FlutterActivity() {
                     "openBatterySettings" -> {
                         result.success(openBatterySettings())
                     }
+                    "canScheduleExactAlarms" -> {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                            result.success(true)
+                        } else {
+                            val alarmManager =
+                                getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                            result.success(alarmManager?.canScheduleExactAlarms() ?: true)
+                        }
+                    }
+                    "openExactAlarmSettings" -> {
+                        result.success(openExactAlarmSettings())
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -173,6 +186,41 @@ class MainActivity : FlutterActivity() {
         }
 
         // 3. The app's own settings page, where battery usage is one tap away.
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
+        return false
+    }
+
+    /**
+     * Opens the "Alarms & reminders" settings screen where the user can grant
+     * `SCHEDULE_EXACT_ALARM`. Returns `true` when a screen was launched or the
+     * permission is already granted.
+     */
+    private fun openExactAlarmSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        if (alarmManager?.canScheduleExactAlarms() == true) return true
+
+        try {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
         try {
             startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

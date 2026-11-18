@@ -306,6 +306,7 @@ class _PointsColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -314,7 +315,7 @@ class _PointsColumn extends StatelessWidget {
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
             fontSize: 14,
-            color: _heroMute,
+            color: palette.mute,
             height: 1.6,
           ),
         ),
@@ -329,7 +330,7 @@ class _PointsColumn extends StatelessWidget {
               fontSize: _bigSize,
               height: 1.1,
               fontWeight: FontWeight.w700,
-              color: _heroGold,
+              color: palette.gold,
             ),
           ),
         ),
@@ -337,7 +338,7 @@ class _PointsColumn extends StatelessWidget {
           margin: const EdgeInsets.only(top: 6),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           decoration: BoxDecoration(
-            color: _heroGold.withValues(alpha: 0.16),
+            color: palette.gold.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
@@ -345,7 +346,7 @@ class _PointsColumn extends StatelessWidget {
             style: const TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 13,
-              color: _heroGold,
+              color: palette.gold,
             ),
           ),
         ),
@@ -361,6 +362,7 @@ class _StreakColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -369,7 +371,7 @@ class _StreakColumn extends StatelessWidget {
           style: TextStyle(
             fontFamily: KTypography.bodyFamily,
             fontSize: 14,
-            color: _heroMute,
+            color: palette.mute,
             height: 1.6,
           ),
         ),
@@ -384,7 +386,7 @@ class _StreakColumn extends StatelessWidget {
               fontSize: _bigSize,
               height: 1.1,
               fontWeight: FontWeight.w700,
-              color: _heroText,
+              color: palette.tx,
             ),
           ),
         ),
@@ -395,7 +397,7 @@ class _StreakColumn extends StatelessWidget {
             style: TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 14,
-              color: _heroMute,
+              color: palette.mute,
               height: 1.6,
             ),
           ),
@@ -413,6 +415,7 @@ class _WeekStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     final DateTime? today = data.todayDate;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -423,7 +426,7 @@ class _WeekStrip extends StatelessWidget {
             fontFamily: KTypography.bodyFamily,
             fontSize: 15,
             fontWeight: FontWeight.w500,
-            color: _heroText,
+            color: palette.tx,
             height: 1.6,
           ),
         ),
@@ -453,7 +456,7 @@ class _WeekStrip extends StatelessWidget {
           children: <Widget>[
             _LegendDot(color: _heroOk, label: 'أنجزت يومك'),
             _LegendDot(dashed: true, label: 'يوم راحة'),
-            _LegendDot(color: _heroGold, label: 'مهام تنتظرك'),
+            _LegendDot(color: palette.gold, label: 'مهام تنتظرك'),
           ],
         ),
       ],
@@ -470,6 +473,7 @@ class _DayDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     final Color line;
     final Color fill;
     final bool dashed;
@@ -483,11 +487,11 @@ class _DayDot extends StatelessWidget {
         fill = Colors.transparent;
         dashed = true;
       case 'wait':
-        line = _heroGold;
+        line = palette.gold;
         fill = Colors.transparent;
         dashed = false;
       case 'today':
-        line = _heroText;
+        line = palette.tx;
         fill = _heroCard2;
         dashed = false;
       default:
@@ -520,7 +524,7 @@ class _DayDot extends StatelessWidget {
                       '–',
                       style: TextStyle(
                         fontSize: 12,
-                        color: _heroMute,
+                        color: palette.mute,
                         height: 1,
                       ),
                     )
@@ -537,7 +541,7 @@ class _DayDot extends StatelessWidget {
             fontFamily: KTypography.bodyFamily,
             fontSize: 12,
             height: 1.2,
-            color: isToday ? _heroText : _heroMute,
+            color: isToday ? palette.tx : palette.mute,
             fontWeight: isToday ? FontWeight.w500 : FontWeight.w400,
           ),
         ),
@@ -559,6 +563,7 @@ class _LegendDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -580,7 +585,7 @@ class _LegendDot extends StatelessWidget {
           style: const TextStyle(
             fontFamily: KTypography.bodyFamily,
             fontSize: 12,
-            color: _heroMute,
+            color: palette.mute,
             height: 1.3,
           ),
         ),
@@ -597,6 +602,7 @@ class _NextBadgeBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     final BadgeInfo? next = data.nextBadge;
     if (next == null) {
       return Container(
@@ -638,7 +644,7 @@ class _NextBadgeBlock extends StatelessWidget {
                   style: const TextStyle(
                     fontFamily: KTypography.bodyFamily,
                     fontSize: 14,
-                    color: _heroText,
+                    color: palette.tx,
                     height: 1.6,
                   ),
                 ),
@@ -649,7 +655,7 @@ class _NextBadgeBlock extends StatelessWidget {
                 style: const TextStyle(
                   fontFamily: KTypography.bodyFamily,
                   fontSize: 14,
-                  color: _heroMute,
+                  color: palette.mute,
                   height: 1.6,
                 ),
               ),
@@ -659,7 +665,7 @@ class _NextBadgeBlock extends StatelessWidget {
           _Track(
             fraction: next.fraction,
             background: _heroLine,
-            fill: _heroGold,
+            fill: palette.gold,
           ),
           const SizedBox(height: 8),
           Text(
@@ -667,7 +673,7 @@ class _NextBadgeBlock extends StatelessWidget {
             style: const TextStyle(
               fontFamily: KTypography.bodyFamily,
               fontSize: 13,
-              color: _heroMute,
+              color: palette.mute,
               height: 1.6,
             ),
           ),
@@ -690,6 +696,7 @@ class _HowItWorksState extends State<_HowItWorks> {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     return Container(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: _heroLine)),
@@ -710,7 +717,7 @@ class _HowItWorksState extends State<_HowItWorks> {
                       style: TextStyle(
                         fontFamily: KTypography.bodyFamily,
                         fontSize: 14,
-                        color: _heroText,
+                        color: palette.tx,
                         height: 1.6,
                       ),
                     ),
@@ -722,10 +729,10 @@ class _HowItWorksState extends State<_HowItWorks> {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: _heroText.withValues(alpha: 0.12),
+                        color: palette.tx.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: const _Chevron(size: 16, color: _heroText),
+                      child: const _Chevron(size: 16, color: palette.tx),
                     ),
                   ),
                 ],
@@ -768,6 +775,7 @@ class _Bullet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -777,7 +785,7 @@ class _Bullet extends StatelessWidget {
             padding: EdgeInsets.only(top: 2, left: 6, right: 6),
             child: Text(
               '•',
-              style: TextStyle(color: _heroMute, fontSize: 14, height: 1.6),
+              style: TextStyle(color: palette.mute, fontSize: 14, height: 1.6),
             ),
           ),
           Expanded(
@@ -786,7 +794,7 @@ class _Bullet extends StatelessWidget {
               style: const TextStyle(
                 fontFamily: KTypography.bodyFamily,
                 fontSize: 14,
-                color: _heroMute,
+                color: palette.mute,
                 height: 1.6,
               ),
             ),
@@ -1061,6 +1069,8 @@ void _openBadgeSheet(BuildContext context, BadgeInfo badge) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    enableDrag: true,
+    showDragHandle: true,
     backgroundColor: Colors.transparent,
     builder: (BuildContext sheetContext) {
       final KhutatiPalette palette = sheetContext.palette;
@@ -1265,8 +1275,8 @@ class _MedalPainter extends CustomPainter {
     // `fill-opacity=".85"`. The reference paints both flat red; a vertical
     // gradient plus a darker right tail reads as folded satin at 84px without
     // changing a single anchor point.
-    final Color ribbonTop = earned ? _ribbonTop : line;
-    final Color ribbonBottom = earned ? _ribbonBottom : line;
+    final Color ribbonTop = earned ? _ribbonTop : const Color(0xFF9AA3AE);
+    final Color ribbonBottom = earned ? _ribbonBottom : const Color(0xFF6B7280);
     final Path leftRibbon = Path()
       ..moveTo(28, 70)
       ..lineTo(50, 78)
@@ -1312,16 +1322,6 @@ class _MedalPainter extends CustomPainter {
     );
 
     // ---- Disc ----------------------------------------------------------
-    // A contained shadow instead of nothing, so the medal sits on the card
-    // instead of floating flat.
-    canvas.drawCircle(
-      const Offset(50, 51),
-      42,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.28)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-    );
-
     // `<circle r="42" fill="tier[0] or var(--line)"/>` — the metal ring, swept
     // from the light top-left corner to the shadowed bottom-right.
     canvas.drawCircle(
@@ -1332,11 +1332,11 @@ class _MedalPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: tier == null
-              ? <Color>[line, card2]
+              ? <Color>[Color(0xFFC8D0DA), Color(0xFFA8B0BC)]
               : <Color>[
                   tier[1],
                   tier[0],
-                  Color.lerp(tier[0], Colors.black, 0.25)!,
+                  Color.lerp(tier[0], Colors.black, 0.10)!,
                 ],
           stops: const <double>[0.0, 0.55, 1.0],
         ).createShader(box),
@@ -1352,11 +1352,11 @@ class _MedalPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: tier == null
-              ? <Color>[card2, card2]
+              ? <Color>[Color(0xFFF2F5F9), Color(0xFFDCE2EA)]
               : <Color>[
-                  Color.lerp(tier[1], Colors.white, 0.35)!,
+                  Color.lerp(tier[1], Colors.white, 0.50)!,
                   tier[1],
-                  tier[0],
+                  Color.lerp(tier[0], Colors.white, 0.15)!,
                 ],
           stops: const <double>[0.0, 0.5, 1.0],
         ).createShader(box),
@@ -1373,7 +1373,7 @@ class _MedalPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 5
           ..strokeCap = StrokeCap.round
-          ..color = Colors.white.withValues(alpha: 0.30)
+          ..color = Colors.white.withValues(alpha: 0.45)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
       );
     }
@@ -1594,9 +1594,8 @@ class _DayMapSection extends StatelessWidget {
                 onSelect: onSelect,
               ),
               const SizedBox(height: 14),
-              Wrap(
-                spacing: 14,
-                runSpacing: 6,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: <Widget>[
                   _MapLegend(
                     color: palette.ok,
@@ -1674,16 +1673,19 @@ class _DayGrid extends StatelessWidget {
           const SizedBox(width: _labelWidth),
           for (int i = 0; i < 7; i++)
             Expanded(
-              child: Text(
-                _weekdayShort[i],
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 11,
-                  color: i == offset && start != null
-                      ? palette.tx
-                      : palette.mute,
-                  height: 1.4,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _weekdayShort[i],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 11,
+                    color: i == offset && start != null
+                        ? palette.tx
+                        : palette.mute,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ),
@@ -1760,17 +1762,6 @@ class _WeekLabel extends StatelessWidget {
   final bool current;
   final KhutatiPalette palette;
 
-  String? get _range {
-    final DateTime? a = _dateOfDay(data, firstDay);
-    final DateTime? b = _dateOfDay(data, lastDay);
-    if (a == null || b == null) return null;
-    if (a.month == b.month) {
-      return '${_fa(a.day)}–${_fa(b.day)} ${_months[a.month - 1]}';
-    }
-    return '${_fa(a.day)} ${_months[a.month - 1]} – '
-        '${_fa(b.day)} ${_months[b.month - 1]}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final String? range = _range;
@@ -1789,20 +1780,6 @@ class _WeekLabel extends StatelessWidget {
             fontWeight: current ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
-        if (range != null)
-          Text(
-            range,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: 9,
-              height: 1.35,
-              color: current
-                  ? palette.gold
-                  : palette.mute.withValues(alpha: 0.7),
-            ),
-          ),
       ],
     );
   }
