@@ -240,7 +240,7 @@ class _SlideState extends State<_Slide> with TickerProviderStateMixin {
     vsync: this,
     duration: const Duration(seconds: 12),
   );
-  late final Animation<double> _curve = CurvedAnimation(
+  late final CurvedAnimation _curve = CurvedAnimation(
     parent: _enter,
     curve: Curves.easeOutCubic,
   );

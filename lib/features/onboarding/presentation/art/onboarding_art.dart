@@ -173,7 +173,7 @@ double segment(double t, double start, double end) {
 /// Dashes a path by sampling its metrics — Flutter has no dash pattern.
 Path dashPath(Path source, {required double dash, required double gap}) {
   final Path result = Path();
-  for (final PathMetric metric in source.computeMetrics()) {
+  for (final ui.PathMetric metric in source.computeMetrics()) {
     double distance = 0;
     while (distance < metric.length) {
       final double next = math.min(distance + dash, metric.length);
