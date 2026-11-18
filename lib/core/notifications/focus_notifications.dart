@@ -140,7 +140,12 @@ abstract final class FocusNotifications {
         await android.createNotificationChannel(channel.platformChannel);
       } else {
         await _plugin.cancel(channel.notificationId);
-        await _plugin.cancel(channel.notificationId + 1);
+        // The timer channel owns two ids (focus and break). The reminder
+        // channels own exactly one; cancelling `id + 1` there would silently
+        // clear the next channel's notification.
+        if (channel == KhutatiNotificationChannel.timer) {
+          await _plugin.cancel(channel.notificationId + 1);
+        }
         await android.deleteNotificationChannel(channel.id);
       }
     } catch (_) {
