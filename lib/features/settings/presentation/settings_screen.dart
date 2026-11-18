@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/device/battery_optimization.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_info.dart';
@@ -125,15 +127,18 @@ class SettingsScreen extends ConsumerWidget {
                   color: palette.mute,
                 ),
                 onTap: () async {
-                  const MethodChannel channel =
-                      MethodChannel('khutati/focus_timer');
-                  try {
-                    await channel.invokeMethod('openBatterySettings');
-                  } catch (_) {}
+                  final bool opened =
+                      await BatteryOptimization.requestUnrestricted();
+                  if (!opened) {
+                    if (!context.mounted) return;
+                    showKToast(
+                      context,
+                      'تعذّر فتح إعدادات البطارية.',
+                      kind: KToastKind.error,
+                    );
+                  }
                 },
               ),
-              const SizedBox(height: 6),
-              _SettingsHint(text: l10n.settingsNotificationsHint),
             ],
           ),
         ),
@@ -183,7 +188,9 @@ class SettingsScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: palette.gold.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(KMetrics.pillRadius),
-                      border: Border.all(color: palette.gold.withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: palette.gold.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Text(
                       AppInfo.versionName,
@@ -375,11 +382,7 @@ class _AboutModalContent extends ConsumerWidget {
                     shape: BoxShape.circle,
                     color: palette.card2,
                   ),
-                  child: Icon(
-                    Icons.close,
-                    size: 20,
-                    color: palette.mute,
-                  ),
+                  child: Icon(Icons.close, size: 20, color: palette.mute),
                 ),
               ),
             ],
@@ -445,11 +448,7 @@ class _DeveloperModalContent extends ConsumerWidget {
                     shape: BoxShape.circle,
                     color: palette.card2,
                   ),
-                  child: Icon(
-                    Icons.close,
-                    size: 20,
-                    color: palette.mute,
-                  ),
+                  child: Icon(Icons.close, size: 20, color: palette.mute),
                 ),
               ),
             ],
@@ -559,10 +558,7 @@ class _DeveloperActionTile extends ConsumerWidget {
             onTap: () => _open(url),
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: palette.card2,
                 borderRadius: BorderRadius.circular(14),
@@ -829,37 +825,10 @@ class _SettingsActionRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
           child: content,
         ),
       ),
     );
   }
 }
-
-class _SettingsHint extends StatelessWidget {
-  const _SettingsHint({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final KhutatiPalette palette = context.palette;
-
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: KTypography.bodyFamily,
-          fontSize: KTypography.smallSize,
-          color: palette.mute,
-          height: 1.5,
-        ),
-      ),
-    );
-  }
-}
-

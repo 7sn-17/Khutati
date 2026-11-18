@@ -3,10 +3,10 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:flutter/services.dart' show MethodChannel;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/notifications/focus_notifications.dart';
 import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart'
     show sharedPreferencesProvider;
@@ -83,8 +83,7 @@ class FocusSessionState {
   FocusStepRef? get currentStep =>
       steps.isEmpty ? null : steps[stepIndex.clamp(0, steps.length - 1)];
 
-  FocusStepRef? get nextStep =>
-      steps.isEmpty || stepIndex + 1 >= steps.length
+  FocusStepRef? get nextStep => steps.isEmpty || stepIndex + 1 >= steps.length
       ? null
       : steps[stepIndex + 1];
 
@@ -258,6 +257,7 @@ class FocusController extends Notifier<FocusSessionState> {
 
   Timer? _ticker;
   bool _restored = false;
+  bool _restoring = false;
   bool _busy = false;
   int _pausedRemaining = 0;
 
@@ -440,11 +440,7 @@ class FocusController extends Notifier<FocusSessionState> {
       steps: state.steps,
       startIndex: state.stepIndex + 1,
     );
-    await start(
-      mode: FocusMode.linked,
-      minutes: next.minutes,
-      draft: draft,
-    );
+    await start(mode: FocusMode.linked, minutes: next.minutes, draft: draft);
   }
 
   /// Advances the running session to its next phase without leaving the timer
@@ -568,14 +564,23 @@ class FocusController extends Notifier<FocusSessionState> {
   }
 
   /// Applies an action chosen from the notification while the app was closed.
+  ///
+  /// Only the explicit notification buttons write an action. Tapping the body
+  /// of the notification writes nothing at all, so opening the app from the
+  /// shade can never end a session. A queued action that outlives its session
+  /// is discarded instead of being applied to the next one.
   Future<void> consumePendingAction() async {
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
       final String? action = prefs.getString(pendingActionKey);
       if (action == null || action.isEmpty) return;
-      // Keep the action until a session exists; a cold start may still be
-      // restoring the running session when this is first called.
-      if (!(state.isRunning || state.isPaused)) return;
+      // A cold start may still be restoring the running session; leave the
+      // action queued until there is a state to apply it to.
+      if (_restoring) return;
+      if (!(state.isRunning || state.isPaused)) {
+        await prefs.remove(pendingActionKey);
+        return;
+      }
       await prefs.remove(pendingActionKey);
       switch (action) {
         case 'skip_step':
@@ -583,9 +588,7 @@ class FocusController extends Notifier<FocusSessionState> {
         case 'start_break':
           await startBreakNow();
         case 'end':
-          if (state.isRunning || state.isPaused) {
-            await endStep();
-          }
+          await endStep();
       }
     } catch (_) {
       // A missing preference simply means there is nothing to consume.
@@ -652,7 +655,9 @@ class FocusController extends Notifier<FocusSessionState> {
       }
 
       final bool wantsBreak =
-          phase == FocusPhase.focus && state.autoBreak && state.breakMinutes > 0;
+          phase == FocusPhase.focus &&
+          state.autoBreak &&
+          state.breakMinutes > 0;
       if (wantsBreak) {
         await _beginBreak();
         return;
@@ -701,7 +706,6 @@ class FocusController extends Notifier<FocusSessionState> {
       });
       return;
     }
-    int ticks = 0;
     _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
       if (!state.isRunning) return;
       final DateTime? endsAt = state.endsAt;
@@ -713,81 +717,145 @@ class FocusController extends Notifier<FocusSessionState> {
         return;
       }
       state = state.copyWith(remainingSeconds: remaining);
-      ticks += 1;
-      if (ticks % 5 == 0) {
-        unawaited(syncWithNative());
-      }
     });
   }
 
-  /// The notification's Pause button drives the native service; adopting that
-  /// here keeps the in-app UI in sync without polling every second.
-  /// Public so the UI can call it on app resume (foreground) to keep the
-  /// in-app timer in sync with the native foreground service (pause/resume/end
-  /// triggered from the notification).
-  /// True two-way sync with the Kotlin foreground service.
+  /// Reconciles the in-app machine with the Kotlin foreground service.
   ///
-  /// On resume (or periodic tick) we adopt the native remaining time and
-  /// paused/running state verbatim instead of trusting stale local fields.
+  /// Called when the app comes back to the foreground and after a cold-start
+  /// restore. Two rules make it safe:
+  ///
+  /// * The deadline is absolute. The service's persisted `targetEndMs` wins;
+  ///   if the service has no timer at all, the session's own persisted
+  ///   `endsAt` is used. A *missing* service is never treated as an ending.
+  /// * A phase completes only when a real deadline is in the past, and it
+  ///   completes through [_onTimerComplete] (the natural-expiry path).
+  ///   [endStep] — the manual "End" that marks the step done and jumps to the
+  ///   next one — is unreachable from lifecycle reconciliation. That is the
+  ///   fix for "opening the app from the notification ends my task".
   Future<void> syncWithNative() async {
     if (!(state.isRunning || state.isPaused)) return;
-    Map<dynamic, dynamic> native;
-    try {
-      native = await _nativeGetState();
-    } catch (_) {
-      return;
-    }
+    final Map<dynamic, dynamic> native = await _nativeGetState();
+
     final bool nativePaused = native['paused'] == true;
     final int targetEndMs = (native['targetEndMs'] as num?)?.toInt() ?? 0;
-    final int nativeMs = targetEndMs > 0
-        ? (targetEndMs - DateTime.now().millisecondsSinceEpoch)
-        : ((native['remainingMs'] as num?)?.toInt() ?? 0);
-    final int nativeSeconds = (nativeMs / 1000).ceil();
+    final FocusPhase nativePhase = FocusPhase.parse(native['phase'] as String?);
+    final int nativePlannedSeconds =
+        (native['plannedSeconds'] as num?)?.toInt() ?? 0;
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Service is gone / finished → end the step.
-    if (nativeMs <= 0 && !nativePaused) {
-      if (state.isRunning || state.isPaused) {
-        await endStep();
+    // A stale `endsAt` on a paused session must never be used as a deadline.
+    final int deadline = targetEndMs > 0
+        ? targetEndMs
+        : (state.isRunning ? (state.endsAt?.millisecondsSinceEpoch ?? 0) : 0);
+
+    // No absolute deadline: a free (count-up) session, or a paused session
+    // whose service is gone. Adopt a native pause, but never invent an ending.
+    if (deadline <= 0) {
+      if (state.isRunning &&
+          !nativePaused &&
+          state.mode != FocusMode.free &&
+          state.remainingSeconds > 0) {
+        // The service was killed (or never started) while a countdown is still
+        // running here. Re-arm it so the background alert is not silently
+        // lost, then pick the new deadline up on the next reconcile.
+        await _nativeStart(
+          phase: state.phase,
+          seconds: state.remainingSeconds,
+        );
+        return;
       }
-      return;
-    }
-
-    if (nativePaused) {
-      _pausedRemaining = nativeSeconds > 0 ? nativeSeconds : _pausedRemaining;
-      if (state.isRunning) {
+      if (nativePaused && state.isRunning) {
+        final int pausedMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+        final int pausedSeconds = pausedMs > 0 ? pausedMs ~/ 1000 : 0;
+        _pausedRemaining = pausedSeconds > 0
+            ? pausedSeconds
+            : state.remainingSeconds;
         _ticker?.cancel();
         state = state.copyWith(
           stage: FocusStage.paused,
           remainingSeconds: _pausedRemaining,
         );
         _persist();
-      } else if (state.isPaused) {
-        state = state.copyWith(remainingSeconds: _pausedRemaining);
-        _persist();
       }
       return;
     }
 
-    // Native is running.
+    final int remainingMs = deadline - nowMs;
+
+    // Genuinely expired while we were away: same path as a 00:00 tick.
+    if (remainingMs <= 0) {
+      if (!state.isRunning) return; // a paused session stays paused
+      state = state.copyWith(remainingSeconds: 0);
+      await _onTimerComplete();
+      return;
+    }
+
+    final int seconds = (remainingMs / 1000).ceil();
+
+    if (nativePaused) {
+      _pausedRemaining = seconds > 0 ? seconds : _pausedRemaining;
+      _ticker?.cancel();
+      state = state.copyWith(
+        stage: FocusStage.paused,
+        remainingSeconds: _pausedRemaining,
+      );
+      _persist();
+      return;
+    }
+
+    // Native is running: resume from the exact remaining time.
+    _pausedRemaining = seconds;
     if (state.isPaused) {
-      // Adopt native remaining and resume.
-      _pausedRemaining = nativeSeconds;
-      final DateTime now = DateTime.now();
+      if (nativePhase != state.phase) {
+        await _adoptNativePhase(nativePhase);
+      }
       state = state.copyWith(
         stage: FocusStage.running,
-        remainingSeconds: nativeSeconds,
-        endsAt: now.add(Duration(seconds: nativeSeconds)),
+        phase: nativePhase,
+        plannedSeconds: nativePlannedSeconds > 0
+            ? nativePlannedSeconds
+            : state.plannedSeconds,
+        remainingSeconds: seconds,
+        endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
       );
       _startTicker();
       _persist();
       return;
     }
-    // Both running: align remaining time.
-    if (state.isRunning && nativeSeconds > 0) {
-      state = state.copyWith(
-        remainingSeconds: nativeSeconds,
-        endsAt: DateTime.now().add(Duration(seconds: nativeSeconds)),
+
+    // Both running. The service may have moved to the next phase (a break, or
+    // the next Pomodoro round) while the Dart isolate was frozen; adopt it.
+    if (nativePhase != state.phase) {
+      await _adoptNativePhase(nativePhase);
+    }
+    state = state.copyWith(
+      phase: nativePhase,
+      plannedSeconds: nativePlannedSeconds > 0
+          ? nativePlannedSeconds
+          : state.plannedSeconds,
+      remainingSeconds: seconds,
+      endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
+    );
+  }
+
+  /// The service advanced a phase while Dart was frozen. Book the phase that
+  /// just finished (step progress, session record, round count) before the
+  /// caller swaps in the new phase, so a background session is never lost.
+  Future<void> _adoptNativePhase(FocusPhase nativePhase) async {
+    if (state.phase == FocusPhase.focus) {
+      await _markCurrentStepComplete();
+      await _recordSession(
+        completed: true,
+        actualSeconds: state.plannedSeconds,
       );
+      state = state.copyWith(rounds: state.rounds + 1);
+      return;
+    }
+    if (state.phase == FocusPhase.breakTime &&
+        nativePhase == FocusPhase.focus &&
+        state.mode == FocusMode.pomodoro) {
+      state = state.copyWith(rounds: state.rounds + 1);
     }
   }
 
@@ -806,8 +874,8 @@ class FocusController extends Notifier<FocusSessionState> {
   // ----------------------------------------------------------------- persistence
 
   Future<void> _restore() async {
-    if (_restored) return;
-    _restored = true;
+    if (_restored || _restoring) return;
+    _restoring = true;
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
       final String? raw = prefs.getString(sessionKey);
@@ -822,55 +890,97 @@ class FocusController extends Notifier<FocusSessionState> {
 
       final Map<dynamic, dynamic> native = await _nativeGetState();
       final bool nativePaused = native['paused'] == true;
-      final int nativeMs = (native['remainingMs'] as num?)?.toInt() ?? 0;
+      final int targetEndMs = (native['targetEndMs'] as num?)?.toInt() ?? 0;
+      final int nativeRemainingMs =
+          (native['remainingMs'] as num?)?.toInt() ?? 0;
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
 
-      if (nativeMs > 0) {
-        final int seconds = (nativeMs / 1000).ceil();
+      // Rule 1: a pause always wins. A paused session can never "expire".
+      if (nativePaused) {
+        final int seconds = (nativeRemainingMs / 1000).ceil();
+        _pausedRemaining = seconds > 0 ? seconds : saved.remainingSeconds;
+        state = saved.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: _pausedRemaining,
+        );
+        _persist();
+        return;
+      }
+      if (saved.isPaused) {
+        _pausedRemaining = saved.remainingSeconds;
+        state = saved.copyWith(
+          stage: FocusStage.paused,
+          remainingSeconds: saved.remainingSeconds,
+        );
+        _persist();
+        return;
+      }
+
+      // Rule 2: the deadline is absolute — the service's `targetEndMs` first,
+      // then our own persisted `endsAt`. Never a relative remaining value.
+      final int deadline = targetEndMs > 0
+          ? targetEndMs
+          : (saved.endsAt?.millisecondsSinceEpoch ?? 0);
+
+      if (deadline <= 0) {
+        // No deadline anywhere: a count-up session, or a countdown whose
+        // service never started. Park it paused with the last known value
+        // instead of guessing that it finished.
+        if (saved.mode == FocusMode.free || saved.remainingSeconds > 0) {
+          _pausedRemaining = saved.remainingSeconds;
+          state = saved.copyWith(
+            stage: FocusStage.paused,
+            remainingSeconds: saved.remainingSeconds,
+          );
+          _persist();
+          return;
+        }
+        state = const FocusSessionState();
+        await prefs.remove(sessionKey);
+        return;
+      }
+
+      final int remainingMs = deadline - nowMs;
+      if (remainingMs > 0) {
+        // The service may have advanced to the next phase while the app was
+        // closed; if it did, record the phase that just finished.
+        final FocusPhase nativePhase = FocusPhase.parse(
+          native['phase'] as String?,
+        );
+        if (nativePhase != saved.phase && saved.phase == FocusPhase.focus) {
+          state = saved;
+          await _markCurrentStepComplete();
+          await _recordSession(
+            completed: true,
+            actualSeconds: saved.plannedSeconds,
+          );
+        }
+        // Still running: resume from the exact remaining time.
+        final int seconds = (remainingMs / 1000).ceil();
         _pausedRemaining = seconds;
         state = saved.copyWith(
-          stage: nativePaused ? FocusStage.paused : FocusStage.running,
+          stage: FocusStage.running,
+          phase: nativePhase,
+          plannedSeconds:
+              (native['plannedSeconds'] as num?)?.toInt() ??
+              saved.plannedSeconds,
           remainingSeconds: seconds,
-          endsAt: DateTime.now().add(Duration(milliseconds: nativeMs)),
+          endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
         );
-        if (state.isRunning) _startTicker();
+        _startTicker();
         _persist();
-        unawaited(consumePendingAction());
         return;
       }
 
-      // No native timer: either the user paused and the service died, or the
-      // phase ran out while the app was gone.
-      if (saved.isPaused && saved.remainingSeconds > 0) {
-        _pausedRemaining = saved.remainingSeconds;
-        state = saved.copyWith(
-          stage: FocusStage.paused,
-          remainingSeconds: saved.remainingSeconds,
-        );
-        _persist();
-        unawaited(consumePendingAction());
-        return;
-      }
-
-      // A free session that was running when the app died is parked as paused
-      // with its elapsed time intact, instead of being auto-finished.
-      if (saved.mode == FocusMode.free) {
-        _pausedRemaining = saved.remainingSeconds;
-        state = saved.copyWith(
-          stage: FocusStage.paused,
-          remainingSeconds: saved.remainingSeconds,
-        );
-        _persist();
-        unawaited(consumePendingAction());
-        return;
-      }
-
-      state = saved.copyWith(
-        stage: FocusStage.running,
-        remainingSeconds: 0,
-      );
+      // The deadline really did pass while the app was closed.
+      state = saved.copyWith(stage: FocusStage.running, remainingSeconds: 0);
       await _completeExpiredPhase();
     } catch (_) {
       state = const FocusSessionState();
+    } finally {
+      _restoring = false;
+      _restored = true;
+      unawaited(consumePendingAction());
     }
   }
 
@@ -938,33 +1048,15 @@ class FocusController extends Notifier<FocusSessionState> {
     } catch (_) {}
   }
 
+  /// Fires at 00:00, before any transition work, so the alert is not delayed by
+  /// database writes. The Kotlin service posts the same alert independently:
+  /// when the Dart isolate is frozen in the background the native side is the
+  /// only thing still running, and the user must still hear the timer end.
   Future<void> _notifyTimerComplete(FocusPhase phase) async {
-    try {
-      final bool enabled =
-          ref.read(notificationPrefsProvider).timer;
-      if (!enabled) return;
-      final FlutterLocalNotificationsPlugin plugin =
-          FlutterLocalNotificationsPlugin();
-      const AndroidNotificationDetails android = AndroidNotificationDetails(
-        'khutati_timer',
-        'مؤقت التركيز',
-        channelDescription: 'تنبيهات انتهاء جلسات التركيز',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-      );
-      const NotificationDetails details = NotificationDetails(android: android);
-      final String title = phase == FocusPhase.breakTime
-          ? 'انتهت الاستراحة'
-          : 'انتهى وقت التركيز';
-      final String body = phase == FocusPhase.breakTime
-          ? 'وقت العودة للدراسة.'
-          : 'أحسنت! أكملت جلسة التركيز.';
-      await plugin.show(1001, title, body, details);
-    } catch (_) {
-      // Notifications are best-effort.
-    }
+    if (!ref.read(notificationPrefsProvider).timer) return;
+    await FocusNotifications.showCompletion(
+      isBreak: phase == FocusPhase.breakTime,
+    );
   }
 
   Future<void> _recordSession({
@@ -1005,7 +1097,6 @@ class FocusController extends Notifier<FocusSessionState> {
     required int seconds,
   }) async {
     try {
-      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
       await _channel.invokeMethod<void>('start', <String, dynamic>{
         'durationMs': seconds * 1000,
         'taskId': state.taskId,
@@ -1015,8 +1106,9 @@ class FocusController extends Notifier<FocusSessionState> {
         'hasNextStep': state.hasNextStep,
         'breakEnabled': state.autoBreak && state.breakMinutes > 0,
         'breakMinutes': state.breakMinutes > 0 ? state.breakMinutes : 5,
-        'notificationsEnabled':
-            prefs.getBool('notif_timer_enabled') ?? true,
+        // The real preference key (`notif_timer`), read through its controller
+        // so the native service honours a toggle changed mid-session.
+        'notificationsEnabled': ref.read(notificationPrefsProvider).timer,
       });
     } catch (_) {
       // No foreground service (for example a desktop test): the in-app ticker
@@ -1056,8 +1148,9 @@ class FocusController extends Notifier<FocusSessionState> {
 }
 
 final NotifierProvider<FocusController, FocusSessionState>
-focusControllerProvider =
-    NotifierProvider<FocusController, FocusSessionState>(FocusController.new);
+focusControllerProvider = NotifierProvider<FocusController, FocusSessionState>(
+  FocusController.new,
+);
 
 /// User-controlled immersive mode. Watched by the shell so the bottom
 /// navigation bar only disappears when the user asks for full screen.
@@ -1072,8 +1165,8 @@ final StateProvider<FocusTaskDraft?> focusDraftProvider =
 /// Live stream of recorded focus sessions, newest first, for the history sheet.
 final StreamProvider<List<FocusSession>> focusHistoryProvider =
     StreamProvider<List<FocusSession>>((Ref ref) {
-  final AppDatabase db = ref.watch(appDatabaseProvider);
-  return (db.select(db.focusSessions)
-        ..orderBy([(t) => OrderingTerm.desc(t.startedAt)]))
-      .watch();
-});
+      final AppDatabase db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.focusSessions,
+      )..orderBy([(t) => OrderingTerm.desc(t.startedAt)])).watch();
+    });

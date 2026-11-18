@@ -3,9 +3,9 @@ package com.khutati.app
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
-import android.content.SharedPreferences
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -21,6 +21,27 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         persistPendingAction(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setAppForeground(true)
+    }
+
+    override fun onPause() {
+        setAppForeground(false)
+        super.onPause()
+    }
+
+    /**
+     * The service and the exact-alarm receiver use this to stay silent while
+     * the Dart state machine is alive and doing the alerting itself.
+     */
+    private fun setAppForeground(value: Boolean) {
+        getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.app_foreground", value)
+            .apply()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -53,6 +74,8 @@ class MainActivity : FlutterActivity() {
                         val breakMinutes = call.argument<Int>("breakMinutes") ?: 5
                         val taskTitle = call.argument<String>("taskTitle")
                         val hasNextStep = call.argument<Boolean>("hasNextStep") ?: false
+                        val notificationsEnabled =
+                            call.argument<Boolean>("notificationsEnabled") ?: true
                         val intent = Intent(this, FocusTimerService::class.java).apply {
                             action = FocusTimerService.ACTION_START
                             putExtra(FocusTimerService.EXTRA_DURATION, duration.toLong())
@@ -63,6 +86,7 @@ class MainActivity : FlutterActivity() {
                             putExtra(FocusTimerService.EXTRA_HAS_NEXT_STEP, hasNextStep)
                             putExtra(FocusTimerService.EXTRA_BREAK_ENABLED, breakEnabled)
                             putExtra(FocusTimerService.EXTRA_BREAK_MINUTES, breakMinutes)
+                            putExtra(FocusTimerService.EXTRA_NOTIFY, notificationsEnabled)
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
@@ -102,27 +126,64 @@ class MainActivity : FlutterActivity() {
                     "getState" -> {
                         result.success(FocusTimerService.persistedState(this))
                     }
+                    "isIgnoringBatteryOptimizations" -> {
+                        val power = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        result.success(
+                            power?.isIgnoringBatteryOptimizations(packageName) ?: false,
+                        )
+                    }
                     "openBatterySettings" -> {
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                data = Uri.parse("package:$packageName")
-                            }
-                            startActivity(intent)
-                            result.success(true)
-                        } catch (_: Exception) {
-                            try {
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.parse("package:$packageName")
-                                }
-                                startActivity(intent)
-                                result.success(true)
-                            } catch (_: Exception) {
-                                result.success(false)
-                            }
-                        }
+                        result.success(openBatterySettings())
                     }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Opens the battery-optimisation screen for this app. Returns `true` when
+     * the app is already unrestricted or a settings screen was launched, and
+     * `false` when every option failed — which is what the first-run dialog
+     * uses to fall back to a readable message instead of doing nothing.
+     */
+    private fun openBatterySettings(): Boolean {
+        val power = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (power?.isIgnoringBatteryOptimizations(packageName) == true) return true
+
+        // 1. The direct "allow unrestricted" sheet.
+        try {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
+        // 2. The battery-optimisation list (some OEM skins block the sheet).
+        try {
+            startActivity(
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
+        // 3. The app's own settings page, where battery usage is one tap away.
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+            return true
+        } catch (_: Exception) {
+        }
+
+        return false
     }
 }

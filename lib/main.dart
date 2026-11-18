@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app.dart';
 import 'app/bootstrap.dart';
+import 'core/notifications/focus_notifications.dart';
 import 'core/settings/theme_mode_controller.dart';
 import 'data/database/app_database.dart';
 import 'data/database/database_provider.dart';
@@ -15,15 +15,11 @@ Future<void> main() async {
   // Arabic month names are needed before the first frame (Plan and Today both
   // print real dates).
   await initializeDateFormatting('ar');
-  // Initialise local notifications so permission requests and the focus service
-  // notification channel are available from the first frame.
-  final FlutterLocalNotificationsPlugin notifications =
-      FlutterLocalNotificationsPlugin();
-  const AndroidInitializationSettings androidInit =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  await notifications.initialize(
-    const InitializationSettings(android: androidInit),
-  );
+  // One owner for the notification plugin. This creates the completion channel
+  // with IMPORTANCE_MAX up front (the first channel definition on Android is
+  // permanent), so a session that ends while the app is backgrounded still
+  // produces a sound.
+  await FocusNotifications.init();
 
   // Read the stored theme before the first frame so there is no flash.
   final SharedPreferences prefs = await SharedPreferences.getInstance();

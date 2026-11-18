@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
+import '../../../core/device/battery_optimization.dart';
 import '../../../core/design/widgets/feedback.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/design/widgets/surfaces.dart';
@@ -45,7 +47,13 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(focusControllerProvider.notifier).consumePendingAction();
+      final FocusController controller = ref.read(
+        focusControllerProvider.notifier,
+      );
+      controller.consumePendingAction();
+      // A warm resume that lands on this screen must reconcile with the
+      // service too, not only resumes that go through the lifecycle observer.
+      controller.syncWithNative();
       _tryAutoLoadTask();
       _applySystemUi();
     });
@@ -63,49 +71,68 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final FocusController controller =
-          ref.read(focusControllerProvider.notifier);
+      final FocusController controller = ref.read(
+        focusControllerProvider.notifier,
+      );
       controller.consumePendingAction();
       controller.syncWithNative();
     }
   }
 
+  /// Asks once for the battery exemption — but only when the app actually is
+  /// optimised. `PowerManager.isIgnoringBatteryOptimizations` is checked first,
+  /// and the resulting "asked" flag is persisted either way, so a user who is
+  /// already unrestricted never sees the dialog.
   Future<void> _maybePromptBattery() async {
     try {
-      final prefs = ref.read(sharedPreferencesProvider);
+      final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
       if (prefs.getBool('battery_prompt_shown') == true) return;
-      await prefs.setBool('battery_prompt_shown', true);
+
+      if (await BatteryOptimization.isUnrestricted()) {
+        await prefs.setBool('battery_prompt_shown', true);
+        return;
+      }
       if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showDialog<void>(
-          context: context,
-          builder: (BuildContext ctx) => AlertDialog(
-            title: const Text('تحسين استخدام البطارية'),
-            content: const Text(
-              'لضمان عمل المؤقت في الخلفية دون توقف، يرجى ضبط '
-              'استخدام البطارية لهذا التطبيق على "غير مقيد" (Unrestricted).',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('لاحقاً'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  Navigator.of(ctx).pop();
-                  const MethodChannel channel =
-                      MethodChannel('khutati/focus_timer');
-                  try {
-                    await channel.invokeMethod('openBatterySettings');
-                  } catch (_) {}
-                },
-                child: const Text('فتح الإعدادات'),
-              ),
-            ],
+
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext ctx) => AlertDialog(
+          title: const Text('تحسين استخدام البطارية'),
+          content: const Text(
+            'لضمان عمل المؤقت في الخلفية دون توقف، يرجى ضبط '
+            'استخدام البطارية لهذا التطبيق على "غير مقيد" (Unrestricted).',
           ),
-        );
-      });
+          actions: <Widget>[
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('battery_prompt_shown', true);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+              child: const Text('لاحقاً'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                // The platform call happens while the dialog is still on
+                // screen. Popping first (the previous code) left the channel
+                // invocation racing the route teardown, which is why the
+                // first-run button did nothing while the Settings row worked.
+                final bool opened =
+                    await BatteryOptimization.requestUnrestricted();
+                await prefs.setBool('battery_prompt_shown', true);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (!opened && mounted) {
+                  showKToast(
+                    context,
+                    'تعذّر فتح إعدادات البطارية. افتحها يدوياً من إعدادات النظام.',
+                    kind: KToastKind.error,
+                  );
+                }
+              },
+              child: const Text('فتح الإعدادات'),
+            ),
+          ],
+        ),
+      );
     } catch (_) {}
   }
 
@@ -208,7 +235,9 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
           showKToast(context, 'جلسة تركيز جديدة', kind: KToastKind.info);
         }
       }
-      if (previous.isRunning && next.isFinished && next.reason == FocusEndReason.completed) {
+      if (previous.isRunning &&
+          next.isFinished &&
+          next.reason == FocusEndReason.completed) {
         if (next.mode == FocusMode.linked) {
           showKToast(context, 'انتهى الوقت', kind: KToastKind.info);
         }
@@ -290,16 +319,19 @@ class _FocusView extends ConsumerWidget {
     final AppLocalizations l10n = context.l10n;
     final KhutatiPalette palette = context.palette;
     final KhutatiHaptics haptics = ref.read(hapticsProvider);
-    final FocusController controller = ref.read(focusControllerProvider.notifier);
+    final FocusController controller = ref.read(
+      focusControllerProvider.notifier,
+    );
     final FocusSetup setup = ref.watch(focusSetupProvider);
-    final FocusSetupController setupController = ref.read(focusSetupProvider.notifier);
+    final FocusSetupController setupController = ref.read(
+      focusSetupProvider.notifier,
+    );
     final FocusTaskDraft? draft = ref.watch(focusDraftProvider);
 
     // When idle, the displayed mode comes from the setup (segmented control),
     // not from the session (which defaults to pomodoro). This is what makes
     // switching between Task / Pomodoro / Free actually update the UI.
-    final FocusMode effectiveMode =
-        session.isIdle ? setup.mode : session.mode;
+    final FocusMode effectiveMode = session.isIdle ? setup.mode : session.mode;
     final bool isFree = effectiveMode == FocusMode.free;
     final bool isTask = effectiveMode == FocusMode.linked;
     final bool isPomo = effectiveMode == FocusMode.pomodoro;
@@ -324,8 +356,9 @@ class _FocusView extends ConsumerWidget {
         : isPomo
         ? setup.focusMinutes * 60
         : (draft?.minutes ?? 25) * 60;
-    final int displayPlannedSeconds =
-        session.isIdle ? idlePlannedSeconds : session.plannedSeconds;
+    final int displayPlannedSeconds = session.isIdle
+        ? idlePlannedSeconds
+        : session.plannedSeconds;
     final int displayRemainingSeconds = session.isIdle
         ? (isFree ? 0 : idlePlannedSeconds)
         : session.remainingSeconds;
@@ -392,7 +425,11 @@ class _FocusView extends ConsumerWidget {
           : session.plannedSeconds - session.remainingSeconds;
       final int minutes = elapsed ~/ 60;
       if (minutes > 0) {
-        showKToast(context, 'حُفظت الجلسة: $minutes دقيقة', kind: KToastKind.success);
+        showKToast(
+          context,
+          'حُفظت الجلسة: $minutes دقيقة',
+          kind: KToastKind.success,
+        );
       }
       controller.endStep();
     }
@@ -402,7 +439,11 @@ class _FocusView extends ConsumerWidget {
       if (isTask) {
         final FocusStepRef? next = session.nextStep;
         if (next != null) {
-          showKToast(context, 'انتقلت إلى: ${next.label}', kind: KToastKind.info);
+          showKToast(
+            context,
+            'انتقلت إلى: ${next.label}',
+            kind: KToastKind.info,
+          );
         }
         controller.skipPhase();
       } else if (isPomo) {
@@ -476,17 +517,23 @@ class _FocusView extends ConsumerWidget {
           _SegButton(
             label: l10n.focusModeLinked,
             selected: isTask,
-            onTap: session.isIdle ? () => setupController.setMode(FocusMode.linked) : null,
+            onTap: session.isIdle
+                ? () => setupController.setMode(FocusMode.linked)
+                : null,
           ),
           _SegButton(
             label: l10n.focusModePomodoro,
             selected: isPomo,
-            onTap: session.isIdle ? () => setupController.setMode(FocusMode.pomodoro) : null,
+            onTap: session.isIdle
+                ? () => setupController.setMode(FocusMode.pomodoro)
+                : null,
           ),
           _SegButton(
             label: l10n.focusModeFree,
             selected: isFree,
-            onTap: session.isIdle ? () => setupController.setMode(FocusMode.free) : null,
+            onTap: session.isIdle
+                ? () => setupController.setMode(FocusMode.free)
+                : null,
           ),
         ],
       ),
@@ -512,7 +559,9 @@ class _FocusView extends ConsumerWidget {
         ),
         child: Text(
           isTask
-              ? (draft != null ? '${draft.subjectName ?? ''} — ${draft.taskTitle}' : 'مهمة')
+              ? (draft != null
+                    ? '${draft.subjectName ?? ''} — ${draft.taskTitle}'
+                    : 'مهمة')
               : isPomo
               ? 'بومودورو'
               : 'مؤقت حر',
@@ -964,9 +1013,7 @@ class _PresetChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? palette.card2 : palette.card,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? _gold : palette.line,
-          ),
+          border: Border.all(color: selected ? _gold : palette.line),
         ),
         child: Text(
           label,
@@ -1055,7 +1102,10 @@ class _NumberFieldState extends State<_NumberField> {
           ),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: palette.card,
             border: OutlineInputBorder(
@@ -1146,7 +1196,9 @@ class _FocusRing extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       height: 1.05,
                       color: palette.tx,
-                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
                     ),
                   ),
                 ),
@@ -1458,7 +1510,8 @@ class _FinishedView extends StatelessWidget {
                   color: palette.tx,
                 ),
               ),
-              if (session.taskTitle != null && session.taskTitle!.isNotEmpty) ...<Widget>[
+              if (session.taskTitle != null &&
+                  session.taskTitle!.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 8),
                 Text(
                   session.taskTitle!,
@@ -1600,7 +1653,6 @@ Color _subjectColor(FocusTaskDraft d) {
   return const Color(0xFF6AA6FF);
 }
 
-
 String _clock(int totalSeconds, {required bool free}) {
   final int safe = totalSeconds < 0 ? 0 : totalSeconds;
   final int m = safe ~/ 60;
@@ -1634,8 +1686,6 @@ class _HistoryButton extends StatelessWidget {
     );
   }
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Focus history (advanced)
@@ -1730,7 +1780,9 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<List<FocusSession>> history = ref.watch(focusHistoryProvider);
+    final AsyncValue<List<FocusSession>> history = ref.watch(
+      focusHistoryProvider,
+    );
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.4,
@@ -1792,13 +1844,18 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
               const SizedBox(height: 12),
               Expanded(
                 child: history.when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
                   error: (Object e, StackTrace st) => Center(
-                    child: Text('تعذّر تحميل السجل',
-                        style: TextStyle(color: palette.mute)),
+                    child: Text(
+                      'تعذّر تحميل السجل',
+                      style: TextStyle(color: palette.mute),
+                    ),
                   ),
                   data: (List<FocusSession> sessions) {
-                    final List<FocusSession> filtered = sessions.where((FocusSession s) {
+                    final List<FocusSession> filtered = sessions.where((
+                      FocusSession s,
+                    ) {
                       if (!_inRange(s.startedAt)) return false;
                       if (_type != 'all' && s.mode != _type) return false;
                       return true;
@@ -1883,8 +1940,11 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: <Widget>[
-                                      Icon(Icons.history_toggle_off_rounded,
-                                          size: 56, color: palette.mute),
+                                      Icon(
+                                        Icons.history_toggle_off_rounded,
+                                        size: 56,
+                                        color: palette.mute,
+                                      ),
                                       const SizedBox(height: 12),
                                       Text(
                                         'لم تبدأ أي جلسات تركيز بعد. ابدأ الآن!',
@@ -1903,16 +1963,21 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                   itemCount: keys.length,
                                   itemBuilder: (BuildContext c, int gi) {
                                     final String key = keys[gi];
-                                    final List<FocusSession> items = groups[key]!;
+                                    final List<FocusSession> items =
+                                        groups[key]!;
                                     return Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
                                       children: <Widget>[
                                         Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
                                           child: Text(
                                             key,
                                             style: TextStyle(
-                                              fontFamily: KTypography.displayFamily,
+                                              fontFamily:
+                                                  KTypography.displayFamily,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                               color: palette.gold,
@@ -1922,19 +1987,30 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                         ...items.map((FocusSession s) {
                                           final String mode = s.mode;
                                           final String title =
-                                              (s.taskTitle != null && s.taskTitle!.isNotEmpty)
-                                                  ? s.taskTitle!
-                                                  : (s.taskId != null ? 'مهمة' : _modeLabel(mode));
-                                          final String typeLabel = _modeLabel(mode);
-                                          final String status =
-                                              s.completed ? 'مكتمل' : 'متوقف';
+                                              (s.taskTitle != null &&
+                                                  s.taskTitle!.isNotEmpty)
+                                              ? s.taskTitle!
+                                              : (s.taskId != null
+                                                    ? 'مهمة'
+                                                    : _modeLabel(mode));
+                                          final String typeLabel = _modeLabel(
+                                            mode,
+                                          );
+                                          final String status = s.completed
+                                              ? 'مكتمل'
+                                              : 'متوقف';
                                           return Container(
-                                            margin: const EdgeInsets.only(bottom: 10),
+                                            margin: const EdgeInsets.only(
+                                              bottom: 10,
+                                            ),
                                             padding: const EdgeInsets.all(14),
                                             decoration: BoxDecoration(
                                               color: palette.bg,
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(color: palette.line),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: palette.line,
+                                              ),
                                             ),
                                             child: Row(
                                               children: <Widget>[
@@ -1942,8 +2018,13 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                                   width: 40,
                                                   height: 40,
                                                   decoration: BoxDecoration(
-                                                    color: _modeColor(mode).withValues(alpha: 0.15),
-                                                    borderRadius: BorderRadius.circular(10),
+                                                    color: _modeColor(
+                                                      mode,
+                                                    ).withValues(alpha: 0.15),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
                                                   ),
                                                   child: Icon(
                                                     _modeIcon(mode),
@@ -1954,14 +2035,19 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                                 const SizedBox(width: 12),
                                                 Expanded(
                                                   child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
                                                     children: <Widget>[
                                                       Text(
                                                         title,
                                                         style: TextStyle(
-                                                          fontFamily: KTypography.bodyFamily,
+                                                          fontFamily:
+                                                              KTypography
+                                                                  .bodyFamily,
                                                           fontSize: 15,
-                                                          fontWeight: FontWeight.w500,
+                                                          fontWeight:
+                                                              FontWeight.w500,
                                                           color: palette.tx,
                                                         ),
                                                       ),
@@ -1969,7 +2055,9 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
                                                       Text(
                                                         '$typeLabel · ${_fmtDuration(s.actualSeconds)} · $status',
                                                         style: TextStyle(
-                                                          fontFamily: KTypography.bodyFamily,
+                                                          fontFamily:
+                                                              KTypography
+                                                                  .bodyFamily,
                                                           fontSize: 12,
                                                           color: palette.mute,
                                                         ),
@@ -2031,9 +2119,7 @@ class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
         decoration: BoxDecoration(
           color: active ? palette.gold.withValues(alpha: 0.2) : palette.card,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? palette.gold : palette.line,
-          ),
+          border: Border.all(color: active ? palette.gold : palette.line),
         ),
         child: Text(
           label,

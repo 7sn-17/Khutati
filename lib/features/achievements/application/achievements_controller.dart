@@ -80,6 +80,8 @@ class AchievementsData {
     required this.splitHours,
     required this.subjects,
     required this.todayDayNumber,
+    required this.planStart,
+    required this.todayDate,
   });
 
   final int totalPoints;
@@ -99,6 +101,13 @@ class AchievementsData {
   final Map<String, double> splitHours;
   final List<SubjectProgress> subjects;
   final int todayDayNumber;
+
+  /// First day of the active plan, used to print a real date for every cell in
+  /// the day map (the reference prints `الأحد 12 نوفمبر` under a selected day).
+  final DateTime? planStart;
+
+  /// The device's local "today", used for the last-7-days weekday labels.
+  final DateTime? todayDate;
 }
 
 final FutureProvider<AchievementsData?> achievementsProvider =
@@ -347,6 +356,8 @@ final FutureProvider<AchievementsData?> achievementsProvider =
     splitHours: splitHours,
     subjects: subjectList,
     todayDayNumber: todayDayNumber,
+    planStart: plan?.startDate,
+    todayDate: today?.date,
   );
 });
 

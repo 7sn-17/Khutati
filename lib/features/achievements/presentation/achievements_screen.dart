@@ -1,11 +1,156 @@
+// Achievements — a line-for-line rebuild of design/achievements_reference.html.
+//
+// Every measurement below is taken from that file, not from the app's general
+// design tokens: the reference has its own scale (60px numerals, 22px section
+// titles, a 56x96 hexagon tile, a 50px week label column). Keeping the numbers
+// local and documenting the CSS rule they come from is what makes it possible
+// to diff this file against the reference by eye.
+//
+// Nothing here is approximated with stock Material widgets: the hexagon hero
+// texture, the check marks, the dashed circles and the five medals with their
+// ribbons are all painted from the reference's SVG geometry.
+
 import 'dart:math' as math;
+import 'dart:ui' show PathMetric;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
-import '../../../core/design/widgets/widgets.dart';
 import '../../../l10n/l10n.dart';
 import '../application/achievements_controller.dart';
+
+// ---------------------------------------------------------------------------
+// Values lifted verbatim from design/achievements_reference.html
+// ---------------------------------------------------------------------------
+
+/// `.hero { background:#0D1A2D; color:#EAE5DA; border-radius:28px;
+///          padding:22px 20px 18px; gap:16px }`
+const Color _heroBg = Color(0xFF0D1A2D);
+const Color _heroText = Color(0xFFEAE5DA);
+const Color _heroMute = Color(0xFFA9B6CB);
+const Color _heroGold = Color(0xFFE8B65A);
+const Color _heroLine = Color(0xFF26395A);
+const Color _heroDotLine = Color(0xFF34496B);
+const Color _heroCard2 = Color(0xFF1C3150);
+const Color _heroOk = Color(0xFF7CCBB0);
+
+/// `.wrap { padding:16px 16px 120px; gap:30px }`
+const EdgeInsets _wrapPadding = EdgeInsets.fromLTRB(16, 16, 16, 120);
+const double _sectionGap = 30;
+
+/// `.hero .trk { background:#26395A }`, `.trk { height:8px; border-radius:4px }`
+const double _trackHeight = 8;
+const double _trackRadius = 4;
+
+/// `h1 { font-size:30px }`, `h2 { font-size:21px }`, `h3 { font-size:18px }`
+const double _h1Size = 30;
+const double _h2Size = 21;
+const double _h3Size = 18;
+
+/// `.big { font-size:60px; line-height:1.1 }`
+const double _bigSize = 60;
+
+/// `.cat { border-radius:22px; padding:14px; grid-template-columns:84px 1fr;
+///         gap:4px 14px }`
+const double _badgeRadius = 22;
+const double _medalWidth = 84;
+
+/// `.surf { border-radius:22px; padding:16px }`
+const double _surfaceRadius = 22;
+
+/// Medals: five tiers, metals and progress thresholds exactly as the reference.
+const List<String> _tierNames = <String>[
+  'برونزي',
+  'فضي',
+  'ذهبي',
+  'زمردي',
+  'ماسي',
+];
+const List<List<Color>> _tierColors = <List<Color>>[
+  <Color>[Color(0xFFB9753F), Color(0xFFE8BE92)],
+  <Color>[Color(0xFF8E9BAD), Color(0xFFE6EBF2)],
+  <Color>[Color(0xFFD9A441), Color(0xFFF8E3A6)],
+  <Color>[Color(0xFF2FA37F), Color(0xFFB1EAD6)],
+  <Color>[Color(0xFF4F93F0), Color(0xFFCDE5FF)],
+];
+
+/// `const WD=[...]`, `const WS=[...]`, `const MO=[...]` from the reference.
+const List<String> _weekdayFull = <String>[
+  'الأحد',
+  'الاثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+];
+const List<String> _weekdayShort = <String>[
+  'أحد',
+  'اثنين',
+  'ثلاثاء',
+  'أربعاء',
+  'خميس',
+  'جمعة',
+  'سبت',
+];
+const List<String> _months = <String>[
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+/// `const fa = n => n.toLocaleString('en-US')` — Latin digits with thousands
+/// separators, because the reference prints `1,250` rather than `١٬٢٥٠`.
+String _fa(num value) {
+  final String digits = value.abs().toStringAsFixed(0);
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return value < 0 ? '-$out' : out.toString();
+}
+
+/// `const hm = h => ...` — "2 س و30 د" / "45 د".
+String _duration(double hours) {
+  final int whole = hours.floor();
+  final int minutes = ((hours - whole) * 60).round();
+  if (whole <= 0) return '$minutes د';
+  return minutes > 0 ? '$whole س و$minutes د' : '$whole س';
+}
+
+/// `dateOf(d)` from the reference, resolved against the real plan start.
+DateTime? _dateOfDay(AchievementsData data, int day) {
+  final DateTime? start = data.planStart;
+  if (start == null) return null;
+  return DateTime(
+    start.year,
+    start.month,
+    start.day,
+  ).add(Duration(days: day - 1));
+}
+
+/// `WD[dateOf(d).getDay()]` — Dart starts the week on Monday, the reference on
+/// Sunday, so Sunday (7) must map back to index 0.
+int _weekdayIndex(DateTime date) => date.weekday % 7;
+
+String _fullDate(DateTime date) =>
+    '${_weekdayFull[_weekdayIndex(date)]} ${date.day} ${_months[date.month - 1]}';
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
 
 class AchievementsScreen extends ConsumerWidget {
   const AchievementsScreen({super.key});
@@ -15,12 +160,22 @@ class AchievementsScreen extends ConsumerWidget {
     final AsyncValue<AchievementsData?> data = ref.watch(achievementsProvider);
     return data.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (Object e, StackTrace st) => Center(child: Text('$e')),
+      error: (Object error, StackTrace stack) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            '$error',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              color: context.palette.mute,
+            ),
+          ),
+        ),
+      ),
       data: (AchievementsData? d) {
         if (d == null) {
-          return Center(
-            child: Text(context.l10n.achievementsPlaceholder),
-          );
+          return Center(child: Text(context.l10n.achievementsPlaceholder));
         }
         return _AchievementsBody(data: d);
       },
@@ -30,6 +185,7 @@ class AchievementsScreen extends ConsumerWidget {
 
 class _AchievementsBody extends StatefulWidget {
   const _AchievementsBody({required this.data});
+
   final AchievementsData data;
 
   @override
@@ -47,39 +203,58 @@ class _AchievementsBodyState extends State<_AchievementsBody> {
         : 1;
   }
 
+  void _selectDay(int day) {
+    if (_selectedDay == day) return;
+    setState(() => _selectedDay = day);
+  }
+
   @override
   Widget build(BuildContext context) {
     final AchievementsData d = widget.data;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _HeroSection(data: d),
-          const SizedBox(height: 24),
-          _BadgesSection(data: d),
-          const SizedBox(height: 24),
-          _DayMapSection(
-            data: d,
-            selectedDay: _selectedDay,
-            onSelect: (int day) => setState(() => _selectedDay = day),
+    final KhutatiPalette palette = context.palette;
+
+    return ListView(
+      padding: _wrapPadding,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+          child: Text(
+            'إنجازاتي',
+            style: TextStyle(
+              fontFamily: KTypography.displayFamily,
+              fontSize: _h1Size,
+              fontWeight: FontWeight.w700,
+              color: palette.tx,
+              height: 1.3,
+            ),
           ),
-          const SizedBox(height: 24),
-          _StudyHoursSection(data: d),
-          const SizedBox(height: 24),
-          _SubjectsSection(data: d),
-        ],
-      ),
+        ),
+        const SizedBox(height: _sectionGap),
+        _HeroCard(data: d),
+        const SizedBox(height: _sectionGap),
+        _BadgesSection(data: d),
+        const SizedBox(height: _sectionGap),
+        _DayMapSection(
+          data: d,
+          selectedDay: _selectedDay ?? d.todayDayNumber,
+          onSelect: _selectDay,
+        ),
+        const SizedBox(height: _sectionGap),
+        _StudyHoursSection(data: d),
+        const SizedBox(height: _sectionGap),
+        _SubjectsSection(data: d),
+      ],
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Hero
+// Hero card
 // ---------------------------------------------------------------------------
 
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.data});
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.data});
+
   final AchievementsData data;
 
   @override
@@ -88,240 +263,534 @@ class _HeroSection extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: Stack(
         children: <Widget>[
-          const Positioned.fill(child: _HexagonPattern()),
-          Container(
-            decoration: const BoxDecoration(color: Color(0xFF0D1A2D)),
-            padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                flex: 6,
-                child: Column(
+          Container(color: _heroBg),
+          // `.hero > .pat { position:absolute; inset:0 }`
+          const Positioned.fill(
+            child: IgnorePointer(child: CustomPaint(painter: _HexPattern())),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      'إجمالي نقاطك',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                    Text(
-                      '${data.totalPoints}',
-                      style: const TextStyle(
-                        fontFamily: 'Reem Kufi',
-                        fontSize: 52,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFE8B65A),
-                      ),
-                    ),
-                    Container(
-                      margin: const EdgeInsets.only(top: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8B65A).withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '+${data.pointsToday} نقطة اليوم',
-                        style: const TextStyle(
-                          color: Color(0xFFE8B65A),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
+                    Expanded(flex: 12, child: _PointsColumn(data: data)),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 10, child: _StreakColumn(data: data)),
                   ],
                 ),
-              ),
-              Expanded(
-                flex: 5,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'سلسلتك',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                    Text(
-                      '${data.streak}',
-                      style: const TextStyle(
-                        fontFamily: 'Reem Kufi',
-                        fontSize: 52,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      'أيام متتالية من الإنجاز',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'آخر 7 أيام',
-            style: TextStyle(color: Colors.white, fontSize: 15),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List<Widget>.generate(7, (int i) {
-              final String status = data.last7[i];
-              final Color dotColor = status == 'done'
-                  ? const Color(0xFF7CCBB0)
-                  : status == 'rest'
-                  ? Colors.transparent
-                  : status == 'today'
-                  ? const Color(0xFF1C3150)
-                  : Colors.transparent;
-              final Border border = status == 'rest'
-                  ? Border.all(
-                      color: Colors.white38,
-                      style: BorderStyle.solid,
-                      width: 2,
-                    )
-                  : status == 'today'
-                  ? Border.all(color: Colors.white, width: 2.5)
-                  : status == 'wait'
-                  ? Border.all(color: const Color(0xFFE8B65A), width: 2)
-                  : Border.all(color: Colors.white24, width: 2);
-              return Column(
-                children: <Widget>[
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: dotColor,
-                      border: border,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    alignment: Alignment.center,
-                    child: status == 'done'
-                        ? const Icon(Icons.check, size: 16, color: Color(0xFF0D1A2D))
-                        : status == 'rest'
-                        ? const Text('–', style: TextStyle(color: Colors.white70))
-                        : null,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    status == 'today' ? 'اليوم' : '',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ],
-              );
-            }),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: const <Widget>[
-              _LegendDot(color: Color(0xFF7CCBB0), label: 'أنجزت يومك'),
-              SizedBox(width: 14),
-              _LegendDot(color: Colors.transparent, dashed: true, label: 'يوم راحة'),
-              SizedBox(width: 14),
-              _LegendDot(color: Color(0xFFE8B65A), hollow: true, label: 'مهام تنتظرك'),
-            ],
-          ),
-          if (data.nextBadge != null) ...<Widget>[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.only(top: 14),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFF26395A))),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Text(
-                        'وسامك القادم: ${_tierName(data.nextBadge!.level)} في ${data.nextBadge!.name}',
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                      Text(
-                        '${data.nextBadge!.current} من ${data.nextBadge!.nextThreshold}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: data.nextBadge!.fraction,
-                      minHeight: 8,
-                      backgroundColor: const Color(0xFF26395A),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFFE8B65A),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'يتبقّى ${data.nextBadge!.nextThreshold! - data.nextBadge!.current} ${data.nextBadge!.unit} فقط.',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                ],
-              ),
+                const SizedBox(height: 16),
+                _WeekStrip(data: data),
+                const SizedBox(height: 16),
+                _NextBadgeBlock(data: data),
+                const _HowItWorks(),
+              ],
             ),
-          ],
-        ],
-      ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PointsColumn extends StatelessWidget {
+  const _PointsColumn({required this.data});
+
+  final AchievementsData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text(
+          'إجمالي نقاطك',
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: _heroMute,
+            height: 1.6,
+          ),
+        ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            _fa(data.totalPoints),
+            maxLines: 1,
+            style: const TextStyle(
+              fontFamily: KTypography.displayFamily,
+              fontSize: _bigSize,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              color: _heroGold,
+            ),
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          decoration: BoxDecoration(
+            color: _heroGold.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '+${data.pointsToday} نقطة اليوم',
+            style: const TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 13,
+              color: _heroGold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StreakColumn extends StatelessWidget {
+  const _StreakColumn({required this.data});
+
+  final AchievementsData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text(
+          'سلسلتك',
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: _heroMute,
+            height: 1.6,
+          ),
+        ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            _fa(data.streak),
+            maxLines: 1,
+            style: const TextStyle(
+              fontFamily: KTypography.displayFamily,
+              fontSize: _bigSize,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              color: _heroText,
+            ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'أيام متتالية من الإنجاز',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 14,
+              color: _heroMute,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// `.week` — seven dots, one per day, with `.dot.done/.rest/.wait/.today`.
+class _WeekStrip extends StatelessWidget {
+  const _WeekStrip({required this.data});
+
+  final AchievementsData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime? today = data.todayDate;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const Text(
+          'آخر 7 أيام',
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: _heroText,
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: <Widget>[
+            for (int i = 0; i < 7; i++)
+              Expanded(
+                child: _DayDot(
+                  status: i < data.last7.length ? data.last7[i] : 'future',
+                  isToday: i == data.last7.length - 1,
+                  date: today == null
+                      ? null
+                      : DateTime(
+                          today.year,
+                          today.month,
+                          today.day,
+                        ).subtract(Duration(days: 6 - i)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        const Wrap(
+          spacing: 14,
+          runSpacing: 4,
+          children: <Widget>[
+            _LegendDot(color: _heroOk, label: 'أنجزت يومك'),
+            _LegendDot(dashed: true, label: 'يوم راحة'),
+            _LegendDot(color: _heroGold, label: 'مهام تنتظرك'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DayDot extends StatelessWidget {
+  const _DayDot({required this.status, required this.isToday, this.date});
+
+  final String status;
+  final bool isToday;
+  final DateTime? date;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color line;
+    final Color fill;
+    final bool dashed;
+    switch (status) {
+      case 'done':
+        line = _heroOk;
+        fill = _heroOk;
+        dashed = false;
+      case 'rest':
+        line = _heroDotLine;
+        fill = Colors.transparent;
+        dashed = true;
+      case 'wait':
+        line = _heroGold;
+        fill = Colors.transparent;
+        dashed = false;
+      case 'today':
+        line = _heroText;
+        fill = _heroCard2;
+        dashed = false;
+      default:
+        line = _heroDotLine;
+        fill = Colors.transparent;
+        dashed = false;
+    }
+
+    final String label = isToday
+        ? 'اليوم'
+        : (date == null ? '' : _weekdayShort[_weekdayIndex(date!)]);
+
+    return Column(
+      children: <Widget>[
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: CustomPaint(
+            painter: _CirclePainter(
+              color: line,
+              fill: fill,
+              strokeWidth: 2,
+              dashed: dashed,
+            ),
+            child: Center(
+              child: status == 'done'
+                  ? const _CheckMark(size: 16)
+                  : status == 'rest'
+                  ? const Text(
+                      '–',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _heroMute,
+                        height: 1,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 12,
+            height: 1.2,
+            color: isToday ? _heroText : _heroMute,
+            fontWeight: isToday ? FontWeight.w500 : FontWeight.w400,
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _LegendDot extends StatelessWidget {
   const _LegendDot({
-    required this.color,
     required this.label,
+    this.color = _heroDotLine,
     this.dashed = false,
-    this.hollow = false,
   });
-  final Color color;
+
   final String label;
+  final Color color;
   final bool dashed;
-  final bool hollow;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
+        SizedBox(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(
-            color: hollow ? Colors.transparent : color,
-            borderRadius: BorderRadius.circular(5),
-            border: dashed
-                ? Border.all(color: Colors.white38, style: BorderStyle.solid)
-                : hollow
-                ? Border.all(color: const Color(0xFFE8B65A))
-                : null,
+          child: CustomPaint(
+            painter: _CirclePainter(
+              color: color,
+              fill: color == _heroOk ? _heroOk : Colors.transparent,
+              strokeWidth: 2,
+              dashed: dashed,
+            ),
           ),
         ),
         const SizedBox(width: 5),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 12,
+            color: _heroMute,
+            height: 1.3,
+          ),
+        ),
       ],
     );
   }
 }
 
-String _tierName(int level) {
-  const List<String> names = <String>['برونزي', 'فضي', 'ذهبي', 'زمردي', 'ماسي'];
-  if (level <= 0) return names[0];
-  if (level > names.length) return names.last;
-  return names[level - 1];
+/// `.next { border-top:1px solid #26395A; padding-top:14px; gap:8px }`
+class _NextBadgeBlock extends StatelessWidget {
+  const _NextBadgeBlock({required this.data});
+
+  final AchievementsData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final BadgeInfo? next = data.nextBadge;
+    if (next == null) {
+      return Container(
+        padding: const EdgeInsets.only(top: 14),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: _heroLine)),
+        ),
+        child: const Text(
+          'أكملت كل الأوسمة. أحسنت!',
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: _heroOk,
+            height: 1.6,
+          ),
+        ),
+      );
+    }
+    final int nextThreshold = next.nextThreshold ?? next.current;
+    final int remaining = (nextThreshold - next.current).clamp(
+      0,
+      nextThreshold,
+    );
+
+    return Container(
+      padding: const EdgeInsets.only(top: 14),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: _heroLine)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  'وسامك القادم: ${_tierNames[next.level]} في ${next.name}',
+                  style: const TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 14,
+                    color: _heroText,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_fa(next.current)} من ${_fa(nextThreshold)}',
+                style: const TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 14,
+                  color: _heroMute,
+                  height: 1.6,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _Track(
+            fraction: next.fraction,
+            background: _heroLine,
+            fill: _heroGold,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'يتبقّى ${_fa(remaining)} ${next.unit} فقط.',
+            style: const TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 13,
+              color: _heroMute,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `<details>` — a 44px summary row with a rotating chevron and three rules.
+class _HowItWorks extends StatefulWidget {
+  const _HowItWorks();
+
+  @override
+  State<_HowItWorks> createState() => _HowItWorksState();
+}
+
+class _HowItWorksState extends State<_HowItWorks> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: _heroLine)),
+      ),
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: SizedBox(
+              height: 44,
+              child: Row(
+                children: <Widget>[
+                  const Expanded(
+                    child: Text(
+                      'كيف تُحسب النقاط والسلسلة؟',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 14,
+                        color: _heroText,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _heroText.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const _Chevron(size: 16, color: _heroText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: _open
+                ? const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _Bullet(
+                          'كل فيديو تكمله يمنحك 10 نقاط، وحل أسئلة الفصل يمنحك 20 نقطة.',
+                        ),
+                        _Bullet(
+                          'السلسلة هي عدد الأيام المتتالية التي أنجزت فيها مهامك. يوم الراحة المجدول لا يقطعها.',
+                        ),
+                        _Bullet(
+                          'إن فاتك يوم تبدأ سلسلة جديدة، ولا تفقد نقاطك ولا أوسمتك.',
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Bullet extends StatelessWidget {
+  const _Bullet(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.only(top: 2, left: 6, right: 6),
+            child: Text(
+              '•',
+              style: TextStyle(color: _heroMute, fontSize: 14, height: 1.6),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: 14,
+                color: _heroMute,
+                height: 1.6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -330,35 +799,49 @@ String _tierName(int level) {
 
 class _BadgesSection extends StatelessWidget {
   const _BadgesSection({required this.data});
+
   final AchievementsData data;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    final int earned = data.badges.fold<int>(0, (int a, BadgeInfo b) => a + b.level);
+    final int earned = data.badges.fold<int>(
+      0,
+      (int sum, BadgeInfo badge) => sum + badge.level,
+    );
+    final int all = data.badges.length * 5;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(
-              'الأوسمة',
-              style: TextStyle(
-                fontFamily: KTypography.displayFamily,
-                fontSize: 21,
-                fontWeight: FontWeight.w700,
-                color: palette.tx,
-              ),
-            ),
-            Text(
-              'جمعت $earned وسام من ${data.badges.length * 5}.',
-              style: TextStyle(color: palette.mute, fontSize: 13),
-            ),
-          ],
+        Text(
+          'الأوسمة',
+          style: TextStyle(
+            fontFamily: KTypography.displayFamily,
+            fontSize: _h2Size,
+            fontWeight: FontWeight.w700,
+            color: palette.tx,
+            height: 1.5,
+          ),
         ),
-        const SizedBox(height: 12),
-        ...data.badges.map((BadgeInfo b) => _BadgeCard(badge: b)),
+        Text(
+          'جمعت $earned وسام من $all. لكل فئة خمسة مستويات: '
+          'برونزي، فضي، ذهبي، زمردي، ماسي.',
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: palette.mute,
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 14),
+        for (int i = 0; i < data.badges.length; i++)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: i == data.badges.length - 1 ? 0 : 12,
+            ),
+            child: _BadgeCard(badge: data.badges[i]),
+          ),
       ],
     );
   }
@@ -366,135 +849,578 @@ class _BadgesSection extends StatelessWidget {
 
 class _BadgeCard extends StatelessWidget {
   const _BadgeCard({required this.badge});
+
   final BadgeInfo badge;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    final int tierIndex = badge.level > 0 ? badge.level - 1 : -1;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.card,
-        border: Border.all(color: palette.line),
-        borderRadius: BorderRadius.circular(22),
+    final int level = badge.level;
+    final int? next = badge.nextThreshold;
+
+    return Material(
+      color: palette.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_badgeRadius),
+        side: BorderSide(color: palette.line),
       ),
-      child: Row(
-        children: <Widget>[
-          SizedBox(
-            width: 84,
-            height: 99,
-            child: CustomPaint(
-              painter: _BadgePainter(tier: tierIndex, icon: badge.icon),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  badge.name,
-                  style: TextStyle(
-                    fontFamily: KTypography.displayFamily,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: palette.tx,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(_badgeRadius),
+        onTap: () => _openBadgeSheet(context, badge),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  SizedBox(
+                    width: _medalWidth,
+                    child: _Medal(icon: badge.icon, level: level),
                   ),
-                ),
-                Text(
-                  badge.level > 0
-                      ? 'المستوى ${_tierName(badge.level)} (${badge.level} من 5)'
-                      : 'لم تبدأ بعد',
-                  style: TextStyle(color: palette.mute, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                if (badge.nextThreshold != null) ...<Widget>[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: badge.fraction,
-                      minHeight: 8,
-                      backgroundColor: palette.line,
-                      valueColor: AlwaysStoppedAnimation<Color>(palette.gold),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Text(
+                          badge.name,
+                          style: TextStyle(
+                            fontFamily: KTypography.displayFamily,
+                            fontSize: _h3Size,
+                            fontWeight: FontWeight.w700,
+                            color: palette.tx,
+                            height: 1.4,
+                          ),
+                        ),
+                        level == 0
+                            ? Text(
+                                'لم تبدأ بعد',
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 13,
+                                  color: palette.mute,
+                                  height: 1.6,
+                                ),
+                              )
+                            : Text.rich(
+                                TextSpan(
+                                  children: <InlineSpan>[
+                                    const TextSpan(text: 'المستوى '),
+                                    TextSpan(
+                                      text: _tierNames[level - 1],
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: palette.tx,
+                                      ),
+                                    ),
+                                    TextSpan(text: ' ($level من 5)'),
+                                  ],
+                                ),
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 13,
+                                  color: palette.mute,
+                                  height: 1.6,
+                                ),
+                              ),
+                        const SizedBox(height: 6),
+                        if (next == null)
+                          Text(
+                            'أنهيت كل المستويات. أحسنت!',
+                            style: TextStyle(
+                              fontFamily: KTypography.bodyFamily,
+                              fontSize: 13,
+                              color: palette.ok,
+                              height: 1.6,
+                            ),
+                          )
+                        else ...<Widget>[
+                          _Track(
+                            fraction: badge.fraction,
+                            background: palette.line,
+                            fill: palette.gold,
+                            minFraction: 0.03,
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: <Widget>[
+                              Text(
+                                '${_fa(badge.current)} من ${_fa(next)} ${badge.unit}',
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 12,
+                                  color: palette.mute,
+                                  height: 1.6,
+                                ),
+                              ),
+                              Text(
+                                'التالي: ${_tierNames[level]}',
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 12,
+                                  color: palette.mute,
+                                  height: 1.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Text(
-                        '${badge.current} من ${badge.nextThreshold} ${badge.unit}',
-                        style: TextStyle(color: palette.mute, fontSize: 12),
-                      ),
-                      Text(
-                        'التالي: ${_tierName(badge.level + 1)}',
-                        style: TextStyle(color: palette.mute, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ] else
-                  Text(
-                    'أنهيت كل المستويات. أحسنت!',
-                    style: TextStyle(color: palette.ok, fontSize: 13),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: badge.thresholds
-                      .asMap()
-                      .entries
-                      .map((MapEntry<int, int> e) {
-                        final bool earned = e.key < badge.level;
-                        return Column(
+                ],
+              ),
+              // `.lad { grid-column:1/-1; border-top:1px solid var(--line);
+              //         margin-top:8px; padding-top:12px }`
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 12),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: palette.line)),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    for (int i = 0; i < badge.thresholds.length; i++)
+                      Expanded(
+                        child: Column(
                           children: <Widget>[
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: earned ? palette.gold : palette.line,
-                                  width: 2,
-                                  style: earned
-                                      ? BorderStyle.solid
-                                      : BorderStyle.solid,
-                                ),
-                                color: earned
-                                    ? palette.gold.withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${e.key + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: earned ? palette.gold : palette.mute,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
+                            _Pip(index: i, earned: i < level),
+                            const SizedBox(height: 4),
                             Text(
-                              '${e.value}',
+                              _fa(badge.thresholds[i]),
                               style: TextStyle(
+                                fontFamily: KTypography.bodyFamily,
                                 fontSize: 11,
                                 color: palette.mute,
+                                height: 1.4,
                               ),
                             ),
                           ],
-                        );
-                      })
-                      .toList(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `.pip { width:30px; height:30px; border-radius:50%;
+///         border:2px dashed var(--line) }`
+/// `.pip.e { border:2px solid var(--c); background:var(--l); color:#0D1A2D }`
+class _Pip extends StatelessWidget {
+  const _Pip({required this.index, required this.earned});
+
+  final int index;
+  final bool earned;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    final List<Color> tier = _tierColors[index];
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: CustomPaint(
+        painter: _CirclePainter(
+          color: earned ? tier[0] : palette.line,
+          fill: earned ? tier[1] : Colors.transparent,
+          strokeWidth: 2,
+          dashed: !earned,
+        ),
+        child: Center(
+          child: Text(
+            '${index + 1}',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 12,
+              height: 1.1,
+              fontWeight: earned ? FontWeight.w500 : FontWeight.w400,
+              color: earned ? const Color(0xFF0D1A2D) : palette.mute,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `.box { border-radius:28px 28px 0 0; padding:20px 20px 24px }`
+void _openBadgeSheet(BuildContext context, BadgeInfo badge) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (BuildContext sheetContext) {
+      final KhutatiPalette palette = sheetContext.palette;
+      final int level = badge.level;
+      final int current = badge.current;
+
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
+        ),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: palette.card,
+            border: Border.all(color: palette.line),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            24 + MediaQuery.paddingOf(sheetContext).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                SizedBox(
+                  width: 110,
+                  child: _Medal(icon: badge.icon, level: level),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  badge.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.displayFamily,
+                    fontSize: _h2Size,
+                    fontWeight: FontWeight.w700,
+                    color: palette.tx,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${badge.name}. أنت الآن عند ${_fa(current)} ${badge.unit}.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 14,
+                    color: palette.mute,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // `.lr { grid-template-columns:30px 1fr auto; gap:12px;
+                //        border-top:1px solid var(--line); padding:10px 0 }`
+                for (int i = 0; i < badge.thresholds.length; i++)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: palette.line)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        _Pip(index: i, earned: i < level),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                _tierNames[i],
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 14,
+                                  color: palette.tx,
+                                  height: 1.6,
+                                ),
+                              ),
+                              Text(
+                                '${_fa(badge.thresholds[i])} ${badge.unit}',
+                                style: TextStyle(
+                                  fontFamily: KTypography.bodyFamily,
+                                  fontSize: 12,
+                                  color: palette.mute,
+                                  height: 1.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          i < level
+                              ? 'مكتسب'
+                              : i == level
+                              ? 'تبقّى ${_fa(badge.thresholds[i] - current)}'
+                              : 'قادم',
+                          style: TextStyle(
+                            fontFamily: KTypography.bodyFamily,
+                            fontSize: 12,
+                            color: i < level ? palette.ok : palette.mute,
+                            fontWeight: i < level
+                                ? FontWeight.w500
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: palette.card2,
+                      side: BorderSide(color: palette.line),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'إغلاق',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 16,
+                        color: palette.tx,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      );
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Medal — SVG geometry from the reference, painted with Canvas
+// ---------------------------------------------------------------------------
+
+class _Medal extends StatelessWidget {
+  const _Medal({required this.icon, required this.level});
+
+  final String icon;
+  final int level;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 100 / 118,
+      child: CustomPaint(
+        painter: _MedalPainter(
+          icon: icon,
+          level: level,
+          line: context.palette.line,
+          card2: context.palette.card2,
+          mute: context.palette.mute,
+          red: context.palette.red,
+        ),
       ),
     );
   }
+}
+
+class _MedalPainter extends CustomPainter {
+  const _MedalPainter({
+    required this.icon,
+    required this.level,
+    required this.line,
+    required this.card2,
+    required this.mute,
+    required this.red,
+  });
+
+  final String icon;
+  final int level;
+  final Color line;
+  final Color card2;
+  final Color mute;
+  final Color red;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double scale = size.width / 100;
+    canvas.save();
+    canvas.scale(scale);
+
+    final bool earned = level > 0;
+    final List<Color>? tier = earned ? _tierColors[level - 1] : null;
+
+    final Paint ribbon = Paint()
+      ..style = PaintingStyle.fill
+      ..color = earned ? red : line;
+
+    // <polygon points="28,70 50,78 42,116 31,106 20,114"/>
+    final Path leftRibbon = Path()
+      ..moveTo(28, 70)
+      ..lineTo(50, 78)
+      ..lineTo(42, 116)
+      ..lineTo(31, 106)
+      ..lineTo(20, 114)
+      ..close();
+    canvas.drawPath(leftRibbon, ribbon);
+
+    // <polygon points="72,70 50,78 58,116 69,106 80,114" fill-opacity=".85"/>
+    final Path rightRibbon = Path()
+      ..moveTo(72, 70)
+      ..lineTo(50, 78)
+      ..lineTo(58, 116)
+      ..lineTo(69, 106)
+      ..lineTo(80, 114)
+      ..close();
+    canvas.drawPath(
+      rightRibbon,
+      ribbon..color = (earned ? red : line).withValues(alpha: 0.85),
+    );
+
+    // <circle cx="50" cy="48" r="42" fill="tier[0] or var(--line)"/>
+    canvas.drawCircle(
+      const Offset(50, 48),
+      42,
+      Paint()..color = tier?[0] ?? line,
+    );
+
+    // <circle cx="50" cy="48" r="35" fill="tier[1] or var(--card2)"
+    //         stroke="#fff" stroke-opacity=".55" stroke-width="1.5"
+    //         [stroke-dasharray="4 4"]/>
+    canvas.drawCircle(
+      const Offset(50, 48),
+      35,
+      Paint()..color = tier?[1] ?? card2,
+    );
+    final Paint inner = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = tier != null
+          ? Colors.white.withValues(alpha: 0.55)
+          : mute.withValues(alpha: 0.55);
+    if (tier == null) {
+      _drawDashedCircle(
+        canvas,
+        const Offset(50, 48),
+        35,
+        inner,
+        dash: 4,
+        gap: 4,
+      );
+    } else {
+      canvas.drawCircle(const Offset(50, 48), 35, inner);
+    }
+
+    // <g transform="translate(28 26) scale(1.83)">
+    canvas.save();
+    canvas.translate(28, 26);
+    canvas.scale(1.83);
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = tier != null
+          ? const Color(0xFF0D1A2D)
+          : mute.withValues(alpha: 0.7);
+    _paintIcon(canvas, icon, stroke);
+    canvas.restore();
+
+    canvas.restore();
+  }
+
+  /// `IC[ic]` — the five 24x24 icon paths, in order.
+  void _paintIcon(Canvas canvas, String key, Paint paint) {
+    switch (key) {
+      case 'flame':
+        // M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3
+        // 0-3-1-6 1-9z
+        final Path flame = Path()
+          ..moveTo(12, 3)
+          ..cubicTo(13, 6.5, 17, 8.5, 17, 13)
+          ..arcToPoint(
+            const Offset(7, 13),
+            radius: const Radius.circular(5),
+            clockwise: false,
+          )
+          ..cubicTo(7, 11, 8, 10, 9, 9)
+          ..cubicTo(9, 11, 10, 12, 11, 12)
+          ..cubicTo(11, 9, 10, 6, 12, 3)
+          ..close();
+        canvas.drawPath(flame, paint);
+      case 'star':
+        // m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9
+        // L3.5 9.7l5.9-.8z
+        final Path star = Path()
+          ..moveTo(12, 3.5)
+          ..lineTo(14.6, 8.9)
+          ..lineTo(20.5, 9.7)
+          ..lineTo(16.2, 13.8)
+          ..lineTo(17.2, 19.7)
+          ..lineTo(12, 16.9)
+          ..lineTo(6.8, 19.7)
+          ..lineTo(7.8, 13.8)
+          ..lineTo(3.5, 9.7)
+          ..lineTo(9.4, 8.9)
+          ..close();
+        canvas.drawPath(star, paint);
+      case 'clock':
+        // <circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>
+        canvas.drawCircle(const Offset(12, 12), 8, paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(12, 7.5)
+            ..lineTo(12, 12)
+            ..lineTo(15, 14),
+          paint,
+        );
+      case 'flag':
+        // <path d="M6 21V4m0 1h11l-2 4 2 4H6"/>
+        canvas.drawPath(
+          Path()
+            ..moveTo(6, 21)
+            ..lineTo(6, 4)
+            ..moveTo(6, 5)
+            ..lineTo(17, 5)
+            ..lineTo(15, 9)
+            ..lineTo(17, 13)
+            ..lineTo(6, 13),
+          paint,
+        );
+      case 'quiz':
+        // <circle cx="12" cy="12" r="9"/>
+        // <path d="M9.3 9.3a2.8 2.8 0 1 1 4.3 2.4c-1 .6-1.6 1.2-1.6 2.3
+        //         M12 17.3v.2"/>
+        canvas.drawCircle(const Offset(12, 12), 9, paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(9.3, 9.3)
+            ..arcToPoint(
+              const Offset(13.6, 11.7),
+              radius: const Radius.circular(2.8),
+              clockwise: true,
+            )
+            ..cubicTo(12.6, 12.3, 12, 12.9, 12, 14)
+            ..moveTo(12, 17.3)
+            ..lineTo(12, 17.5),
+          paint,
+        );
+      default:
+        canvas.drawCircle(const Offset(12, 12), 9, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MedalPainter oldDelegate) =>
+      oldDelegate.icon != icon ||
+      oldDelegate.level != level ||
+      oldDelegate.line != line ||
+      oldDelegate.card2 != card2 ||
+      oldDelegate.mute != mute ||
+      oldDelegate.red != red;
 }
 
 // ---------------------------------------------------------------------------
@@ -507,13 +1433,18 @@ class _DayMapSection extends StatelessWidget {
     required this.selectedDay,
     required this.onSelect,
   });
+
   final AchievementsData data;
-  final int? selectedDay;
+  final int selectedDay;
   final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final int total = data.totalDays;
+    final int completed = data.completedDays;
+    final double fraction = total > 0 ? (completed / total).clamp(0.0, 1.0) : 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -521,23 +1452,23 @@ class _DayMapSection extends StatelessWidget {
           'خريطة الأيام',
           style: TextStyle(
             fontFamily: KTypography.displayFamily,
-            fontSize: 21,
+            fontSize: _h2Size,
             fontWeight: FontWeight.w700,
             color: palette.tx,
+            height: 1.5,
           ),
         ),
         Text(
           'كل مربع يوم من أيام الخطة. اضغط على أي يوم لترى تفاصيله.',
-          style: TextStyle(color: palette.mute, fontSize: 14),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: palette.card,
-            border: Border.all(color: palette.line),
-            borderRadius: BorderRadius.circular(22),
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: palette.mute,
+            height: 1.6,
           ),
+        ),
+        const SizedBox(height: 14),
+        _Surface(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
@@ -545,84 +1476,65 @@ class _DayMapSection extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   Text(
-                    '${data.completedDays} يوماً مكتملاً من ${data.totalDays}',
-                    style: TextStyle(color: palette.tx, fontSize: 14),
+                    '$completed يوماً مكتملاً من $total',
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: 14,
+                      color: palette.tx,
+                      height: 1.6,
+                    ),
                   ),
                   Text(
-                    '${data.totalDays > 0 ? (data.completedDays / data.totalDays * 100).round() : 0}%',
-                    style: TextStyle(color: palette.mute, fontSize: 14),
+                    '${(fraction * 100).round()}%',
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: 14,
+                      color: palette.mute,
+                      height: 1.6,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: data.totalDays > 0
-                      ? data.completedDays / data.totalDays
-                      : 0,
-                  minHeight: 8,
-                  backgroundColor: palette.line,
-                  valueColor: AlwaysStoppedAnimation<Color>(palette.ok),
-                ),
+              _Track(
+                fraction: fraction,
+                background: palette.line,
+                fill: palette.gold,
               ),
               const SizedBox(height: 14),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 8,
-                  mainAxisSpacing: 5,
-                  crossAxisSpacing: 5,
-                  childAspectRatio: 1,
-                ),
-                itemCount: data.totalDays,
-                itemBuilder: (BuildContext context, int index) {
-                  final int day = index + 1;
-                  final String status = data.dayStatus[day] ?? 'future';
-                  final bool selected = selectedDay == day;
-                  Color bg = palette.card2;
-                  Color border = palette.line;
-                  Color fg = palette.mute;
-                  if (status == 'done') {
-                    bg = palette.ok;
-                    border = palette.ok;
-                    fg = palette.bg;
-                  } else if (status == 'rest') {
-                    bg = Colors.transparent;
-                    border = palette.mute;
-                  } else if (status == 'today') {
-                    bg = palette.card;
-                    border = palette.tx;
-                    fg = palette.tx;
-                  } else if (status == 'wait') {
-                    bg = Colors.transparent;
-                    border = palette.gold;
-                    fg = palette.tx;
-                  }
-                  return GestureDetector(
-                    onTap: () => onSelect(day),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: bg,
-                        border: Border.all(color: border, width: selected ? 2.5 : 1.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$day',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: status == 'today' ? FontWeight.w700 : FontWeight.normal,
-                          color: fg,
-                        ),
-                      ),
-                    ),
-                  );
-                },
+              _DayGrid(
+                data: data,
+                selectedDay: selectedDay,
+                onSelect: onSelect,
               ),
               const SizedBox(height: 14),
-              _DayDetailCard(data: data, day: selectedDay),
+              Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                children: <Widget>[
+                  _MapLegend(color: palette.ok, label: 'مكتمل'),
+                  _MapLegend(
+                    color: palette.gold,
+                    label: 'تنتظرك',
+                    borderWidth: 2,
+                  ),
+                  _MapLegend(color: palette.tx, label: 'اليوم', borderWidth: 2),
+                  _MapLegend(
+                    color: palette.mute,
+                    label: 'راحة',
+                    borderWidth: 1.5,
+                    dashed: true,
+                  ),
+                  _MapLegend(
+                    color: palette.line,
+                    label: 'قادم',
+                    fill: palette.card2,
+                    borderWidth: 1,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _DayDetail(data: data, day: selectedDay),
             ],
           ),
         ),
@@ -631,100 +1543,380 @@ class _DayMapSection extends StatelessWidget {
   }
 }
 
-class _DayDetailCard extends StatelessWidget {
-  const _DayDetailCard({required this.data, required this.day});
+class _DayGrid extends StatelessWidget {
+  const _DayGrid({
+    required this.data,
+    required this.selectedDay,
+    required this.onSelect,
+  });
+
   final AchievementsData data;
-  final int? day;
+  final int selectedDay;
+  final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    final int d = day ?? data.todayDayNumber;
-    if (d < 1 || d > data.totalDays) {
-      return const SizedBox.shrink();
+    final int total = data.totalDays;
+    final int weeks = (total / 7).ceil();
+    final int currentWeek = data.todayDayNumber > 0
+        ? ((data.todayDayNumber - 1) / 7).floor()
+        : 0;
+
+    final List<Widget> rows = <Widget>[
+      Row(
+        spacing: 5,
+        children: <Widget>[
+          const SizedBox(width: 50),
+          for (int i = 0; i < 7; i++)
+            Expanded(
+              child: Text(
+                _weekdayShort[i],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 11,
+                  color: palette.mute,
+                  height: 1.4,
+                ),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 5),
+    ];
+
+    for (int w = 0; w < weeks; w++) {
+      rows.add(
+        Row(
+          spacing: 5,
+          children: <Widget>[
+            SizedBox(
+              width: 50,
+              child: Text(
+                'أسبوع ${w + 1}',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 11,
+                  height: 1.4,
+                  color: w == currentWeek ? palette.tx : palette.mute,
+                  fontWeight: w == currentWeek
+                      ? FontWeight.w500
+                      : FontWeight.w400,
+                ),
+              ),
+            ),
+            for (int c = 0; c < 7; c++)
+              Expanded(
+                child: _DayCell(
+                  day: w * 7 + c + 1,
+                  total: total,
+                  status: data.dayStatus[w * 7 + c + 1] ?? 'future',
+                  selected: selectedDay == w * 7 + c + 1,
+                  onTap: onSelect,
+                ),
+              ),
+          ],
+        ),
+      );
+      if (w != weeks - 1) rows.add(const SizedBox(height: 5));
     }
-    final String status = data.dayStatus[d] ?? 'future';
-    final String statusLabel = status == 'done'
-        ? 'مكتمل'
-        : status == 'rest'
-        ? 'يوم راحة مجدول. لا يقطع سلسلتك.'
-        : status == 'today'
-        ? 'يومك الحالي'
-        : status == 'wait'
-        ? 'فيه مهام تنتظرك'
-        : 'قادم';
-    final double hours = data.dayHours[d] ?? 0;
-    final int pts = data.dayPoints[d] ?? 0;
-    final int doneTasks = data.dayTasks[d] ?? 0;
-    final int totalTasks = data.dayTotalTasks[d] ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
+  }
+}
+
+class _DayCell extends StatelessWidget {
+  const _DayCell({
+    required this.day,
+    required this.total,
+    required this.status,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int day;
+  final int total;
+  final String status;
+  final bool selected;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (day > total) return const SizedBox.shrink();
+
+    final KhutatiPalette palette = context.palette;
+    final bool done = status == 'done';
+    final bool wait = status == 'wait';
+    final bool today = status == 'today';
+    final bool rest = status == 'rest';
+
+    final Color background = done
+        ? palette.ok
+        : today
+        ? palette.card
+        : palette.card2;
+    final Color border = done
+        ? palette.ok
+        : wait
+        ? palette.gold
+        : today
+        ? palette.tx
+        : rest
+        ? palette.mute
+        : palette.line;
+    final double borderWidth = wait || today
+        ? 2.5
+        : rest
+        ? 1.5
+        : 1.5;
+    final Color text = done
+        ? palette.bg
+        : wait || today
+        ? palette.tx
+        : palette.mute;
+
+    return GestureDetector(
+      onTap: () => onTap(day),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? palette.gold : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        padding: const EdgeInsets.all(1),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: CustomPaint(
+            painter: _CellPainter(
+              fill: background,
+              border: border,
+              borderWidth: borderWidth,
+              dashed: rest,
+            ),
+            child: Center(
+              child: Text(
+                '$day',
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 12,
+                  height: 1.2,
+                  color: text,
+                  fontWeight: today ? FontWeight.w500 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MapLegend extends StatelessWidget {
+  const _MapLegend({
+    required this.color,
+    required this.label,
+    this.fill = Colors.transparent,
+    this.borderWidth = 0,
+    this.dashed = false,
+  });
+
+  final Color color;
+  final String label;
+  final Color fill;
+  final double borderWidth;
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(4),
+            border: borderWidth > 0 && !dashed
+                ? Border.all(color: color, width: borderWidth)
+                : dashed
+                ? Border.all(color: color, width: borderWidth)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 12,
+            color: palette.mute,
+            height: 1.3,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// `.dd { background:var(--card2); border-radius:14px; padding:12px 14px;
+///        min-height:96px; margin-top:14px }`
+class _DayDetail extends StatelessWidget {
+  const _DayDetail({required this.data, required this.day});
+
+  final AchievementsData data;
+  final int day;
+
+  static const Map<String, String> _statusLabel = <String, String>{
+    'done': 'مكتمل',
+    'wait': 'فيه مهام تنتظرك',
+    'today': 'يومك الحالي',
+    'rest': 'يوم راحة مجدول',
+    'future': 'قادم',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    final String status = data.dayStatus[day] ?? 'future';
+    final DateTime? date = _dateOfDay(data, day);
+    final double hours = data.dayHours[day] ?? 0;
+    final int points = data.dayPoints[day] ?? 0;
+    final int tasks = data.dayTasks[day] ?? 0;
+    final int totalTasks = data.dayTotalTasks[day] ?? 0;
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(minHeight: 96),
       decoration: BoxDecoration(
         color: palette.card2,
         borderRadius: BorderRadius.circular(14),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: <Widget>[
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
               Text(
-                'اليوم $d',
+                'اليوم $day',
                 style: TextStyle(
-                  fontFamily: KTypography.displayFamily,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                   color: palette.tx,
+                  height: 1.5,
                 ),
               ),
-              Text(statusLabel, style: TextStyle(color: palette.mute, fontSize: 13)),
+              const Spacer(),
+              Text(
+                date == null ? '' : _fullDate(date),
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 14,
+                  color: palette.mute,
+                  height: 1.5,
+                ),
+              ),
             ],
           ),
-          if (status != 'future' && status != 'rest') ...<Widget>[
-            const SizedBox(height: 10),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('${hours.toStringAsFixed(1)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: palette.tx)),
-                      Text('ساعة دراسة', style: TextStyle(fontSize: 12, color: palette.mute)),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('$pts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: palette.tx)),
-                      Text('نقطة', style: TextStyle(fontSize: 12, color: palette.mute)),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('$doneTasks من $totalTasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: palette.tx)),
-                      Text('مهام منجزة', style: TextStyle(fontSize: 12, color: palette.mute)),
-                    ],
-                  ),
-                ),
-              ],
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '${_statusLabel[status] ?? ''}'
+              '${status == 'rest' ? '. لا يقطع سلسلتك.' : ''}',
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: 14,
+                color: palette.mute,
+                height: 1.6,
+              ),
             ),
-          ],
+          ),
           if (status == 'future')
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'لم يبدأ بعد. تظهر تفاصيله عندما يحين موعده.',
-                style: TextStyle(color: palette.mute, fontSize: 13),
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 14,
+                  color: palette.mute,
+                  height: 1.6,
+                ),
+              ),
+            )
+          else if (status != 'rest')
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: _DetailStat(value: _duration(hours), label: 'دراسة'),
+                  ),
+                  Expanded(
+                    child: _DetailStat(value: _fa(points), label: 'نقطة'),
+                  ),
+                  Expanded(
+                    child: _DetailStat(
+                      value: '$tasks من $totalTasks',
+                      label: 'مهام منجزة',
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _DetailStat extends StatelessWidget {
+  const _DetailStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: palette.tx,
+            height: 1.4,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 12,
+            color: palette.mute,
+            height: 1.4,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -735,17 +1927,21 @@ class _DayDetailCard extends StatelessWidget {
 
 class _StudyHoursSection extends StatelessWidget {
   const _StudyHoursSection({required this.data});
+
   final AchievementsData data;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
-    final double total = data.splitHours.values.fold<double>(0, (a, b) => a + b);
-    final List<_SplitRow> rows = <_SplitRow>[
-      _SplitRow('حضور الفيديوهات', data.splitHours['attend'] ?? 0, const Color(0xFF7CCBB0)),
-      _SplitRow('الدراسة', data.splitHours['study'] ?? 0, const Color(0xFFE8B65A)),
-      _SplitRow('حل الأسئلة', data.splitHours['questions'] ?? 0, const Color(0xFF93A1B8)),
-    ];
+    final double total = data.totalFocusHours;
+    final double attend = data.splitHours['attend'] ?? 0;
+    final double study = data.splitHours['study'] ?? 0;
+    final double questions = data.splitHours['questions'] ?? 0;
+    final double sum = attend + study + questions;
+
+    int flex(double value) =>
+        sum <= 0 ? 0 : math.max(1, (value / sum * 1000).round());
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -753,83 +1949,102 @@ class _StudyHoursSection extends StatelessWidget {
           'ساعات الدراسة',
           style: TextStyle(
             fontFamily: KTypography.displayFamily,
-            fontSize: 21,
+            fontSize: _h2Size,
             fontWeight: FontWeight.w700,
             color: palette.tx,
+            height: 1.5,
           ),
         ),
         Text(
           'الوقت الذي سجّله مؤقت التركيز فعلياً.',
-          style: TextStyle(color: palette.mute, fontSize: 14),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: palette.card,
-            border: Border.all(color: palette.line),
-            borderRadius: BorderRadius.circular(22),
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: palette.mute,
+            height: 1.6,
           ),
+        ),
+        const SizedBox(height: 14),
+        _Surface(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
                   Text(
-                    '${data.totalFocusHours.floor()}',
+                    '${total.floor()}',
                     style: TextStyle(
                       fontFamily: KTypography.displayFamily,
                       fontSize: 48,
+                      height: 1,
+                      fontWeight: FontWeight.w700,
                       color: palette.tx,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'ساعة و ${(data.totalFocusHours * 60 % 60).round()} دقيقة',
-                    style: TextStyle(color: palette.mute, fontSize: 14),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'ساعة و${((total % 1) * 60).round()} دقيقة',
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 14,
+                        color: palette.mute,
+                        height: 1.6,
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: SizedBox(
-                  height: 14,
-                  child: Row(
-                    children: rows
-                        .map(
-                          (_SplitRow r) => Expanded(
-                            flex: (r.hours * 1000).round().clamp(1, 100000),
-                            child: Container(color: r.color),
-                          ),
-                        )
-                        .toList(),
-                  ),
+              // `.bar { height:14px; border-radius:7px; gap:2px }`
+              Container(
+                height: 14,
+                decoration: BoxDecoration(
+                  color: palette.line,
+                  borderRadius: BorderRadius.circular(7),
                 ),
-              ),
-              const SizedBox(height: 12),
-              ...rows.map((_SplitRow r) {
-                final double pct = total > 0 ? r.hours / total : 0;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Row(
+                clipBehavior: Clip.antiAlias,
+                child: sum <= 0
+                    ? const SizedBox.shrink()
+                    : Row(
+                        spacing: 2,
                         children: <Widget>[
-                          Container(width: 10, height: 10, decoration: BoxDecoration(color: r.color, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Text(r.label, style: TextStyle(color: palette.tx, fontSize: 14)),
+                          if (attend > 0)
+                            Expanded(
+                              flex: flex(attend),
+                              child: ColoredBox(color: palette.ok),
+                            ),
+                          if (study > 0)
+                            Expanded(
+                              flex: flex(study),
+                              child: ColoredBox(color: palette.gold),
+                            ),
+                          if (questions > 0)
+                            Expanded(
+                              flex: flex(questions),
+                              child: ColoredBox(color: palette.mute),
+                            ),
                         ],
                       ),
-                      Text(
-                        '${r.hours.toStringAsFixed(1)} س',
-                        style: TextStyle(color: palette.mute, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+              ),
+              const SizedBox(height: 12),
+              _SplitRow(
+                color: palette.ok,
+                label: 'حضور الفيديوهات',
+                value: _duration(attend),
+              ),
+              _SplitRow(
+                color: palette.gold,
+                label: 'الدراسة',
+                value: _duration(study),
+              ),
+              _SplitRow(
+                color: palette.mute,
+                label: 'حل الأسئلة',
+                value: _duration(questions),
+              ),
             ],
           ),
         ),
@@ -838,24 +2053,72 @@ class _StudyHoursSection extends StatelessWidget {
   }
 }
 
-class _SplitRow {
-  const _SplitRow(this.label, this.hours, this.color);
-  final String label;
-  final double hours;
+class _SplitRow extends StatelessWidget {
+  const _SplitRow({
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
   final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: 14,
+                  color: palette.tx,
+                  height: 1.6,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 14,
+              color: palette.tx,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Subjects
+// Subject progress
 // ---------------------------------------------------------------------------
 
 class _SubjectsSection extends StatelessWidget {
   const _SubjectsSection({required this.data});
+
   final AchievementsData data;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -863,54 +2126,43 @@ class _SubjectsSection extends StatelessWidget {
           'التقدم في المواد',
           style: TextStyle(
             fontFamily: KTypography.displayFamily,
-            fontSize: 21,
+            fontSize: _h2Size,
             fontWeight: FontWeight.w700,
             color: palette.tx,
+            height: 1.5,
           ),
         ),
         Text(
           'نسبة المهام المنجزة في كل مادة.',
-          style: TextStyle(color: palette.mute, fontSize: 14),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: palette.card,
-            border: Border.all(color: palette.line),
-            borderRadius: BorderRadius.circular(22),
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 14,
+            color: palette.mute,
+            height: 1.6,
           ),
+        ),
+        const SizedBox(height: 14),
+        _Surface(
           child: Column(
-            children: data.subjects
-                .map((SubjectProgress s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              Text(s.name, style: TextStyle(color: palette.tx, fontSize: 14)),
-                              Text(
-                                '${s.completedTasks} من ${s.totalTasks} مهمة · ${(s.percent * 100).round()}%',
-                                style: TextStyle(color: palette.mute, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: s.percent,
-                              minHeight: 8,
-                              backgroundColor: palette.line,
-                              valueColor: AlwaysStoppedAnimation<Color>(s.color),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ))
-                .toList(),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (int i = 0; i < data.subjects.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(
+                    bottom: i == data.subjects.length - 1 ? 0 : 14,
+                  ),
+                  child: _SubjectRow(subject: data.subjects[i]),
+                ),
+              if (data.subjects.isEmpty)
+                Text(
+                  'لا توجد مواد في الخطة بعد.',
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 14,
+                    color: palette.mute,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -918,168 +2170,383 @@ class _SubjectsSection extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Badge painter
-// ---------------------------------------------------------------------------
+class _SubjectRow extends StatelessWidget {
+  const _SubjectRow({required this.subject});
 
-class _BadgePainter extends CustomPainter {
-  const _BadgePainter({required this.tier, required this.icon});
-  final int tier; // -1 none, 0..4
-  final String icon;
-
-  static const List<List<Color>> _tiers = <List<Color>>[
-    <Color>[Color(0xFFB9753F), Color(0xFFE8BE92)],
-    <Color>[Color(0xFF8E9BAD), Color(0xFFE6EBF2)],
-    <Color>[Color(0xFFD9A441), Color(0xFFF8E3A6)],
-    <Color>[Color(0xFF2FA37F), Color(0xFFB1EAD6)],
-    <Color>[Color(0xFF4F93F0), Color(0xFFCDE5FF)],
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bool earned = tier >= 0;
-    final Offset c = Offset(size.width / 2, size.height * 0.4);
-    final double r = size.width * 0.42;
-    // ribbons
-    final Paint ribbon = Paint()
-      ..color = earned ? const Color(0xFFB52A20) : const Color(0xFFD9D2C3);
-    final Path leftRibbon = Path()
-      ..moveTo(c.dx - r * 0.5, c.dy + r * 0.6)
-      ..lineTo(c.dx - r * 0.3, c.dy + r * 1.6)
-      ..lineTo(c.dx - r * 0.9, c.dy + r * 1.4)
-      ..close();
-    final Path rightRibbon = Path()
-      ..moveTo(c.dx + r * 0.5, c.dy + r * 0.6)
-      ..lineTo(c.dx + r * 0.3, c.dy + r * 1.6)
-      ..lineTo(c.dx + r * 0.9, c.dy + r * 1.4)
-      ..close();
-    canvas.drawPath(leftRibbon, ribbon);
-    canvas.drawPath(rightRibbon, ribbon..color = ribbon.color.withValues(alpha: 0.85));
-
-    // outer circle
-    final Paint outer = Paint()
-      ..shader = earned
-          ? LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: _tiers[tier],
-            ).createShader(Rect.fromCircle(center: c, radius: r))
-          : null
-      ..color = earned ? Colors.transparent : const Color(0xFFD9D2C3);
-    if (earned) {
-      canvas.drawCircle(c, r, outer);
-    } else {
-      canvas.drawCircle(c, r, Paint()..color = const Color(0xFFD9D2C3));
-    }
-    // inner circle
-    canvas.drawCircle(
-      c,
-      r * 0.83,
-      Paint()
-        ..color = earned ? _tiers[tier][1] : const Color(0xFFF6F2EA)
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawCircle(
-      c,
-      r * 0.83,
-      Paint()
-        ..color = earned ? Colors.white.withValues(alpha: 0.55) : const Color(0xFF5B6A80).withValues(alpha: 0.5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-    // icon (simple)
-    final Paint iconPaint = Paint()
-      ..color = earned ? const Color(0xFF0D1A2D) : const Color(0xFF5B6A80)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.save();
-    canvas.translate(c.dx - r * 0.5, c.dy - r * 0.5);
-    canvas.scale(r / 28.0);
-    _drawIcon(canvas, icon, iconPaint);
-    canvas.restore();
-  }
-
-  void _drawIcon(Canvas canvas, String icon, Paint p) {
-    switch (icon) {
-      case 'flame':
-        final Path path = Path()
-          ..moveTo(12, 3)
-          ..cubicTo(13, 6.5, 17, 8.5, 17, 13)
-          ..arcToPoint(const Offset(7, 13), radius: const Radius.circular(5))
-          ..cubicTo(7, 11, 8, 10, 9, 9)
-          ..cubicTo(9, 11, 10, 12, 11, 12)
-          ..cubicTo(11, 9, 10, 6, 12, 3);
-        canvas.drawPath(path, p..style = PaintingStyle.fill);
-        break;
-      case 'star':
-        final Path path = Path()
-          ..moveTo(12, 3.5)
-          ..lineTo(14.6, 8.9)
-          ..lineTo(20.5, 9.7)
-          ..lineTo(16.2, 13.8)
-          ..lineTo(17.2, 19.7)
-          ..lineTo(12, 16.9)
-          ..lineTo(6.8, 19.7)
-          ..lineTo(7.8, 13.8)
-          ..lineTo(3.5, 9.7)
-          ..lineTo(9.4, 8.9)
-          ..close();
-        canvas.drawPath(path, p..style = PaintingStyle.fill);
-        break;
-      default:
-        canvas.drawCircle(const Offset(12, 12), 8, p..style = PaintingStyle.stroke);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _BadgePainter oldDelegate) {
-    return oldDelegate.tier != tier || oldDelegate.icon != icon;
-  }
-}
-
-class _HexagonPattern extends StatelessWidget {
-  const _HexagonPattern();
+  final SubjectProgress subject;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: _HexagonPainter());
+    final KhutatiPalette palette = context.palette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(
+              subject.name,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: 14,
+                color: palette.tx,
+                height: 1.6,
+              ),
+            ),
+            Text(
+              '${subject.completedTasks} من ${subject.totalTasks} مهمة · '
+              '${(subject.percent * 100).round()}%',
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: 14,
+                color: palette.mute,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _Track(
+          fraction: subject.percent,
+          background: palette.line,
+          fill: subject.color,
+        ),
+      ],
+    );
   }
 }
 
-class _HexagonPainter extends CustomPainter {
+// ---------------------------------------------------------------------------
+// Shared primitives
+// ---------------------------------------------------------------------------
+
+/// `.surf { background:var(--card); border:1px solid var(--line);
+///          border-radius:22px; padding:16px }`
+class _Surface extends StatelessWidget {
+  const _Surface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.card,
+        border: Border.all(color: palette.line),
+        borderRadius: BorderRadius.circular(_surfaceRadius),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
+  }
+}
+
+/// `.trk { height:8px; border-radius:4px; background:var(--line) }
+///  .trk i { display:block; height:100%; border-radius:4px }`
+class _Track extends StatelessWidget {
+  const _Track({
+    required this.fraction,
+    required this.background,
+    required this.fill,
+    this.minFraction = 0,
+  });
+
+  final double fraction;
+  final Color background;
+  final Color fill;
+  final double minFraction;
+
+  @override
+  Widget build(BuildContext context) {
+    final double value = fraction.isFinite
+        ? fraction.clamp(0.0, 1.0).toDouble()
+        : 0;
+    final double widthFactor = value <= 0
+        ? 0
+        : math.max(value, minFraction).clamp(0.0, 1.0).toDouble();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_trackRadius),
+      child: SizedBox(
+        height: _trackHeight,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            ColoredBox(color: background),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FractionallySizedBox(
+                widthFactor: widthFactor,
+                heightFactor: 1,
+                child: ColoredBox(color: fill),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// `border-radius:50%` with optional dash pattern, for `.dot`, `.pip` and `.lg i`.
+class _CirclePainter extends CustomPainter {
+  const _CirclePainter({
+    required this.color,
+    required this.fill,
+    required this.strokeWidth,
+    this.dashed = false,
+  });
+
+  final Color color;
+  final Color fill;
+  final double strokeWidth;
+  final bool dashed;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = const Color(0xFF93A1B8).withValues(alpha: 0.13)
+    final double radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+    final Offset center = Offset(size.width / 2, size.height / 2);
+    if (fill != Colors.transparent) {
+      canvas.drawCircle(center, radius, Paint()..color = fill);
+    }
+    final Paint stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    const double w = 56;
-    const double h = 96;
-    for (double y = -h; y < size.height + h; y += h) {
-      for (double x = -w; x < size.width + w; x += w) {
-        _drawHexagon(canvas, Offset(x, y), w / 2, paint);
-        _drawHexagon(canvas, Offset(x + w / 2, y + h / 2), w / 2, paint);
-      }
+      ..strokeWidth = strokeWidth
+      ..color = color;
+    if (dashed) {
+      _drawDashedCircle(canvas, center, radius, stroke, dash: 3, gap: 3);
+    } else {
+      canvas.drawCircle(center, radius, stroke);
     }
-  }
-
-  void _drawHexagon(Canvas canvas, Offset c, double r, Paint paint) {
-    final Path path = Path();
-    for (int i = 0; i < 6; i++) {
-      final double angle = (math.pi / 3) * i - math.pi / 2;
-      final Offset p = Offset(c.dx + r * math.cos(angle), c.dy + r * math.sin(angle));
-      if (i == 0) {
-        path.moveTo(p.dx, p.dy);
-      } else {
-        path.lineTo(p.dx, p.dy);
-      }
-    }
-    path.close();
-    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(_CirclePainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.fill != fill ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashed != dashed;
+}
+
+/// `.cl { border-radius:10px; border:1.5px solid var(--line) }` plus the four
+/// state variants from the reference's day-map CSS.
+class _CellPainter extends CustomPainter {
+  const _CellPainter({
+    required this.fill,
+    required this.border,
+    required this.borderWidth,
+    required this.dashed,
+  });
+
+  final Color fill;
+  final Color border;
+  final double borderWidth;
+  final bool dashed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final RRect rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(10),
+    );
+    canvas.drawRRect(rect, Paint()..color = fill);
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderWidth
+      ..color = border;
+    if (dashed) {
+      _drawDashedRRect(canvas, rect.deflate(borderWidth / 2), stroke);
+    } else {
+      canvas.drawRRect(rect.deflate(borderWidth / 2), stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CellPainter oldDelegate) =>
+      oldDelegate.fill != fill ||
+      oldDelegate.border != border ||
+      oldDelegate.borderWidth != borderWidth ||
+      oldDelegate.dashed != dashed;
+}
+
+/// The hero texture: `<pattern id="pt" width="56" height="96">` with five
+/// `<use>` calls of `M28 0 56 16V48L28 64 0 48V16z`, stroked #93A1B8 at 13%.
+class _HexPattern extends CustomPainter {
+  const _HexPattern();
+
+  static const double _tileWidth = 56;
+  static const double _tileHeight = 96;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = const Color(0xFF93A1B8).withValues(alpha: 0.13);
+
+    final Path hex = Path()
+      ..moveTo(28, 0)
+      ..lineTo(56, 16)
+      ..lineTo(56, 48)
+      ..lineTo(28, 64)
+      ..lineTo(0, 48)
+      ..lineTo(0, 16)
+      ..close();
+
+    for (
+      double y = -_tileHeight;
+      y < size.height + _tileHeight;
+      y += _tileHeight
+    ) {
+      for (
+        double x = -_tileWidth;
+        x < size.width + _tileWidth;
+        x += _tileWidth
+      ) {
+        for (final Offset offset in <Offset>[
+          Offset(x, y),
+          Offset(x + 28, y + 48),
+          Offset(x - 28, y + 48),
+          Offset(x + 28, y - 48),
+          Offset(x - 28, y - 48),
+        ]) {
+          canvas.save();
+          canvas.translate(offset.dx, offset.dy);
+          canvas.drawPath(hex, stroke);
+          canvas.restore();
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HexPattern oldDelegate) => false;
+}
+
+/// `m5 12.5 4.5 4.5L19 7.5` with `stroke-width="3"`, 16x16.
+class _CheckMark extends StatelessWidget {
+  const _CheckMark({required this.size, this.color = _heroBg});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _CheckPainter(color: color)),
+    );
+  }
+}
+
+class _CheckPainter extends CustomPainter {
+  const _CheckPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double scale = size.width / 24;
+    canvas.scale(scale);
+    canvas.drawPath(
+      Path()
+        ..moveTo(5, 12.5)
+        ..lineTo(9.5, 17)
+        ..lineTo(19, 7.5),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CheckPainter oldDelegate) => oldDelegate.color != color;
+}
+
+/// `<path d="m6 9 6 6 6-6"/>` — the details chevron.
+class _Chevron extends StatelessWidget {
+  const _Chevron({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _ChevronPainter(color: color)),
+    );
+  }
+}
+
+class _ChevronPainter extends CustomPainter {
+  const _ChevronPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24);
+    canvas.drawPath(
+      Path()
+        ..moveTo(6, 9)
+        ..lineTo(12, 15)
+        ..lineTo(18, 9),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ChevronPainter oldDelegate) => oldDelegate.color != color;
+}
+
+// ---------------------------------------------------------------------------
+// Dash helpers
+// ---------------------------------------------------------------------------
+
+void _drawDashedCircle(
+  Canvas canvas,
+  Offset center,
+  double radius,
+  Paint paint, {
+  required double dash,
+  required double gap,
+}) {
+  final double circumference = 2 * math.pi * radius;
+  final double step = dash + gap;
+  final int segments = (circumference / step).floor();
+  final double sweep = (dash / radius);
+  for (int i = 0; i < segments; i++) {
+    final double start = i * step / radius;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      start,
+      sweep,
+      false,
+      paint,
+    );
+  }
+}
+
+void _drawDashedRRect(Canvas canvas, RRect rect, Paint paint) {
+  final Path path = Path()..addRRect(rect);
+  for (final PathMetric metric in path.computeMetrics()) {
+    double distance = 0;
+    while (distance < metric.length) {
+      final double next = math.min(distance + 4, metric.length);
+      canvas.drawPath(metric.extractPath(distance, next), paint);
+      distance = next + 3;
+    }
+  }
 }

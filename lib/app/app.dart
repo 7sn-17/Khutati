@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/notifications/focus_notifications.dart';
 import '../core/settings/theme_mode_controller.dart';
 import '../features/updates/presentation/update_bootstrap.dart';
 import '../l10n/l10n.dart';
@@ -72,32 +72,37 @@ class _NotificationPermissionBootstrapState
   Future<void> _request() async {
     if (_requested) return;
     _requested = true;
-    final FlutterLocalNotificationsPlugin plugin =
-        FlutterLocalNotificationsPlugin();
-    final AndroidFlutterLocalNotificationsPlugin? android = plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    if (android == null) return;
-    final bool? granted = await android.requestNotificationsPermission();
-    if (granted == false && mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (BuildContext ctx) => AlertDialog(
-          title: const Text('إذن الإشعارات'),
-          content: const Text(
-            'نحتاج إلى إذن الإشعارات لتشغيل مؤقت التركيز في الخلفية '
-            'وتنبيهك عند انتهاء الجلسة. بدونه قد لا يعمل المؤقت بشكل موثوق.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('حسناً'),
-            ),
-          ],
+    // Ask immediately on every cold start until the permission is granted, so
+    // a user who declined once is not left with a silently dead timer.
+    final bool granted = await FocusNotifications.requestPermission();
+    // On Android 12 and below the request returns null; the channel state is
+    // what actually decides whether the alert can be posted, so trust it too
+    // instead of showing the rationale on every single launch.
+    if (granted || await FocusNotifications.areEnabled()) return;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('إذن الإشعارات'),
+        content: const Text(
+          'نحتاج إلى إذن الإشعارات لتشغيل مؤقت التركيز في الخلفية '
+          'وتنبيهك عند انتهاء الجلسة. بدونه قد لا يعمل المؤقت بشكل موثوق.',
         ),
-      );
-    }
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('لاحقاً'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await FocusNotifications.requestPermission();
+            },
+            child: const Text('السماح'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
