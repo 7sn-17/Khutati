@@ -422,7 +422,15 @@ class FocusTimerService : Service() {
         executor = Executors.newSingleThreadScheduledExecutor()
         executor?.scheduleAtFixedRate({
             if (remainingMs() <= 0) {
-                handleExpiry()
+                // This ticker only *draws* the countdown. It must never drive
+                // the transition: doing so let it run just before the exact
+                // alarm and call cancelAlarm() on the way out, which is how a
+                // 00:00 alert could disappear entirely. The exact alarm owns
+                // the expiry while we are backgrounded, and Dart owns it while
+                // the app is visible.
+                executor?.shutdownNow()
+                executor = null
+                if (!isAppForeground()) scheduleAlarm()
             } else {
                 try {
                     val nm = getSystemService(NotificationManager::class.java)
@@ -439,9 +447,10 @@ class FocusTimerService : Service() {
             .getBoolean("flutter.app_foreground", false)
 
     /**
-     * Called both by the executor and by the exact alarm. While the app is
-     * visible the Dart machine owns the transition and its own alert, so the
-     * native side stays out of the way to avoid a double sound.
+     * Called only by `ACTION_ALARM_EXPIRE`, i.e. after [FocusAlarmReceiver] has
+     * already posted the audible alert. The display ticker never calls it, and
+     * while the app is visible the Dart machine owns the transition and its own
+     * alert, so the native side stays out of the way to avoid a double sound.
      */
     @Synchronized
     private fun handleExpiry() {

@@ -3,8 +3,8 @@
 /// Kept in one Dart constant so the update checker, Settings and the release CI
 /// manifest agree. `tools/check_version.mjs` guards it against `pubspec.yaml`.
 abstract final class AppInfo {
-  static const String versionName = '0.6.0';
-  static const int buildNumber = 24;
+  static const String versionName = '0.6.1';
+  static const int buildNumber = 25;
 
   static const String versionLabel = '$versionName ($buildNumber)';
   static String get tag => 'v$versionName';

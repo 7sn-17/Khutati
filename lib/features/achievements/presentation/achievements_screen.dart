@@ -11,7 +11,7 @@
 // ribbons are all painted from the reference's SVG geometry.
 
 import 'dart:math' as math;
-import 'dart:ui' show PathMetric;
+import 'dart:ui' show MaskFilter, PathMetric;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -266,7 +266,11 @@ class _HeroCard extends StatelessWidget {
           Container(color: _heroBg),
           // `.hero > .pat { position:absolute; inset:0 }`
           const Positioned.fill(
-            child: IgnorePointer(child: CustomPaint(painter: _HexPattern())),
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(painter: _HexPattern()),
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
@@ -1213,14 +1217,15 @@ class _Medal extends StatelessWidget {
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 100 / 118,
-      child: CustomPaint(
-        painter: _MedalPainter(
-          icon: icon,
-          level: level,
-          line: context.palette.line,
-          card2: context.palette.card2,
-          mute: context.palette.mute,
-          red: context.palette.red,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _MedalPainter(
+            icon: icon,
+            level: level,
+            line: context.palette.line,
+            card2: context.palette.card2,
+            mute: context.palette.mute,
+          ),
         ),
       ),
     );
@@ -1234,7 +1239,6 @@ class _MedalPainter extends CustomPainter {
     required this.line,
     required this.card2,
     required this.mute,
-    required this.red,
   });
 
   final String icon;
@@ -1242,7 +1246,9 @@ class _MedalPainter extends CustomPainter {
   final Color line;
   final Color card2;
   final Color mute;
-  final Color red;
+
+  static const Color _ribbonTop = Color(0xFFD3453A);
+  static const Color _ribbonBottom = Color(0xFF8C1B13);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1252,12 +1258,15 @@ class _MedalPainter extends CustomPainter {
 
     final bool earned = level > 0;
     final List<Color>? tier = earned ? _tierColors[level - 1] : null;
+    const Rect box = Rect.fromLTWH(0, 0, 100, 118);
 
-    final Paint ribbon = Paint()
-      ..style = PaintingStyle.fill
-      ..color = earned ? red : line;
-
-    // <polygon points="28,70 50,78 42,116 31,106 20,114"/>
+    // ---- Ribbons -------------------------------------------------------
+    // `<polygon points="28,70 50,78 42,116 31,106 20,114"/>` and its mirror at
+    // `fill-opacity=".85"`. The reference paints both flat red; a vertical
+    // gradient plus a darker right tail reads as folded satin at 84px without
+    // changing a single anchor point.
+    final Color ribbonTop = earned ? _ribbonTop : line;
+    final Color ribbonBottom = earned ? _ribbonBottom : line;
     final Path leftRibbon = Path()
       ..moveTo(28, 70)
       ..lineTo(50, 78)
@@ -1265,9 +1274,15 @@ class _MedalPainter extends CustomPainter {
       ..lineTo(31, 106)
       ..lineTo(20, 114)
       ..close();
-    canvas.drawPath(leftRibbon, ribbon);
-
-    // <polygon points="72,70 50,78 58,116 69,106 80,114" fill-opacity=".85"/>
+    canvas.drawPath(
+      leftRibbon,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[ribbonTop, ribbonBottom],
+        ).createShader(box),
+    );
     final Path rightRibbon = Path()
       ..moveTo(72, 70)
       ..lineTo(50, 78)
@@ -1277,24 +1292,92 @@ class _MedalPainter extends CustomPainter {
       ..close();
     canvas.drawPath(
       rightRibbon,
-      ribbon..color = (earned ? red : line).withValues(alpha: 0.85),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color.lerp(ribbonTop, Colors.black, 0.18)!,
+            Color.lerp(ribbonBottom, Colors.black, 0.28)!,
+          ],
+        ).createShader(box),
+    );
+    // The crease where the two tails pass under the disc.
+    canvas.drawPath(
+      Path()
+        ..moveTo(50, 78)
+        ..lineTo(50, 118)
+        ..lineTo(46, 118),
+      Paint()..color = Colors.black.withValues(alpha: 0.22),
     );
 
-    // <circle cx="50" cy="48" r="42" fill="tier[0] or var(--line)"/>
+    // ---- Disc ----------------------------------------------------------
+    // A contained shadow instead of nothing, so the medal sits on the card
+    // instead of floating flat.
+    canvas.drawCircle(
+      const Offset(50, 51),
+      42,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+
+    // `<circle r="42" fill="tier[0] or var(--line)"/>` — the metal ring, swept
+    // from the light top-left corner to the shadowed bottom-right.
     canvas.drawCircle(
       const Offset(50, 48),
       42,
-      Paint()..color = tier?[0] ?? line,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: tier == null
+              ? <Color>[line, card2]
+              : <Color>[
+                  tier[1],
+                  tier[0],
+                  Color.lerp(tier[0], Colors.black, 0.25)!,
+                ],
+          stops: const <double>[0.0, 0.55, 1.0],
+        ).createShader(box),
     );
 
-    // <circle cx="50" cy="48" r="35" fill="tier[1] or var(--card2)"
-    //         stroke="#fff" stroke-opacity=".55" stroke-width="1.5"
-    //         [stroke-dasharray="4 4"]/>
+    // `<circle r="35" fill="tier[1] or var(--card2)" stroke="#fff"
+    //  stroke-opacity=".55" [stroke-dasharray="4 4"]/>` — the recessed face.
     canvas.drawCircle(
       const Offset(50, 48),
       35,
-      Paint()..color = tier?[1] ?? card2,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: tier == null
+              ? <Color>[card2, card2]
+              : <Color>[
+                  Color.lerp(tier[1], Colors.white, 0.35)!,
+                  tier[1],
+                  tier[0],
+                ],
+          stops: const <double>[0.0, 0.5, 1.0],
+        ).createShader(box),
     );
+
+    if (tier != null) {
+      // Specular sheen across the top of the face.
+      canvas.drawArc(
+        Rect.fromCircle(center: const Offset(50, 48), radius: 26),
+        math.pi * 1.08,
+        math.pi * 0.42,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white.withValues(alpha: 0.30)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+
     final Paint inner = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
@@ -1314,17 +1397,21 @@ class _MedalPainter extends CustomPainter {
       canvas.drawCircle(const Offset(50, 48), 35, inner);
     }
 
-    // <g transform="translate(28 26) scale(1.83)">
+    // ---- Icon ----------------------------------------------------------
+    // `<g transform="translate(28 26) scale(1.83)" stroke-width="1.8">`: a
+    // 24x24 box at 1.83x is 43.9 wide, so its centre lands on (28+22, 26+22) =
+    // (50, 48) — exactly the face centre. The stroke is thickened to 2.1 so it
+    // survives the 1.83x downscale as ~1.1px instead of hairlining out.
     canvas.save();
     canvas.translate(28, 26);
     canvas.scale(1.83);
     final Paint stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
+      ..strokeWidth = 2.1
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..color = tier != null
-          ? const Color(0xFF0D1A2D)
+          ? const Color(0xFF0D1A2D).withValues(alpha: 0.86)
           : mute.withValues(alpha: 0.7);
     _paintIcon(canvas, icon, stroke);
     canvas.restore();
@@ -1419,8 +1506,7 @@ class _MedalPainter extends CustomPainter {
       oldDelegate.level != level ||
       oldDelegate.line != line ||
       oldDelegate.card2 != card2 ||
-      oldDelegate.mute != mute ||
-      oldDelegate.red != red;
+      oldDelegate.mute != mute;
 }
 
 // ---------------------------------------------------------------------------
@@ -1512,7 +1598,11 @@ class _DayMapSection extends StatelessWidget {
                 spacing: 14,
                 runSpacing: 6,
                 children: <Widget>[
-                  _MapLegend(color: palette.ok, label: 'مكتمل'),
+                  _MapLegend(
+                    color: palette.ok,
+                    label: 'مكتمل',
+                    fill: palette.ok,
+                  ),
                   _MapLegend(
                     color: palette.gold,
                     label: 'تنتظرك',
@@ -1554,20 +1644,34 @@ class _DayGrid extends StatelessWidget {
   final int selectedDay;
   final ValueChanged<int> onSelect;
 
+  /// Width of the week-label gutter. 58dp fits `أسبوع 10` above `28 نوفمبر` at
+  /// 9px without ellipsis on a 360dp screen.
+  static const double _labelWidth = 58;
+  static const double _gap = 5;
+
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
     final int total = data.totalDays;
-    final int weeks = (total / 7).ceil();
+    final DateTime? start = data.planStart;
+
+    // Column 0 is Sunday (the reference's `WD[0]`), so the first row has to be
+    // padded by however many weekdays the plan's first day sits after Sunday.
+    // Without this every cell would carry the wrong weekday as soon as the
+    // plan does not start on a Sunday — which is what made the last week look
+    // scrambled.
+    final int offset = start == null ? 0 : _weekdayIndex(start);
+    final int cells = offset + total;
+    final int weeks = total <= 0 ? 0 : (cells / 7).ceil();
     final int currentWeek = data.todayDayNumber > 0
-        ? ((data.todayDayNumber - 1) / 7).floor()
+        ? (offset + data.todayDayNumber - 1) ~/ 7
         : 0;
 
     final List<Widget> rows = <Widget>[
       Row(
-        spacing: 5,
+        spacing: _gap,
         children: <Widget>[
-          const SizedBox(width: 50),
+          const SizedBox(width: _labelWidth),
           for (int i = 0; i < 7; i++)
             Expanded(
               child: Text(
@@ -1576,57 +1680,130 @@ class _DayGrid extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: KTypography.bodyFamily,
                   fontSize: 11,
-                  color: palette.mute,
+                  color: i == offset && start != null
+                      ? palette.tx
+                      : palette.mute,
                   height: 1.4,
                 ),
               ),
             ),
         ],
       ),
-      const SizedBox(height: 5),
+      const SizedBox(height: 6),
     ];
 
     for (int w = 0; w < weeks; w++) {
+      final int first = w * 7 - offset + 1;
+      final int last = first + 6;
       rows.add(
         Row(
-          spacing: 5,
+          spacing: _gap,
           children: <Widget>[
             SizedBox(
-              width: 50,
-              child: Text(
-                'أسبوع ${w + 1}',
-                maxLines: 1,
-                overflow: TextOverflow.visible,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 11,
-                  height: 1.4,
-                  color: w == currentWeek ? palette.tx : palette.mute,
-                  fontWeight: w == currentWeek
-                      ? FontWeight.w500
-                      : FontWeight.w400,
-                ),
+              width: _labelWidth,
+              child: _WeekLabel(
+                index: w,
+                firstDay: first.clamp(1, total),
+                lastDay: last.clamp(1, total),
+                data: data,
+                current: w == currentWeek,
+                palette: palette,
               ),
             ),
             for (int c = 0; c < 7; c++)
-              Expanded(
-                child: _DayCell(
-                  day: w * 7 + c + 1,
-                  total: total,
-                  status: data.dayStatus[w * 7 + c + 1] ?? 'future',
-                  selected: selectedDay == w * 7 + c + 1,
-                  onTap: onSelect,
-                ),
-              ),
+              Expanded(child: _cellAt(w * 7 + c - offset + 1, total)),
           ],
         ),
       );
-      if (w != weeks - 1) rows.add(const SizedBox(height: 5));
+      if (w != weeks - 1) rows.add(const SizedBox(height: _gap));
     }
 
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: rows.length,
+      itemBuilder: (BuildContext context, int index) => rows[index],
+    );
+  }
+
+  /// One grid slot. Days outside `1..total` are leading/trailing blanks, so the
+  /// last row ends where the plan ends instead of showing phantom days.
+  Widget _cellAt(int day, int total) {
+    if (day < 1 || day > total) return const SizedBox.shrink();
+    return _DayCell(
+      day: day,
+      total: total,
+      status: data.dayStatus[day] ?? 'future',
+      selected: selectedDay == day,
+      onTap: onSelect,
+    );
+  }
+}
+
+/// `أسبوع 3` over `12–18 نوفمبر` — the week number alone told the reader
+/// nothing about which dates the row covers, and the last row is usually a
+/// partial week, so the range is computed from the real plan dates.
+class _WeekLabel extends StatelessWidget {
+  const _WeekLabel({
+    required this.index,
+    required this.firstDay,
+    required this.lastDay,
+    required this.data,
+    required this.current,
+    required this.palette,
+  });
+
+  final int index;
+  final int firstDay;
+  final int lastDay;
+  final AchievementsData data;
+  final bool current;
+  final KhutatiPalette palette;
+
+  String? get _range {
+    final DateTime? a = _dateOfDay(data, firstDay);
+    final DateTime? b = _dateOfDay(data, lastDay);
+    if (a == null || b == null) return null;
+    if (a.month == b.month) {
+      return '${_fa(a.day)}–${_fa(b.day)} ${_months[a.month - 1]}';
+    }
+    return '${_fa(a.day)} ${_months[a.month - 1]} – '
+        '${_fa(b.day)} ${_months[b.month - 1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String? range = _range;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'أسبوع ${index + 1}',
+          maxLines: 1,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: 11,
+            height: 1.35,
+            color: current ? palette.tx : palette.mute,
+            fontWeight: current ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        if (range != null)
+          Text(
+            range,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 9,
+              height: 1.35,
+              color: current
+                  ? palette.gold
+                  : palette.mute.withValues(alpha: 0.7),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1695,22 +1872,24 @@ class _DayCell extends StatelessWidget {
         padding: const EdgeInsets.all(1),
         child: AspectRatio(
           aspectRatio: 1,
-          child: CustomPaint(
-            painter: _CellPainter(
-              fill: background,
-              border: border,
-              borderWidth: borderWidth,
-              dashed: rest,
-            ),
-            child: Center(
-              child: Text(
-                '$day',
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 12,
-                  height: 1.2,
-                  color: text,
-                  fontWeight: today ? FontWeight.w500 : FontWeight.w400,
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: _CellPainter(
+                fill: background,
+                border: border,
+                borderWidth: borderWidth,
+                dashed: rest,
+              ),
+              child: Center(
+                child: Text(
+                  '$day',
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 12,
+                    height: 1.2,
+                    color: text,
+                    fontWeight: today ? FontWeight.w500 : FontWeight.w400,
+                  ),
                 ),
               ),
             ),

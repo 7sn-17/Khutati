@@ -389,7 +389,7 @@ class _FocusView extends ConsumerWidget {
         }
         controller.start(
           mode: FocusMode.linked,
-          minutes: draft.minutes > 0 ? draft.minutes : 25,
+          minutes: (draft.minutes > 0 ? draft.minutes : 25).clamp(5, 180),
           draft: draft,
         );
         return;
@@ -550,7 +550,8 @@ class _FocusView extends ConsumerWidget {
       haptics: haptics,
     );
 
-    final Widget infoTag = Center(
+    final Widget infoTag = Align(
+      alignment: AlignmentDirectional.centerStart,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(

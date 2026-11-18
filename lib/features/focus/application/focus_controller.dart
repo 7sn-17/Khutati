@@ -286,7 +286,12 @@ class FocusController extends Notifier<FocusSessionState> {
 
     final DateTime now = DateTime.now();
     final bool free = mode == FocusMode.free;
-    final int seconds = free ? 0 : minutes * 60;
+    // Enforce the 5-minute floor for every countdown mode, including linked
+    // task steps whose plan may have been authored with shorter steps.
+    final int safeMinutes = free
+        ? 0
+        : minutes.clamp(FocusSetup.minMinutes, FocusSetup.maxMinutes);
+    final int seconds = free ? 0 : safeMinutes * 60;
     state = FocusSessionState(
       stage: FocusStage.running,
       phase: FocusPhase.focus,
@@ -301,7 +306,7 @@ class FocusController extends Notifier<FocusSessionState> {
       startedAt: now,
       endsAt: free ? null : now.add(Duration(seconds: seconds)),
       breakMinutes: breakMinutes,
-      focusMinutes: minutes,
+      focusMinutes: safeMinutes,
       autoBreak: autoBreak,
     );
     _startTicker();
@@ -370,7 +375,9 @@ class FocusController extends Notifier<FocusSessionState> {
         final FocusStepRef? next = state.nextStep;
         if (next != null && next.minutes > 0) {
           final DateTime now = DateTime.now();
-          final int seconds = next.minutes * 60;
+          final int seconds =
+              next.minutes.clamp(FocusSetup.minMinutes, FocusSetup.maxMinutes) *
+              60;
           state = state.copyWith(
             stepIndex: state.stepIndex + 1,
             plannedSeconds: seconds,
@@ -443,8 +450,13 @@ class FocusController extends Notifier<FocusSessionState> {
     await start(mode: FocusMode.linked, minutes: next.minutes, draft: draft);
   }
 
-  /// Advances the running session to its next phase without leaving the timer
-  /// screen (mirrors the HTML skip button).
+  /// "Skip": leave the current item untouched and move on.
+  ///
+  /// Skip is deliberately *not* a completion. It never calls
+  /// [_markCurrentStepComplete] and never writes a `completed` task status, so
+  /// a skipped step keeps whatever progress it already had (0% or 50%) and the
+  /// task card does not jump to 100%. Only [endStep] and a real expiry mark a
+  /// step done.
   Future<void> skipPhase() async {
     if (_busy || !state.isRunning) return;
     _busy = true;
@@ -456,17 +468,24 @@ class FocusController extends Notifier<FocusSessionState> {
       if (state.mode == FocusMode.linked) {
         final FocusStepRef? next = state.nextStep;
         if (next == null || next.minutes <= 0) {
-          _busy = false;
+          // Nothing left to move to: park on the skipped screen instead of
+          // leaving a dead 00:00 timer running on the last step.
+          _finish(FocusEndReason.skipped, recorded);
           return;
         }
         final DateTime now = DateTime.now();
-        final int seconds = next.minutes * 60;
+        final int seconds =
+            next.minutes.clamp(FocusSetup.minMinutes, FocusSetup.maxMinutes) *
+            60;
         state = state.copyWith(
           stepIndex: state.stepIndex + 1,
           plannedSeconds: seconds,
           remainingSeconds: seconds,
           startedAt: now,
           endsAt: now.add(Duration(seconds: seconds)),
+          stage: FocusStage.running,
+          phase: FocusPhase.focus,
+          recordedSeconds: 0,
         );
         _startTicker();
         await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
@@ -474,15 +493,13 @@ class FocusController extends Notifier<FocusSessionState> {
         return;
       }
 
-      if (state.mode == FocusMode.pomodoro) {
-        if (state.phase == FocusPhase.focus) {
-          if (state.autoBreak && state.breakMinutes > 0) {
-            await _beginBreak();
-          } else {
-            await _beginBreak();
-          }
-          return;
-        }
+      if (state.mode == FocusMode.pomodoro &&
+          state.phase == FocusPhase.focus &&
+          state.breakMinutes > 0) {
+        await _beginBreak();
+        return;
+      }
+      if (state.mode == FocusMode.pomodoro && state.isBreak) {
         // Break -> next focus round.
         final int minutes = state.focusMinutes > 0 ? state.focusMinutes : 25;
         final DateTime now = DateTime.now();
@@ -494,12 +511,16 @@ class FocusController extends Notifier<FocusSessionState> {
           startedAt: now,
           endsAt: now.add(Duration(minutes: minutes)),
           rounds: state.rounds + 1,
+          recordedSeconds: 0,
         );
         _startTicker();
         await _nativeStart(phase: FocusPhase.focus, seconds: minutes * 60);
         _persist();
         return;
       }
+
+      // Pomodoro with no break, or any other phase: end without completing.
+      _finish(FocusEndReason.skipped, recorded);
     } finally {
       _busy = false;
     }
@@ -635,7 +656,9 @@ class FocusController extends Notifier<FocusSessionState> {
         final FocusStepRef? next = state.nextStep;
         if (next != null && next.minutes > 0) {
           final DateTime now = DateTime.now();
-          final int seconds = next.minutes * 60;
+          final int seconds =
+              next.minutes.clamp(FocusSetup.minMinutes, FocusSetup.maxMinutes) *
+              60;
           state = state.copyWith(
             stepIndex: state.stepIndex + 1,
             plannedSeconds: seconds,
@@ -759,10 +782,7 @@ class FocusController extends Notifier<FocusSessionState> {
         // The service was killed (or never started) while a countdown is still
         // running here. Re-arm it so the background alert is not silently
         // lost, then pick the new deadline up on the next reconcile.
-        await _nativeStart(
-          phase: state.phase,
-          seconds: state.remainingSeconds,
-        );
+        await _nativeStart(phase: state.phase, seconds: state.remainingSeconds);
         return;
       }
       if (nativePaused && state.isRunning) {

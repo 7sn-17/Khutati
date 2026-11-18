@@ -34,7 +34,8 @@ class BadgeInfo {
   final List<int> thresholds;
 
   int get level => thresholds.where((int t) => current >= t).length;
-  int? get nextThreshold => level < thresholds.length ? thresholds[level] : null;
+  int? get nextThreshold =>
+      level < thresholds.length ? thresholds[level] : null;
   int get prevThreshold => level > 0 ? thresholds[level - 1] : 0;
   double get fraction {
     if (level >= thresholds.length) return 1.0;
@@ -43,6 +44,7 @@ class BadgeInfo {
     if (next <= prev) return 1.0;
     return ((current - prev) / (next - prev)).clamp(0.0, 1.0);
   }
+
   bool get complete => level >= thresholds.length;
 }
 
@@ -110,8 +112,8 @@ class AchievementsData {
   final DateTime? todayDate;
 }
 
-final FutureProvider<AchievementsData?> achievementsProvider =
-    FutureProvider<AchievementsData?>((Ref ref) async {
+final FutureProvider<AchievementsData?>
+achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
   final TodayData? today = ref.watch(todayDataProvider).valueOrNull;
   final List<FocusSession> sessions =
       ref.watch(focusHistoryProvider).valueOrNull ?? const <FocusSession>[];
@@ -131,8 +133,8 @@ final FutureProvider<AchievementsData?> achievementsProvider =
   final Set<String> completedStepIds = await userState.allCompletedStepIds();
   final Map<String, String> taskStatuses = await userState.allTaskStatuses();
   final Map<int, PlanProgress> progressByDay = await progress.progressByDay();
-  final Map<String, PlanProgress> progressBySubject =
-      await progress.progressBySubject();
+  final Map<String, PlanProgress> progressBySubject = await progress
+      .progressBySubject();
 
   // step id -> kind
   final Map<String, String> stepKind = <String, String>{};
@@ -164,8 +166,7 @@ final FutureProvider<AchievementsData?> achievementsProvider =
     final bool taskComplete = taskStatuses[t.task.id] == 'completed';
     int taskPts = 0;
     for (final StepRow s in t.steps) {
-      final bool stepDone =
-          taskComplete || completedStepIds.contains(s.id);
+      final bool stepDone = taskComplete || completedStepIds.contains(s.id);
       if (!stepDone) continue;
       final int p = s.kind == 'questions' ? 20 : 10;
       taskPts += p;
@@ -192,10 +193,14 @@ final FutureProvider<AchievementsData?> achievementsProvider =
     dayTotalTasks[dn] = pp.plannedTasks;
     if (pp.isComplete && pp.plannedTasks > 0) completedDays += 1;
 
-    if (dn > todayDayNumber || todayDayNumber == 0) {
-      dayStatus[dn] = 'future';
-    } else if (d.type == 'rest') {
+    // A rest day is a property of the plan, not of the calendar: it must show
+    // as "راحة" (dashed) whether it is behind us or still ahead. Checking the
+    // future branch first used to hide every upcoming rest day as "قادم", which
+    // is why they looked unrecorded in the map.
+    if (d.type == 'rest') {
       dayStatus[dn] = 'rest';
+    } else if (dn > todayDayNumber || todayDayNumber == 0) {
+      dayStatus[dn] = 'future';
     } else if (dn == todayDayNumber) {
       dayStatus[dn] = pp.isComplete ? 'done' : 'today';
     } else if (pp.isComplete) {
@@ -317,7 +322,9 @@ final FutureProvider<AchievementsData?> achievementsProvider =
       .where((BadgeInfo b) => b.nextThreshold != null)
       .toList();
   if (candidates.isNotEmpty) {
-    candidates.sort((BadgeInfo a, BadgeInfo b) => b.fraction.compareTo(a.fraction));
+    candidates.sort(
+      (BadgeInfo a, BadgeInfo b) => b.fraction.compareTo(a.fraction),
+    );
     nextBadge = candidates.first;
   }
 
