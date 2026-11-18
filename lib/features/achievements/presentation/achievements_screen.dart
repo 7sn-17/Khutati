@@ -50,7 +50,6 @@ class _AchievementsBodyState extends State<_AchievementsBody> {
   @override
   Widget build(BuildContext context) {
     final AchievementsData d = widget.data;
-    final KhutatiPalette palette = context.palette;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       child: Column(
@@ -85,7 +84,6 @@ class _HeroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final KhutatiPalette palette = context.palette;
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: Stack(
@@ -273,8 +271,12 @@ class _HeroSection extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      );
+        ],
+      ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

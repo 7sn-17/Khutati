@@ -257,7 +257,6 @@ class _UpdatePanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = context.l10n;
-    final KhutatiPalette palette = context.palette;
     final UpdateState state = ref.watch(updateControllerProvider);
     final UpdateManifest? manifest = state.manifest;
 
@@ -622,56 +621,6 @@ class _DeveloperActionTile extends ConsumerWidget {
     } catch (_) {
       // A device without the app or a browser simply keeps the sheet open.
     }
-  }
-}
-
-class _StatusLine extends StatelessWidget {
-  const _StatusLine({
-    required this.text,
-    this.icon,
-    this.color,
-    this.spinner = false,
-  });
-
-  final String text;
-  final IconData? icon;
-  final Color? color;
-  final bool spinner;
-
-  @override
-  Widget build(BuildContext context) {
-    final KhutatiPalette palette = context.palette;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        children: <Widget>[
-          if (spinner)
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: palette.ok,
-              ),
-            )
-          else if (icon != null)
-            Icon(icon, size: 17, color: color ?? palette.mute),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.smallSize,
-                color: color ?? palette.mute,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
