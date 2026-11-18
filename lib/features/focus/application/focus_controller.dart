@@ -13,7 +13,6 @@ import '../../../data/database/app_database.dart';
 import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/user_state_repository.dart';
-import '../../../domain/plan/plan_task.dart';
 import '../../../domain/plan/step_progress.dart';
 
 enum FocusStatus { idle, running, paused, completed }
@@ -751,27 +750,6 @@ class FocusController extends Notifier<FocusSessionState> {
         );
   }
 
-  bool get _breakEnabled {
-    try {
-      return ref
-              .read(sharedPreferencesProvider)
-              .getBool('focus_break_enabled') ??
-          true;
-    } catch (_) {
-      return true;
-    }
-  }
-
-  int get _breakSeconds {
-    try {
-      final int minutes =
-          ref.read(sharedPreferencesProvider).getInt('focus_break_minutes') ??
-          5;
-      return minutes * 60;
-    } catch (_) {
-      return 5 * 60;
-    }
-  }
 
   void _persist() {
     try {

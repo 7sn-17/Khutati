@@ -7,7 +7,7 @@ import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../l10n/l10n.dart';
 import '../application/focus_controller.dart'
-    show FocusController, FocusSessionState, FocusStatus, focusImmersiveProvider;
+    show FocusController, FocusSessionState, FocusStatus, focusControllerProvider, focusImmersiveProvider;
 
 class FocusScreen extends ConsumerStatefulWidget {
   const FocusScreen({super.key});
@@ -106,9 +106,6 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     );
 
     final String phaseLabel = isBreak ? l10n.focusBreak : l10n.navFocus;
-    final String stepLabel = session.stepId == null
-        ? ''
-        : (session.isBreak ? '' : '${session.taskTitle ?? ''}');
 
     final Widget ring = KProgressRing(
       progress: session.plannedSeconds > 0
