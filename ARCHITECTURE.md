@@ -384,6 +384,27 @@ Applied by `supabase/migrations/202611180001_sync_tables.sql`:
 
 `anon` is revoked on all of them; `authenticated` gets
 select/insert/update/delete.
+
+### 6.6 Applying migrations
+
+`supabase/migrations/*.sql` are applied by `tools/apply_migrations.mjs`, which
+CI runs on every push to `main` (job `migrate`, before `build-release`). It
+needs two secrets: `KHUTATI_SUPABASE_URL` (already used by the client build) and
+`SUPABASE_ACCESS_TOKEN` (a Personal Access Token, `sbp_…`). The service-role key
+cannot run DDL, so it is not used here.
+
+The script calls the Management API's run-SQL endpoint once per pending file,
+wrapped in `begin; …; insert into public.schema_migrations; commit;`. A file is
+therefore applied exactly once, a failure rolls back completely, and re-running
+is a no-op. Migrations must stay idempotent (`create table if not exists`,
+`drop policy if exists`) so a database that was migrated by hand before the
+ledger existed can be adopted safely.
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co \
+SUPABASE_ACCESS_TOKEN=… \
+node tools/apply_migrations.mjs --dry-run   # list pending, change nothing
+```
 `public.app_versions` (migration `202611190001`) is the opposite: public read,
 writes only via CI with the service role. The earlier `app_updates` table was
 dropped (migration `202611190002`) once the waterfall stopped reading it.

@@ -376,6 +376,7 @@ node tools/extract_tokens.mjs --check      # design tokens match the prototype
 node tools/check_version.mjs               # AppInfo == pubspec version
 node tools/validate_plan_data.mjs          # 21 dataset checks
 node tools/validate_plan_data.mjs --self-test
+node tools/apply_migrations.mjs --dry-run  # list pending SQL migrations
 dart format --output=none lib test         # parse check (does not write)
 ```
 
@@ -387,7 +388,11 @@ it.
 
 CI (`Android CI`) runs: pub get → `libsqlite3-dev` → `gen-l10n` → build_runner →
 the four Node checks → `flutter analyze --no-fatal-infos --no-fatal-warnings`
-(errors fail) → `flutter test` → signed release build. The suite includes
+(errors fail) → `flutter test` → signed release build. On `main` and tags a
+separate `migrate` job applies pending `supabase/migrations/*.sql` before the
+release build (`tools/apply_migrations.mjs`, Management API + the
+`SUPABASE_ACCESS_TOKEN` secret, ledger in `public.schema_migrations`). The suite
+includes
 `test/domain/schedule_override_test.dart` (engine: 1/2/3 practical days, fourth
 rejected, determinism, overrides, pinned starts, every rejection path) and the
 `manual scheduling` group in `test/data/schedule_repository_test.dart`
