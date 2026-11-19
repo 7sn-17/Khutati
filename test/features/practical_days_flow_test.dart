@@ -133,7 +133,13 @@ void main() {
     // Partial progress is recorded before the schedule changes.
     await userState.setStepCompleted(firstStepId, StepProgress.completed);
 
-    // Both tabs are already listening; neither is invalidated by hand.
+    // Both tabs are already listening; neither is invalidated by hand. Today
+    // is read once first so its change stream exists before the write.
+    final TodayData initialToday = (await container.read(
+      todayDataProvider.future,
+    ))!;
+    expect(initialToday.day.type, 'practical');
+
     final Future<PlanBrowserData?> planChanged = waitFor<PlanBrowserData?>(
       planBrowserProvider,
       (PlanBrowserData? data) =>
@@ -149,14 +155,17 @@ void main() {
       todayDataProvider,
       (TodayData? data) => data != null && data.day.type == 'normal',
     );
+    await pumpEventQueue();
 
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
 
     final PlanBrowserData afterPlan = (await planChanged.timeout(
       const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Plan did not re-emit'),
     ))!;
     final TodayData afterToday = (await todayChanged.timeout(
       const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Today did not re-emit'),
     ))!;
 
     // Friday is now a normal study day in both tabs.
@@ -238,9 +247,12 @@ void main() {
             (PlanTask task) => task.id != taskId,
           ),
     );
+    await pumpEventQueue();
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
     final PlanBrowserData custom = (await customised.timeout(
       const Duration(seconds: 10),
+      onTimeout: () =>
+          throw TimeoutException('Plan did not re-emit after save'),
     ))!;
 
     final Future<PlanBrowserData?> restored = waitFor<PlanBrowserData?>(
@@ -251,9 +263,12 @@ void main() {
             (PlanTask task) => task.id == taskId,
           ),
     );
+    await pumpEventQueue();
     await actions.reset();
     final PlanBrowserData original = (await restored.timeout(
       const Duration(seconds: 10),
+      onTimeout: () =>
+          throw TimeoutException('Plan did not re-emit after reset'),
     ))!;
 
     expect(custom.days[1].day.isPractical, isFalse);
