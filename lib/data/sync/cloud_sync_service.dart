@@ -12,6 +12,7 @@ import '../repositories/schedule_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../../domain/plan/practical_weekdays.dart';
 import '../../domain/plan/schedule_engine.dart' show ScheduleOverrideInput;
+import 'task_state_merge.dart';
 
 /// Offline-first uploader for user progress and focus history.
 ///
@@ -270,14 +271,26 @@ class CloudSyncService {
           !remoteAt.toUtc().isAfter(current.updatedAt.toUtc())) {
         continue;
       }
+
+      final String remoteStatus = (row['status'] as String?) ?? 'not_started';
+      // A task can be explicitly completed without rewriting its step rows.
+      // If a step was edited after that completion and is no longer done, the
+      // step edit is newer: never let the old completion paint it back.
+      if (remoteAt != null &&
+          remoteTaskStateIsStale(
+            remoteStatus: remoteStatus,
+            remoteUpdatedAt: remoteAt,
+            localSteps: await _localStepStamps(db, taskId),
+          )) {
+        continue;
+      }
+
       await db
           .into(db.userTaskStates)
           .insertOnConflictUpdate(
             UserTaskStatesCompanion.insert(
               taskId: taskId,
-              status: Value<String>(
-                (row['status'] as String?) ?? 'not_started',
-              ),
+              status: Value<String>(remoteStatus),
               completedAt: Value<DateTime?>(
                 DateTime.tryParse((row['completed_at'] as String?) ?? ''),
               ),
@@ -285,6 +298,28 @@ class CloudSyncService {
             ),
           );
     }
+  }
+
+  /// The timestamps of every local step row for one task. Used by the pull
+  /// merge to decide whether a remote task completion predates a local reopen.
+  Future<List<LocalStepStamp>> _localStepStamps(
+    AppDatabase db,
+    String taskId,
+  ) async {
+    final query = db.select(db.userStepStates).join(
+      <Join<HasResultSet, dynamic>>[
+        innerJoin(db.steps, db.steps.id.equalsExp(db.userStepStates.stepId)),
+      ],
+    );
+    query.where(db.steps.taskId.equals(taskId));
+    final List<TypedResult> rows = await query.get();
+    return <LocalStepStamp>[
+      for (final TypedResult row in rows)
+        (
+          updatedAt: row.readTable(db.userStepStates).updatedAt,
+          completed: row.readTable(db.userStepStates).completed,
+        ),
+    ];
   }
 
   Future<void> _pullStepStates(

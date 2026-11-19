@@ -209,6 +209,14 @@ class _Avatar extends StatelessWidget {
                 width: 56,
                 height: 56,
                 fit: BoxFit.cover,
+                gaplessPlayback: true,
+                // Offline-first: the initials are the default, not a blank
+                // circle. A slow or failed Google fetch never blocks Settings.
+                loadingBuilder: (
+                  BuildContext context,
+                  Widget child,
+                  ImageChunkEvent? progress,
+                ) => progress == null ? child : fallback,
                 errorBuilder: (
                   BuildContext context,
                   Object error,

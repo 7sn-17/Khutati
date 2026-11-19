@@ -660,7 +660,6 @@ class _DayBlock extends StatelessWidget {
     return KCard(
       showPattern: false,
       padding: EdgeInsets.zero,
-      onTap: onToggle,
       child: Column(
         children: <Widget>[
           // The header is a drop target too, so a task can be sent to a day
@@ -683,71 +682,77 @@ class _DayBlock extends StatelessWidget {
                     color: hovering
                         ? palette.gold.withValues(alpha: 0.07)
                         : Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.fromSTEB(
-                        14,
-                        12,
-                        10,
-                        12,
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          _DayNumber(
-                            number: day.dayNumber,
-                            practical: day.isPractical,
-                            rest: day.isRest,
-                            palette: palette,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  _weekday(date),
-                                  style: TextStyle(
-                                    fontFamily: KTypography.displayFamily,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: palette.tx,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  day.isRest
-                                      ? l10n.rsRestDay
-                                      : l10n.rsTasksAndTime(
-                                          tasks.length,
-                                          format.duration(_minutes),
-                                        ),
-                                  style: TextStyle(
-                                    fontFamily: KTypography.bodyFamily,
-                                    fontSize: 11,
-                                    color: palette.mute,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!day.isRest)
-                            _TypePill(
+                    // Only the header toggles the day. Tapping or dragging a
+                    // task row must not collapse the list the user is reading;
+                    // the inner `InkWell` also lets the scrollable win a drag.
+                    child: KInkSurface(
+                      onTap: onToggle,
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          14,
+                          12,
+                          10,
+                          12,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            _DayNumber(
+                              number: day.dayNumber,
                               practical: day.isPractical,
+                              rest: day.isRest,
                               palette: palette,
                             ),
-                          if (!day.isRest) const SizedBox(width: 4),
-                          if (!day.isRest)
-                            AnimatedRotation(
-                              duration: const Duration(
-                                milliseconds: KMotion.navMs,
-                              ),
-                              turns: expanded ? 0.5 : 0,
-                              child: Icon(
-                                Icons.expand_more_rounded,
-                                size: 22,
-                                color: palette.mute,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    _weekday(date),
+                                    style: TextStyle(
+                                      fontFamily: KTypography.displayFamily,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: palette.tx,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    day.isRest
+                                        ? l10n.rsRestDay
+                                        : l10n.rsTasksAndTime(
+                                            tasks.length,
+                                            format.duration(_minutes),
+                                          ),
+                                    style: TextStyle(
+                                      fontFamily: KTypography.bodyFamily,
+                                      fontSize: 11,
+                                      color: palette.mute,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                        ],
+                            if (!day.isRest)
+                              _TypePill(
+                                practical: day.isPractical,
+                                palette: palette,
+                              ),
+                            if (!day.isRest) const SizedBox(width: 4),
+                            if (!day.isRest)
+                              AnimatedRotation(
+                                duration: const Duration(
+                                  milliseconds: KMotion.navMs,
+                                ),
+                                turns: expanded ? 0.5 : 0,
+                                child: Icon(
+                                  Icons.expand_more_rounded,
+                                  size: 22,
+                                  color: palette.mute,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   );

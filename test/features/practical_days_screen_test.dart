@@ -113,6 +113,42 @@ void main() {
     expect(find.text('حفظ التغيير'), findsOneWidget);
   });
 
+  testWidgets('every changed day is reachable in the preview', (
+    WidgetTester tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.text('السبت'));
+    await tester.pumpAndSettle();
+
+    final SchedulePreview preview = await container
+        .read(scheduleRepositoryProvider)
+        .preview(calendar, <int>[
+          DateTime.monday,
+          DateTime.friday,
+          DateTime.saturday,
+        ]);
+    expect(preview.loadChanges.length, greaterThan(8));
+    final int lastDay = preview.loadChanges.last.dayNumber;
+
+    await tester.tap(find.text('حفظ التغيير'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('pd-impact-list')), findsOneWidget);
+    // The old sheet replaced the remainder with "N other days"; every day
+    // must now be in the scrollable list instead.
+    expect(find.textContaining('أخرى'), findsNothing);
+
+    await tester.dragUntilVisible(
+      find.text('اليوم $lastDay'),
+      find.byKey(const Key('pd-impact-list')),
+      const Offset(0, -200),
+    );
+    expect(find.text('اليوم $lastDay'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('confirming saves, toasts and returns to the caller', (
     WidgetTester tester,
   ) async {

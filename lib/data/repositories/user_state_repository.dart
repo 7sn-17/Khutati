@@ -12,31 +12,63 @@ class UserStateRepository {
 
   final AppDatabase _db;
 
-  Future<void> setStepCompleted(
-    String stepId,
-    StepProgress progress,
-  ) async {
+  Future<void> setStepCompleted(String stepId, StepProgress progress) async {
     final DateTime now = DateTime.now();
     final bool completed = progress == StepProgress.completed;
-    await _db
-        .into(_db.userStepStates)
-        .insertOnConflictUpdate(
-          UserStepStatesCompanion.insert(
-            stepId: stepId,
-            completed: Value<bool>(completed),
-            completedAt: Value<DateTime?>(completed ? now : null),
-            // Store 1 for partialUp and 3 for partialDown. Keeping them
-            // distinct is what makes the fourth tap reach 0% after a restart.
-            progress: Value<int>(progress.code),
-            updatedAt: Value<DateTime>(now),
-          ),
-        );
-    await SyncQueueRepository(_db).enqueue('step_state', stepId, <String, Object?>{
-      'step_id': stepId,
-      'progress': progress.code,
-      'completed': completed,
-      'completed_at': isoOrNull(completed ? now : null),
-      'updated_at': isoOrNull(now),
+    final SyncQueueRepository queue = SyncQueueRepository(_db);
+
+    await _db.transaction(() async {
+      await _db
+          .into(_db.userStepStates)
+          .insertOnConflictUpdate(
+            UserStepStatesCompanion.insert(
+              stepId: stepId,
+              completed: Value<bool>(completed),
+              completedAt: Value<DateTime?>(completed ? now : null),
+              // Store 1 for partialUp and 3 for partialDown. Keeping them
+              // distinct is what makes the fourth tap reach 0% after a restart.
+              progress: Value<int>(progress.code),
+              updatedAt: Value<DateTime>(now),
+            ),
+          );
+      await queue.enqueue('step_state', stepId, <String, Object?>{
+        'step_id': stepId,
+        'progress': progress.code,
+        'completed': completed,
+        'completed_at': isoOrNull(completed ? now : null),
+        'updated_at': isoOrNull(now),
+      });
+
+      // A task marked complete counts every step as done without rewriting the
+      // step rows. Once the user edits a step below 100%, that statement is no
+      // longer true: reopen the task in the same transaction, or Today paints
+      // the step back to complete on the next stream rebuild.
+      if (completed) return;
+      final StepRow? step = await (_db.select(
+        _db.steps,
+      )..where((t) => t.id.equals(stepId))).getSingleOrNull();
+      if (step == null) return;
+      final UserTaskStateRow? task = await (_db.select(
+        _db.userTaskStates,
+      )..where((t) => t.taskId.equals(step.taskId))).getSingleOrNull();
+      if (task == null || task.status != 'completed') return;
+
+      await _db
+          .into(_db.userTaskStates)
+          .insertOnConflictUpdate(
+            UserTaskStatesCompanion.insert(
+              taskId: step.taskId,
+              status: const Value<String>('in_progress'),
+              completedAt: const Value<DateTime?>(null),
+              updatedAt: now,
+            ),
+          );
+      await queue.enqueue('task_state', step.taskId, <String, Object?>{
+        'task_id': step.taskId,
+        'status': 'in_progress',
+        'completed_at': null,
+        'updated_at': isoOrNull(now),
+      });
     });
   }
 
@@ -59,11 +91,9 @@ class UserStateRepository {
   }
 
   Future<StepProgress> stepProgress(String stepId) async {
-    final List<UserStepStateRow> rows = await (
-      _db
-          .select(_db.userStepStates)
-          ..where((t) => t.stepId.equals(stepId))
-    ).get();
+    final List<UserStepStateRow> rows = await (_db.select(
+      _db.userStepStates,
+    )..where((t) => t.stepId.equals(stepId))).get();
     if (rows.isEmpty) return StepProgress.notStarted;
     return _progressOf(rows.first);
   }
@@ -125,8 +155,7 @@ class UserStateRepository {
         .select(_db.userStepStates)
         .get();
     return <String, StepProgress>{
-      for (final UserStepStateRow row in rows)
-        row.stepId: _progressOf(row),
+      for (final UserStepStateRow row in rows) row.stepId: _progressOf(row),
     };
   }
 
@@ -149,7 +178,11 @@ class UserStateRepository {
     };
   }
 
-  Future<void> setTaskStatus(String taskId, String status, {DateTime? at}) async {
+  Future<void> setTaskStatus(
+    String taskId,
+    String status, {
+    DateTime? at,
+  }) async {
     final DateTime now = at ?? DateTime.now();
     await _db
         .into(_db.userTaskStates)
@@ -161,12 +194,13 @@ class UserStateRepository {
             updatedAt: now,
           ),
         );
-    await SyncQueueRepository(_db).enqueue('task_state', taskId, <String, Object?>{
-      'task_id': taskId,
-      'status': status,
-      'completed_at': isoOrNull(status == 'completed' ? now : null),
-      'updated_at': isoOrNull(now),
-    });
+    await SyncQueueRepository(_db)
+        .enqueue('task_state', taskId, <String, Object?>{
+          'task_id': taskId,
+          'status': status,
+          'completed_at': isoOrNull(status == 'completed' ? now : null),
+          'updated_at': isoOrNull(now),
+        });
   }
 
   Future<void> addNote(String taskId, String body) {
