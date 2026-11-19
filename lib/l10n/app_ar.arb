@@ -224,8 +224,10 @@
   "settingsThemeDark": "داكن",
   "settingsThemeLight": "فاتح",
   "settingsHaptics": "الاهتزاز عند اللمس",
+  "settingsPlanSection": "الخطة",
   "settingsPracticalDays": "أيام العملي",
-  "settingsPracticalDaysHint": "اختر يومين أسبوعيين للدوام العملي. سنعيد توزيع مهام كل أسبوع بالترتيب مع الحفاظ على تقدمك.",
+  "settingsPracticalDaysSubtitle": "حدد أيام العملي الخاصة بك ليعاد توزيع مهام الخطة تلقائياً.",
+  "settingsPracticalDaysHint": "اختر من يوم إلى ثلاثة أيام للدوام العملي. سنعيد توزيع مهام كل أسبوع بالترتيب مع الحفاظ على تقدمك.",
   "settingsPracticalDaysCurrent": "الحالي: {days}",
   "@settingsPracticalDaysCurrent": {
     "description": "Current practical weekdays summary",
@@ -254,7 +256,6 @@
   },
   "settingsPracticalDaysConfirm": "تأكيد التغيير",
   "settingsPracticalDaysCancel": "إلغاء",
-  "settingsPracticalDaysSelectTwo": "اختر يومين مختلفين.",
   "settingsPracticalDaysSaved": "تم تحديث جدول الخطة.",
   "settingsPracticalDaysFailed": "تعذّر تحديث الجدول. لم يتم حفظ أي تغيير.",
   "settingsPracticalDaysNoChange": "لا تغيير في توزيع المهام.",
@@ -263,6 +264,182 @@
   "settingsPracticalDaysResetMessage": "سيتم إرجاع أيام العملي إلى الاثنين والجمعة، وإعادة توزيع المهام الأصلية. تقدمك ومهامك المكتملة لن تتأثر.",
   "settingsPracticalDaysResetConfirm": "استعادة",
   "settingsPracticalDaysResetDone": "تمت استعادة الجدول الأصلي.",
+  "pdIntro": "حدد أيام العملي الخاصة بك، وسيعيد التطبيق توزيع مهام الخطة تلقائياً بالترتيب نفسه.",
+  "pdPickDays": "اختر الأيام",
+  "pdSelectedLabel": "المحدد",
+  "pdMinHint": "اختر يوماً واحداً على الأقل",
+  "pdMaxHint": "الحد الأقصى ثلاثة أيام. أزل يوماً لتختار غيره.",
+  "pdMaxToast": "الحد الأقصى ثلاثة أيام.",
+  "pdMinToast": "اختر يوماً واحداً على الأقل.",
+  "pdSave": "حفظ التغيير",
+  "pdNoChange": "لا تغيير لحفظه",
+  "pdClearManual": "إلغاء كل التعديلات اليدوية ({count})",
+  "@pdClearManual": {
+    "description": "Button that removes every manual schedule override",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdClearManualTitle": "إلغاء كل التعديلات اليدوية؟",
+  "pdClearManualMessage": "ستعود كل المهام التي حرّكتها يدوياً إلى مكانها التلقائي. تقدمك لن يتأثر.",
+  "pdClearManualConfirm": "إلغاء التعديلات",
+  "pdClearManualDone": "عاد الجدول إلى التوزيع التلقائي.",
+  "pdBack": "رجوع",
+  "pdLoadError": "تعذّر تحميل إعدادات الخطة",
+  "pdCurrent": "الإعداد الحالي",
+  "pdExplainer": "التوزيع تلقائي: تبقى المهام بترتيبها الأصلي، وأيام الراحة لا تتغير، ويُحفظ تقدمك في كل خطوة. تُعاد أوقات البدء حسب نوع اليوم (صباحاً في اليوم العادي، وعصراً في يوم العملي).",
+  "pdPreviewEyebrow": "معاينة",
+  "pdConfirmSave": "تأكيد وحفظ",
+  "pdPreviewDays": "أيام العملي الجديدة: {days}",
+  "@pdPreviewDays": {
+    "description": "First line of the practical-day preview",
+    "placeholders": {
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "pdPreviewNoTypeChange": "لن يتغير نوع أي يوم.",
+  "pdPreviewMore": "و{count} يوماً آخر",
+  "@pdPreviewMore": {
+    "description": "Truncated preview table footer",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdPreviewMoved": "{count} مهمة ستنتقل أو يتغير وقتها",
+  "@pdPreviewMoved": {
+    "description": "Preview stat: tasks whose day or clock changes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdPreviewChangedDays": "{count} يوماً سيتغير توزيعه",
+  "@pdPreviewChangedDays": {
+    "description": "Preview stat: days whose workload changes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdPreviewLoadDelta": "أكبر فرق في الحمل اليومي: {minutes} دقيقة",
+  "@pdPreviewLoadDelta": {
+    "description": "Preview stat: largest absolute day-load delta",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "pdPreviewDropped": "سيُلغى تعديل يدوي على {count} مهمة لأنه لم يعد متوافقاً مع التوزيع الجديد.",
+  "@pdPreviewDropped": {
+    "description": "Warning when a weekday change invalidates manual overrides",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdColumnDay": "اليوم",
+  "pdColumnBefore": "قبل",
+  "pdColumnAfter": "بعد",
+  "pdTypePractical": "عملي",
+  "pdTypeRest": "راحة",
+  "pdTypeNormal": "عادي",
+  "msTitle": "تغيير موعد المهمة",
+  "msManualBadge": "تعديل يدوي",
+  "msClose": "إغلاق",
+  "msDayLabel": "اليوم",
+  "msDayOption": "اليوم {day}",
+  "@msDayOption": {
+    "description": "Day chip inside the manual scheduling sheet",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "msOrderLabel": "الترتيب في اليوم",
+  "msStartLabel": "وقت البدء",
+  "msAuto": "تلقائي",
+  "msEarlier15": "أبكر 15 دقيقة",
+  "msLater15": "أبعد 15 دقيقة",
+  "msRestoreAuto": "إرجاع للجدولة التلقائية",
+  "msCancel": "إلغاء",
+  "msSave": "حفظ الموعد",
+  "msSaved": "تم حفظ الموعد.",
+  "msSaveFailed": "تعذّر حفظ الموعد. لم يتغير الجدول.",
+  "msRestored": "عادت المهمة إلى الجدولة التلقائية.",
+  "msCalculating": "جارٍ حساب الموعد…",
+  "msPreviewLine": "اليوم {day} · {start}–{end} · الترتيب {order}",
+  "@msPreviewLine": {
+    "description": "Valid manual move summary",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      },
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      },
+      "order": {
+        "type": "int"
+      }
+    }
+  },
+  "msAffected": " · تتأثر {count} مهمة أخرى",
+  "@msAffected": {
+    "description": "Suffix naming how many other tasks shift",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "msRestDay": "يوم راحة. اختر يوماً دراسياً.",
+  "msDependencyBefore": "لا يمكن نقله قبل «{task}». جرّب يوماً لاحقاً.",
+  "@msDependencyBefore": {
+    "description": "The task would precede its hard prerequisite",
+    "placeholders": {
+      "task": {
+        "type": "String"
+      }
+    }
+  },
+  "msDependencyAfter": "لا يمكن نقله بعد «{task}». جرّب يوماً أبكر.",
+  "@msDependencyAfter": {
+    "description": "The task would follow a task that depends on it",
+    "placeholders": {
+      "task": {
+        "type": "String"
+      }
+    }
+  },
+  "msOverlap": "يتعارض مع «{task}» ({time}).",
+  "@msOverlap": {
+    "description": "Pinned start collides with another task",
+    "placeholders": {
+      "task": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "msPastMidnight": "ستنتهي المهمة بعد منتصف الليل.",
+  "msInvalidTime": "وقت غير صالح.",
+  "msUnknownTask": "المهمة غير موجودة.",
+  "msGenericIssue": "لا يمكن تطبيق هذا الموعد.",
   "settingsNotifications": "الإشعارات",
   "settingsNotificationsHint": "تُفعّل في المرحلة 4 مع مؤقت التركيز.",
   "settingsNotifTasks": "تذكير المهام",

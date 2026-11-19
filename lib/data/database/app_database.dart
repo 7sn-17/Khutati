@@ -23,6 +23,7 @@ part 'app_database.g.dart';
     UserTaskStates,
     UserStepStates,
     UserOverrides,
+    ScheduleOverrides,
     UserAdditions,
     FocusSessions,
     Notes,
@@ -38,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +56,7 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('CREATE INDEX IF NOT EXISTS idx_overrides_target ON user_overrides(target_type, target_id)');
           await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_focus_client_id ON focus_sessions(client_id) WHERE client_id IS NOT NULL');
           await customStatement('CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity, entity_id)');
+          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_override_task ON schedule_overrides(task_id)');
         },
         onUpgrade: (Migrator m, int from, int to) async {
           // v2 adds the two-tap step state. Existing rows keep `completed`
@@ -82,6 +84,15 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_sync_queue_entity '
               'ON sync_queue(entity, entity_id)',
+            );
+          }
+          // v5 adds manual schedule overrides. Existing installs keep their
+          // schedule untouched; an empty table means "fully automatic".
+          if (from < 5) {
+            await m.createTable(scheduleOverrides);
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_override_task '
+              'ON schedule_overrides(task_id)',
             );
           }
         },

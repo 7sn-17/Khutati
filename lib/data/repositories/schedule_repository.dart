@@ -54,6 +54,7 @@ class ScheduledTask {
     required this.startClock,
     required this.endClock,
     required this.stepSpans,
+    this.isManual = false,
   });
 
   final TaskRow task;
@@ -63,6 +64,9 @@ class ScheduledTask {
   final String? startClock;
   final String? endClock;
   final Map<String, ScheduleSpan> stepSpans;
+
+  /// `true` when the user placed this task by hand.
+  final bool isManual;
 
   int get plannedMinutes =>
       steps.fold<int>(0, (int sum, StepRow step) => sum + step.minutes);
@@ -83,6 +87,7 @@ class ScheduleSnapshot {
     required this.subjects,
     required this.isCustom,
     required this.practicalWeekdays,
+    this.overrides = const <String, ScheduleOverrideInput>{},
   }) : daysByNumber = <int, ScheduledDay>{
          for (final ScheduledDay day in days) day.dayNumber: day,
        },
@@ -100,10 +105,25 @@ class ScheduleSnapshot {
   final bool isCustom;
   final List<int> practicalWeekdays;
 
+  /// Manual placements that produced this snapshot, keyed by task id.
+  final Map<String, ScheduleOverrideInput> overrides;
+
+  bool get hasOverrides => overrides.isNotEmpty;
+
   ScheduledDay? day(int dayNumber) => daysByNumber[dayNumber];
 
   List<ScheduledTask> tasksForDay(int dayNumber) {
     return _tasksByDay[dayNumber] ?? const <ScheduledTask>[];
+  }
+
+  /// Every task in curriculum order: day first, then position in the day.
+  List<ScheduledTask> get orderedTasks {
+    final List<ScheduledTask> ordered = List<ScheduledTask>.of(tasks)
+      ..sort((ScheduledTask a, ScheduledTask b) {
+        final int byDay = a.dayNumber.compareTo(b.dayNumber);
+        return byDay != 0 ? byDay : a.order.compareTo(b.order);
+      });
+    return ordered;
   }
 
   static Map<int, List<ScheduledTask>> _groupTasks(List<ScheduledTask> tasks) {
@@ -120,16 +140,109 @@ class ScheduleSnapshot {
   }
 }
 
+/// A day whose type changes between two schedules.
+class DayTypeChange {
+  const DayTypeChange({
+    required this.dayNumber,
+    required this.before,
+    required this.after,
+  });
+
+  final int dayNumber;
+  final String before;
+  final String after;
+}
+
+/// A day whose planned minutes change between two schedules.
+class DayLoadChange {
+  const DayLoadChange({
+    required this.dayNumber,
+    required this.beforeMinutes,
+    required this.afterMinutes,
+  });
+
+  final int dayNumber;
+  final int beforeMinutes;
+  final int afterMinutes;
+
+  int get deltaMinutes => afterMinutes - beforeMinutes;
+}
+
 class SchedulePreview {
   const SchedulePreview({
     required this.schedule,
     required this.movedTasks,
     required this.changedDays,
+    this.dayChanges = const <DayTypeChange>[],
+    this.loadChanges = const <DayLoadChange>[],
+    this.droppedOverrides = const <String>[],
+    this.previousWeekdays = const <int>[],
+    this.nextWeekdays = const <int>[],
   });
 
   final ScheduleSnapshot schedule;
   final int movedTasks;
   final int changedDays;
+
+  /// Days whose `normal`/`practical`/`rest` type changes.
+  final List<DayTypeChange> dayChanges;
+
+  /// Days whose planned minutes change, largest difference first.
+  final List<DayLoadChange> loadChanges;
+
+  /// Manual overrides that cannot survive the new weekday set.
+  final List<String> droppedOverrides;
+  final List<int> previousWeekdays;
+  final List<int> nextWeekdays;
+
+  bool get hasChanges => movedTasks > 0 || changedDays > 0;
+}
+
+/// Why a requested manual move cannot be applied.
+enum TaskMoveIssue {
+  none,
+  unknownTask,
+  restDay,
+  dependencyBefore,
+  dependencyAfter,
+  overlap,
+  pastMidnight,
+  invalidTime,
+  unavailable,
+}
+
+/// Result of validating a manual move before it is written.
+class TaskMovePreview {
+  const TaskMovePreview({
+    required this.issue,
+    this.schedule,
+    this.task,
+    this.fromDay,
+    this.toDay,
+    this.fromClock,
+    this.toClock,
+    this.blocking,
+    this.affected = const <ScheduledTask>[],
+  });
+
+  final TaskMoveIssue issue;
+
+  /// The proposed schedule. Only set when [issue] is [TaskMoveIssue.none].
+  final ScheduleSnapshot? schedule;
+  final ScheduledTask? task;
+  final int? fromDay;
+  final int? toDay;
+  final String? fromClock;
+  final String? toClock;
+
+  /// The task that blocks the move: a prerequisite, a dependent task, or the
+  /// task whose time would be overlapped.
+  final ScheduledTask? blocking;
+
+  /// Tasks whose day, position or clock would change.
+  final List<ScheduledTask> affected;
+
+  bool get ok => issue == TaskMoveIssue.none && schedule != null;
 }
 
 /// The single owner of practical-weekday persistence and schedule generation.
@@ -148,6 +261,7 @@ class ScheduleRepository {
       'schedule.practical_weekdays_updated_at_v1';
   static const String syncEntity = 'schedule_settings';
   static const String syncEntityId = 'practical_weekdays';
+  static const String overrideSyncEntity = 'schedule_override';
 
   Future<List<int>?> practicalWeekdays() async {
     final SettingRow? row =
@@ -165,6 +279,30 @@ class ScheduleRepository {
     );
   }
 
+  Future<Map<String, ScheduleOverrideInput>> overrides() async {
+    final List<ScheduleOverrideRow> rows = await _db
+        .select(_db.scheduleOverrides)
+        .get();
+    return _toOverrides(rows);
+  }
+
+  Stream<Map<String, ScheduleOverrideInput>> watchOverrides() {
+    return _db.select(_db.scheduleOverrides).watch().map(_toOverrides);
+  }
+
+  static Map<String, ScheduleOverrideInput> _toOverrides(
+    List<ScheduleOverrideRow> rows,
+  ) {
+    return <String, ScheduleOverrideInput>{
+      for (final ScheduleOverrideRow row in rows)
+        row.taskId: ScheduleOverrideInput(
+          dayNumber: row.dayNumber,
+          position: row.position,
+          startClock: row.startClock,
+        ),
+    };
+  }
+
   Future<DateTime?> _updatedAt() async {
     final SettingRow? row =
         await (_db.select(_db.appSettings)..where(
@@ -175,33 +313,77 @@ class ScheduleRepository {
   }
 
   Future<ScheduleSnapshot> load(PlanCalendar calendar) async {
-    return _build(calendar, await practicalWeekdays());
+    return _build(calendar, await practicalWeekdays(), await overrides());
   }
 
-  /// Emits a new snapshot whenever the setting changes. The schedule itself is
-  /// never cached, so a write cannot leave a stale task list behind.
-  Stream<ScheduleSnapshot> watch(PlanCalendar calendar) {
-    return watchPracticalWeekdays().asyncMap(
-      (List<int>? weekdays) => _build(calendar, weekdays),
-    );
+  /// Emits a new snapshot whenever the weekday setting or a manual override
+  /// changes. The schedule itself is never cached, so a write cannot leave a
+  /// stale task list behind.
+  Stream<ScheduleSnapshot> watch(PlanCalendar calendar) async* {
+    yield await load(calendar);
+    await for (final _ in _scheduleChanges()) {
+      yield await load(calendar);
+    }
   }
 
+  /// Merges the two inputs of the schedule into one change signal.
+  Stream<void> _scheduleChanges() {
+    final StreamController<void> controller = StreamController<void>();
+    final List<StreamSubscription<dynamic>> subscriptions =
+        <StreamSubscription<dynamic>>[];
+    controller.onListen = () {
+      subscriptions.add(
+        watchPracticalWeekdays()
+            .skip(1)
+            .listen((_) => controller.add(null), onError: controller.addError),
+      );
+      subscriptions.add(
+        watchOverrides()
+            .skip(1)
+            .listen((_) => controller.add(null), onError: controller.addError),
+      );
+    };
+    controller.onCancel = () async {
+      for (final StreamSubscription<dynamic> subscription in subscriptions) {
+        await subscription.cancel();
+      }
+      subscriptions.clear();
+    };
+    return controller.stream;
+  }
+
+  /// Builds the proposed schedule for a weekday selection without writing it.
+  ///
+  /// Manual overrides are carried over. When one cannot survive the new
+  /// partition it is reported in [SchedulePreview.droppedOverrides] instead of
+  /// failing the whole preview, so the confirmation step can explain exactly
+  /// what the user is about to lose.
   Future<SchedulePreview> preview(
     PlanCalendar calendar,
     Iterable<int> weekdays,
   ) async {
     final List<int> selected = PracticalWeekdays.validate(weekdays);
     final ScheduleSnapshot current = await load(calendar);
-    final ScheduleSnapshot next = await _build(
+    final _Resolved resolved = await _resolve(
       calendar,
-      PracticalWeekdays.isOriginal(selected) ? null : selected,
+      selected,
+      await overrides(),
     );
+    final ScheduleSnapshot next = resolved.schedule;
+
     int moved = 0;
     for (final ScheduledTask task in next.tasks) {
       final ScheduledTask? before = current.tasksById[task.task.id];
-      if (before == null || before.dayNumber != task.dayNumber) moved += 1;
+      if (before == null ||
+          before.dayNumber != task.dayNumber ||
+          before.startClock != task.startClock) {
+        moved += 1;
+      }
     }
+
     int changedDays = 0;
+    final List<DayTypeChange> typeChanges = <DayTypeChange>[];
+    final List<DayLoadChange> loadChanges = <DayLoadChange>[];
     for (final ScheduledDay day in next.days) {
       final ScheduledDay? before = current.day(day.dayNumber);
       if (before == null ||
@@ -209,20 +391,65 @@ class ScheduleRepository {
           !_sameIds(before.taskIds, day.taskIds)) {
         changedDays += 1;
       }
+      if (before != null && before.type != day.type) {
+        typeChanges.add(
+          DayTypeChange(
+            dayNumber: day.dayNumber,
+            before: before.type,
+            after: day.type,
+          ),
+        );
+      }
+      final int beforeMinutes = before == null
+          ? 0
+          : current
+                .tasksForDay(day.dayNumber)
+                .fold<int>(
+                  0,
+                  (int sum, ScheduledTask t) => sum + t.plannedMinutes,
+                );
+      final int afterMinutes = next
+          .tasksForDay(day.dayNumber)
+          .fold<int>(0, (int sum, ScheduledTask t) => sum + t.plannedMinutes);
+      if (beforeMinutes != afterMinutes) {
+        loadChanges.add(
+          DayLoadChange(
+            dayNumber: day.dayNumber,
+            beforeMinutes: beforeMinutes,
+            afterMinutes: afterMinutes,
+          ),
+        );
+      }
     }
+    loadChanges.sort(
+      (DayLoadChange a, DayLoadChange b) =>
+          b.deltaMinutes.abs().compareTo(a.deltaMinutes.abs()),
+    );
+
     return SchedulePreview(
       schedule: next,
       movedTasks: moved,
       changedDays: changedDays,
+      dayChanges: typeChanges,
+      loadChanges: loadChanges,
+      droppedOverrides: resolved.dropped,
+      previousWeekdays: current.practicalWeekdays,
+      nextWeekdays: selected,
     );
   }
 
   /// Validates and commits the setting. The schedule is generated first so an
-  /// invalid selection can never leave a half-written preference.
+  /// invalid selection can never leave a half-written preference. Overrides
+  /// that cannot survive the new partition are deleted in the same transaction
+  /// and were already shown in the preview.
   Future<void> save(PlanCalendar calendar, Iterable<int> weekdays) async {
     final List<int> selected = PracticalWeekdays.validate(weekdays);
     final bool original = PracticalWeekdays.isOriginal(selected);
-    await _build(calendar, original ? null : selected);
+    final _Resolved resolved = await _resolve(
+      calendar,
+      selected,
+      await overrides(),
+    );
 
     final DateTime now = DateTime.now();
     await _db.transaction(() async {
@@ -248,12 +475,67 @@ class ScheduleRepository {
               value: now.toUtc().toIso8601String(),
             ),
           );
+      for (final String taskId in resolved.dropped) {
+        await (_db.delete(
+          _db.scheduleOverrides,
+        )..where((ScheduleOverrides t) => t.taskId.equals(taskId))).go();
+        await SyncQueueRepository(_db).enqueue(
+          overrideSyncEntity,
+          taskId,
+          <String, Object?>{'task_id': taskId, 'deleted': true},
+        );
+      }
       await SyncQueueRepository(_db)
           .enqueue(syncEntity, syncEntityId, <String, Object?>{
             'practical_weekdays': original ? const <int>[] : selected,
             'updated_at': now.toUtc().toIso8601String(),
           });
     });
+  }
+
+  /// Applies a weekday selection plus the overrides that fit it.
+  Future<_Resolved> _resolve(
+    PlanCalendar calendar,
+    List<int> selected,
+    Map<String, ScheduleOverrideInput> manual,
+  ) async {
+    final List<int>? custom = PracticalWeekdays.isOriginal(selected)
+        ? null
+        : selected;
+    try {
+      return _Resolved(
+        schedule: await _build(calendar, custom, manual),
+        dropped: const <String>[],
+      );
+    } on ScheduleException {
+      if (manual.isEmpty) rethrow;
+    }
+
+    final Map<String, ScheduleOverrideInput> working =
+        Map<String, ScheduleOverrideInput>.of(manual);
+    final List<String> dropped = <String>[];
+    for (final String taskId in await _newestOverrideIdsFirst()) {
+      working.remove(taskId);
+      dropped.add(taskId);
+      try {
+        return _Resolved(
+          schedule: await _build(calendar, custom, working),
+          dropped: List<String>.unmodifiable(dropped),
+        );
+      } on ScheduleException {
+        continue;
+      }
+    }
+    throw const ScheduleException(
+      'no manual override can explain the scheduling failure',
+    );
+  }
+
+  Future<List<String>> _newestOverrideIdsFirst() async {
+    final List<ScheduleOverrideRow> rows = await (_db.select(
+      _db.scheduleOverrides,
+    )..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
+    return <String>[for (final ScheduleOverrideRow row in rows) row.taskId];
   }
 
   /// Restores the bundled schedule and syncs the default state to the cloud.
@@ -299,18 +581,481 @@ class ScheduleRepository {
     });
   }
 
+  // ---- manual scheduling -------------------------------------------------
+
+  /// Validates a manual placement against the current schedule without writing
+  /// anything. The returned preview carries the proposed snapshot or a typed
+  /// reason the move is not allowed.
+  Future<TaskMovePreview> previewMove(
+    PlanCalendar calendar, {
+    required String taskId,
+    int? dayNumber,
+    int? position,
+    String? startClock,
+  }) async {
+    final ScheduleSnapshot current = await load(calendar);
+    final ScheduledTask? task = current.tasksById[taskId];
+    if (task == null) {
+      return const TaskMovePreview(issue: TaskMoveIssue.unknownTask);
+    }
+    final int target = dayNumber ?? task.dayNumber;
+    final ScheduledDay? targetDay = current.day(target);
+    if (targetDay == null) {
+      return TaskMovePreview(
+        issue: TaskMoveIssue.unavailable,
+        task: task,
+        fromDay: task.dayNumber,
+      );
+    }
+    if (targetDay.isRest) {
+      return TaskMovePreview(
+        issue: TaskMoveIssue.restDay,
+        task: task,
+        fromDay: task.dayNumber,
+        toDay: target,
+      );
+    }
+
+    final List<ScheduledTask> ordered = current.orderedTasks;
+    final int index = ordered.indexWhere(
+      (ScheduledTask item) => item.task.id == taskId,
+    );
+    final ScheduledTask? previous = index > 0 ? ordered[index - 1] : null;
+    final ScheduledTask? next = index + 1 < ordered.length
+        ? ordered[index + 1]
+        : null;
+
+    if (previous != null && target < previous.dayNumber) {
+      return TaskMovePreview(
+        issue: TaskMoveIssue.dependencyBefore,
+        task: task,
+        fromDay: task.dayNumber,
+        toDay: target,
+        blocking: previous,
+      );
+    }
+    if (next != null && target > next.dayNumber) {
+      return TaskMovePreview(
+        issue: TaskMoveIssue.dependencyAfter,
+        task: task,
+        fromDay: task.dayNumber,
+        toDay: target,
+        blocking: next,
+      );
+    }
+
+    final List<ScheduledTask> targetTasks = List<ScheduledTask>.of(
+      current.tasksForDay(target),
+    )..removeWhere((ScheduledTask item) => item.task.id == taskId);
+    final int slot = (position ?? targetTasks.length + 1).clamp(
+      1,
+      targetTasks.length + 1,
+    );
+
+    if (startClock != null) {
+      final int? start = _parseClock(startClock);
+      if (start == null) {
+        return TaskMovePreview(
+          issue: TaskMoveIssue.invalidTime,
+          task: task,
+          fromDay: task.dayNumber,
+          toDay: target,
+        );
+      }
+      final ScheduledTask? before = slot > 1 ? targetTasks[slot - 2] : null;
+      if (before != null) {
+        final int? end = _parseClock(before.endClock);
+        if (end != null && start < end) {
+          return TaskMovePreview(
+            issue: TaskMoveIssue.overlap,
+            task: task,
+            fromDay: task.dayNumber,
+            toDay: target,
+            blocking: before,
+          );
+        }
+      }
+      if (start + task.plannedMinutes >= 24 * 60) {
+        return TaskMovePreview(
+          issue: TaskMoveIssue.pastMidnight,
+          task: task,
+          fromDay: task.dayNumber,
+          toDay: target,
+        );
+      }
+    }
+
+    final Map<String, ScheduleOverrideInput> manual =
+        Map<String, ScheduleOverrideInput>.of(current.overrides);
+    manual[taskId] = ScheduleOverrideInput(
+      dayNumber: target,
+      position: slot,
+      startClock: startClock,
+    );
+
+    ScheduleSnapshot proposed;
+    try {
+      proposed = await _build(
+        calendar,
+        current.isCustom ? current.practicalWeekdays : null,
+        manual,
+      );
+    } on ScheduleException {
+      return TaskMovePreview(
+        issue: TaskMoveIssue.unavailable,
+        task: task,
+        fromDay: task.dayNumber,
+        toDay: target,
+      );
+    }
+
+    final ScheduledTask placed = proposed.tasksById[taskId]!;
+    final List<ScheduledTask> affected = <ScheduledTask>[
+      for (final ScheduledTask item in proposed.tasks)
+        if (_placementChanged(current.tasksById[item.task.id], item)) item,
+    ];
+
+    return TaskMovePreview(
+      issue: TaskMoveIssue.none,
+      schedule: proposed,
+      task: placed,
+      fromDay: task.dayNumber,
+      toDay: placed.dayNumber,
+      fromClock: task.startClock,
+      toClock: placed.startClock,
+      affected: List<ScheduledTask>.unmodifiable(affected),
+    );
+  }
+
+  /// Commits a validated manual move and queues it for sync.
+  Future<TaskMovePreview> commitMove(
+    PlanCalendar calendar, {
+    required String taskId,
+    int? dayNumber,
+    int? position,
+    String? startClock,
+  }) async {
+    final TaskMovePreview preview = await previewMove(
+      calendar,
+      taskId: taskId,
+      dayNumber: dayNumber,
+      position: position,
+      startClock: startClock,
+    );
+    if (!preview.ok) return preview;
+
+    final ScheduledTask placed = preview.schedule!.tasksById[taskId]!;
+    final DateTime now = DateTime.now();
+    await _db.transaction(() async {
+      await _db
+          .into(_db.scheduleOverrides)
+          .insertOnConflictUpdate(
+            ScheduleOverridesCompanion.insert(
+              taskId: taskId,
+              dayNumber: placed.dayNumber,
+              position: Value<int?>(placed.order),
+              startClock: Value<String?>(startClock),
+              updatedAt: now,
+            ),
+          );
+      await SyncQueueRepository(_db)
+          .enqueue(overrideSyncEntity, taskId, <String, Object?>{
+            'task_id': taskId,
+            'day_number': placed.dayNumber,
+            'position': placed.order,
+            'start_clock': startClock,
+            'updated_at': now.toUtc().toIso8601String(),
+          });
+    });
+    return preview;
+  }
+
+  /// Removes one manual placement and returns to automatic scheduling for it.
+  Future<void> clearOverride(String taskId) async {
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.scheduleOverrides,
+      )..where((ScheduleOverrides t) => t.taskId.equals(taskId))).go();
+      await SyncQueueRepository(_db).enqueue(
+        overrideSyncEntity,
+        taskId,
+        <String, Object?>{'task_id': taskId, 'deleted': true},
+      );
+    });
+  }
+
+  /// Removes every manual placement.
+  Future<void> clearAllOverrides() async {
+    final List<ScheduleOverrideRow> rows = await _db
+        .select(_db.scheduleOverrides)
+        .get();
+    if (rows.isEmpty) return;
+    await _db.transaction(() async {
+      await _db.delete(_db.scheduleOverrides).go();
+      for (final ScheduleOverrideRow row in rows) {
+        await SyncQueueRepository(_db).enqueue(
+          overrideSyncEntity,
+          row.taskId,
+          <String, Object?>{'task_id': row.taskId, 'deleted': true},
+        );
+      }
+    });
+  }
+
+  /// Applies a remote override without re-enqueueing it. Local wins on ties.
+  Future<void> applyRemoteOverride(
+    String taskId,
+    ScheduleOverrideInput? value,
+    DateTime remoteUpdatedAt,
+  ) async {
+    final ScheduleOverrideRow? local =
+        await (_db.select(_db.scheduleOverrides)
+              ..where((ScheduleOverrides t) => t.taskId.equals(taskId)))
+            .getSingleOrNull();
+    if (local != null &&
+        !remoteUpdatedAt.toUtc().isAfter(local.updatedAt.toUtc())) {
+      return;
+    }
+    if (value == null) {
+      await (_db.delete(
+        _db.scheduleOverrides,
+      )..where((ScheduleOverrides t) => t.taskId.equals(taskId))).go();
+      return;
+    }
+    await _db
+        .into(_db.scheduleOverrides)
+        .insertOnConflictUpdate(
+          ScheduleOverridesCompanion.insert(
+            taskId: taskId,
+            dayNumber: value.dayNumber,
+            position: Value<int?>(value.position),
+            startClock: Value<String?>(value.startClock),
+            updatedAt: remoteUpdatedAt.toUtc(),
+          ),
+        );
+  }
+
+  static bool _placementChanged(ScheduledTask? before, ScheduledTask after) {
+    if (before == null) return true;
+    return before.dayNumber != after.dayNumber ||
+        before.order != after.order ||
+        before.startClock != after.startClock;
+  }
+
+  static int? _parseClock(String clock) {
+    final List<String> parts = clock.split(':');
+    if (parts.length != 2) return null;
+    final int? hour = int.tryParse(parts[0]);
+    final int? minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
   Future<ScheduleSnapshot> _build(
     PlanCalendar calendar,
     List<int>? custom,
+    Map<String, ScheduleOverrideInput> overrides,
   ) async {
     final List<DayRow> dayRows = await _template.allDays();
     final List<TaskWithSteps> taskRows = await _template.allTasksWithSteps();
     final List<BreakRow> breakRows = await _template.allBreaks();
     final List<SubjectRow> subjects = await _template.allSubjects();
     if (custom == null || PracticalWeekdays.isOriginal(custom)) {
-      return _buildOriginal(dayRows, taskRows, breakRows, subjects);
+      final ScheduleSnapshot base = _buildOriginal(
+        dayRows,
+        taskRows,
+        breakRows,
+        subjects,
+      );
+      return overrides.isEmpty ? base : _patchOriginal(base, overrides);
     }
-    return _buildCustom(calendar, dayRows, taskRows, subjects, custom);
+    return _buildCustom(
+      calendar,
+      dayRows,
+      taskRows,
+      subjects,
+      custom,
+      overrides,
+    );
+  }
+
+  /// Applies manual placements to the untouched template schedule.
+  ///
+  /// Only the days whose task list or pinned clock changed are re-timed; every
+  /// other day keeps the plan's own printed times. This is what lets a single
+  /// manual move leave the rest of the 68 days exactly as imported.
+  ScheduleSnapshot _patchOriginal(
+    ScheduleSnapshot base,
+    Map<String, ScheduleOverrideInput> overrides,
+  ) {
+    final Map<int, List<ScheduledTask>> byDay = <int, List<ScheduledTask>>{
+      for (final ScheduledDay day in base.days)
+        day.dayNumber: List<ScheduledTask>.of(base.tasksForDay(day.dayNumber)),
+    };
+
+    for (final String taskId in overrides.keys) {
+      for (final List<ScheduledTask> list in byDay.values) {
+        list.removeWhere((ScheduledTask item) => item.task.id == taskId);
+      }
+    }
+
+    final Map<int, List<MapEntry<String, ScheduleOverrideInput>>> perDay =
+        <int, List<MapEntry<String, ScheduleOverrideInput>>>{};
+    for (final MapEntry<String, ScheduleOverrideInput> entry
+        in overrides.entries) {
+      perDay
+          .putIfAbsent(
+            entry.value.dayNumber,
+            () => <MapEntry<String, ScheduleOverrideInput>>[],
+          )
+          .add(entry);
+    }
+    for (final MapEntry<int, List<MapEntry<String, ScheduleOverrideInput>>>
+        dayEntry
+        in perDay.entries) {
+      final List<ScheduledTask> list = byDay[dayEntry.key]!;
+      dayEntry.value.sort((
+        MapEntry<String, ScheduleOverrideInput> a,
+        MapEntry<String, ScheduleOverrideInput> b,
+      ) {
+        final int positionA = a.value.position ?? 1 << 20;
+        final int positionB = b.value.position ?? 1 << 20;
+        if (positionA != positionB) return positionA.compareTo(positionB);
+        return a.key.compareTo(b.key);
+      });
+      for (final MapEntry<String, ScheduleOverrideInput> entry
+          in dayEntry.value) {
+        final ScheduledTask? task = base.tasksById[entry.key];
+        if (task == null) {
+          throw ScheduleException(
+            'override references unknown task ${entry.key}',
+          );
+        }
+        final int slot = (entry.value.position ?? list.length + 1).clamp(
+          1,
+          list.length + 1,
+        );
+        list.insert(slot - 1, task);
+      }
+    }
+
+    final List<ScheduledDay> days = <ScheduledDay>[];
+    final List<ScheduledTask> tasks = <ScheduledTask>[];
+    for (final ScheduledDay day in base.days) {
+      final List<ScheduledTask> list = byDay[day.dayNumber]!;
+      final bool pinned = overrides.entries.any(
+        (MapEntry<String, ScheduleOverrideInput> entry) =>
+            entry.value.dayNumber == day.dayNumber &&
+            entry.value.startClock != null,
+      );
+      final bool changed =
+          pinned ||
+          !_sameIds(day.taskIds, <String>[
+            for (final ScheduledTask task in list) task.task.id,
+          ]);
+      if (!changed) {
+        days.add(day);
+        tasks.addAll(base.tasksForDay(day.dayNumber));
+        continue;
+      }
+      final int? startMinute = _parseClock(day.startClock ?? '');
+      final TimedDay timed = ScheduleEngine.timeDay(
+        dayNumber: day.dayNumber,
+        week: day.week,
+        tasks: <ScheduleTaskInput>[
+          for (final ScheduledTask task in list) _toInput(task),
+        ],
+        practical: day.isPractical,
+        startMinute: startMinute,
+        pinnedStarts: <String, String>{
+          for (final MapEntry<String, ScheduleOverrideInput> entry
+              in overrides.entries)
+            if (entry.value.dayNumber == day.dayNumber &&
+                entry.value.startClock != null)
+              entry.key: entry.value.startClock!,
+        },
+        manualIds: overrides.keys.toSet(),
+      );
+      days.add(
+        ScheduledDay(
+          dayNumber: day.dayNumber,
+          week: day.week,
+          type: day.type,
+          startClock: timed.day.startClock,
+          endClock: timed.day.endClock,
+          headerTitle: day.headerTitle,
+          note: day.note,
+          taskIds: timed.day.taskIds,
+          breaks: timed.day.breaks,
+        ),
+      );
+      for (final String id in timed.day.taskIds) {
+        final ScheduledTask original = base.tasksById[id]!;
+        final GeneratedTaskPlacement placement = timed.placements[id]!;
+        tasks.add(
+          ScheduledTask(
+            task: original.task,
+            steps: original.steps,
+            dayNumber: day.dayNumber,
+            order: placement.order,
+            startClock: placement.startClock,
+            endClock: placement.endClock,
+            stepSpans: placement.stepSpans,
+            isManual: placement.isManual,
+          ),
+        );
+      }
+    }
+
+    tasks.sort((ScheduledTask a, ScheduledTask b) {
+      final int byDay = a.dayNumber.compareTo(b.dayNumber);
+      return byDay != 0 ? byDay : a.order.compareTo(b.order);
+    });
+
+    // A manual placement may not invert the curriculum at day granularity:
+    // ordering inside a day is the user's choice, crossing a day backwards is
+    // not.
+    final Map<String, int> dayOf = <String, int>{
+      for (final ScheduledTask task in tasks) task.task.id: task.dayNumber,
+    };
+    final List<ScheduledTask> canonical = base.orderedTasks;
+    for (int index = 1; index < canonical.length; index++) {
+      final int previous = dayOf[canonical[index - 1].task.id]!;
+      final int current = dayOf[canonical[index].task.id]!;
+      if (current < previous) {
+        throw ScheduleException(
+          'manual placement moves ${canonical[index].task.id} to day $current '
+          'before ${canonical[index - 1].task.id} on day $previous',
+        );
+      }
+    }
+
+    return ScheduleSnapshot(
+      days: days,
+      tasks: tasks,
+      subjects: base.subjects,
+      isCustom: false,
+      practicalWeekdays: base.practicalWeekdays,
+      overrides: overrides,
+    );
+  }
+
+  static ScheduleTaskInput _toInput(ScheduledTask task) {
+    return ScheduleTaskInput(
+      id: task.task.id,
+      sourceDayNumber: task.dayNumber,
+      sourceOrder: task.order,
+      minutes: task.plannedMinutes,
+      steps: <ScheduleStepInput>[
+        for (final StepRow step in task.stepsInOrder)
+          ScheduleStepInput(
+            id: step.id,
+            minutes: step.minutes,
+            order: step.sortOrder,
+          ),
+      ],
+    );
   }
 
   ScheduleSnapshot _buildOriginal(
@@ -405,6 +1150,7 @@ class ScheduleRepository {
     List<TaskWithSteps> taskRows,
     List<SubjectRow> subjects,
     List<int> weekdays,
+    Map<String, ScheduleOverrideInput> overrides,
   ) {
     final List<ScheduleDayInput> days = <ScheduleDayInput>[
       for (final DayRow day in dayRows)
@@ -439,6 +1185,7 @@ class ScheduleRepository {
       days: days,
       tasks: tasks,
       practicalWeekdays: weekdays,
+      overrides: overrides,
     );
     final Map<String, TaskWithSteps> byId = <String, TaskWithSteps>{
       for (final TaskWithSteps item in taskRows) item.task.id: item,
@@ -474,6 +1221,7 @@ class ScheduleRepository {
           startClock: placement.startClock,
           endClock: placement.endClock,
           stepSpans: placement.stepSpans,
+          isManual: placement.isManual,
         ),
       );
     }
@@ -489,6 +1237,7 @@ class ScheduleRepository {
       subjects: subjects,
       isCustom: true,
       practicalWeekdays: generation.practicalWeekdays,
+      overrides: overrides,
     );
   }
 
@@ -506,4 +1255,11 @@ class ScheduleRepository {
     }
     return true;
   }
+}
+
+class _Resolved {
+  const _Resolved({required this.schedule, required this.dropped});
+
+  final ScheduleSnapshot schedule;
+  final List<String> dropped;
 }

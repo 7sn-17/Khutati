@@ -184,7 +184,21 @@ void main() {
       () => ScheduleEngine.generate(
         days: _days(),
         tasks: _tasks(),
-        practicalWeekdays: <int>[DateTime.monday],
+        practicalWeekdays: <int>[],
+      ),
+      throwsA(isA<FormatException>()),
+    );
+
+    expect(
+      () => ScheduleEngine.generate(
+        days: _days(),
+        tasks: _tasks(),
+        practicalWeekdays: <int>[
+          DateTime.monday,
+          DateTime.tuesday,
+          DateTime.thursday,
+          DateTime.friday,
+        ],
       ),
       throwsA(isA<FormatException>()),
     );

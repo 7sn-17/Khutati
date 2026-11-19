@@ -182,6 +182,13 @@ Stream<void> _watchTodayChanges(AppDatabase db, ScheduleRepository schedule) {
             .skip(1)
             .listen((_) => controller.add(null)),
       );
+      subscriptions.add(
+        db
+            .select(db.scheduleOverrides)
+            .watch()
+            .skip(1)
+            .listen((_) => controller.add(null)),
+      );
     },
     onCancel: () async {
       for (final StreamSubscription<dynamic> subscription in subscriptions) {

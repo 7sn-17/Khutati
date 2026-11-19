@@ -1,8 +1,12 @@
-/// The two weekdays the user attends practical training.
+/// The weekdays the user attends practical training.
 ///
 /// The bundled plan uses Monday and Friday. The value is a user setting, not
 /// template data: the importer never changes it, and removing it restores the
 /// original day-by-day schedule.
+///
+/// The product allows one, two or three practical days. Three is the ceiling:
+/// a fourth would leave the remaining study days carrying more than the
+/// reference normal-day workload, which the plan is not sized for.
 abstract final class PracticalWeekdays {
   static const int monday = DateTime.monday;
   static const int tuesday = DateTime.tuesday;
@@ -15,11 +19,13 @@ abstract final class PracticalWeekdays {
   /// Monday and Friday, the pattern printed in the source plan.
   static const List<int> original = <int>[monday, friday];
 
+  /// The most practical days a week may contain.
+  static const int maxDays = 3;
+
   /// Validates a selection and returns it sorted.
   ///
-  /// The product rule is two practical days per week. Rejecting anything else
-  /// keeps the half-time workload balanced and prevents a one-day or seven-day
-  /// week from silently changing the meaning of the plan.
+  /// Duplicates collapse; a selection of zero, four or more days is rejected so
+  /// the stored preference can never describe a week the engine cannot fill.
   static List<int> validate(Iterable<int> weekdays) {
     final Set<int> unique = <int>{};
     for (final int weekday in weekdays) {
@@ -28,8 +34,11 @@ abstract final class PracticalWeekdays {
       }
       unique.add(weekday);
     }
-    if (unique.length != 2) {
-      throw const FormatException('select exactly two practical weekdays');
+    if (unique.isEmpty) {
+      throw const FormatException('select at least one practical weekday');
+    }
+    if (unique.length > maxDays) {
+      throw const FormatException('select at most three practical weekdays');
     }
     return unique.toList(growable: false)..sort();
   }

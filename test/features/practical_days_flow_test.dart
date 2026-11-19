@@ -14,6 +14,7 @@ import 'package:khutati/domain/plan/plan_task.dart';
 import 'package:khutati/domain/plan/practical_weekdays.dart';
 import 'package:khutati/domain/plan/step_progress.dart';
 import 'package:khutati/features/plan/application/plan_browser_controller.dart';
+import 'package:khutati/features/plan/application/task_schedule_controller.dart';
 import 'package:khutati/features/settings/application/practical_days_controller.dart';
 import 'package:khutati/features/today/application/today_controller.dart';
 
@@ -297,5 +298,140 @@ void main() {
     // The template tables were never rewritten by either operation.
     expect((await db.select(db.days).get()).length, 68);
     expect((await db.select(db.tasks).get()).length, 725);
+  });
+
+  test('three practical days save and reach both tabs', () async {
+    final PracticalDaysActions actions = container.read(
+      practicalDaysActionsProvider,
+    );
+    final PlanBrowserData before = (await container.read(
+      planBrowserProvider.future,
+    ))!;
+    expect(before.days[1].day.isPractical, isTrue);
+
+    final SchedulePreview preview = await actions.preview(<int>[
+      DateTime.tuesday,
+      DateTime.wednesday,
+      DateTime.thursday,
+    ]);
+    expect(preview.nextWeekdays, <int>[2, 3, 4]);
+    expect(
+      preview.schedule.tasks,
+      hasLength(
+        before.days.fold<int>(
+          0,
+          (int sum, PlanDayData day) => sum + day.tasks.length,
+        ),
+      ),
+    );
+
+    final Future<PlanBrowserData?> changed = waitFor<PlanBrowserData?>(
+      planBrowserProvider,
+      (PlanBrowserData? data) =>
+          data != null && data.days[1].day.type == 'normal',
+    );
+    final Future<TodayData?> todayChanged = waitFor<TodayData?>(
+      todayDataProvider,
+      (TodayData? data) => data != null && data.day.type == 'normal',
+    );
+    await pumpEventQueue();
+    await actions.save(<int>[
+      DateTime.tuesday,
+      DateTime.wednesday,
+      DateTime.thursday,
+    ]);
+
+    final PlanBrowserData after = (await changed.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Plan did not re-emit'),
+    ))!;
+    final TodayData today = (await todayChanged.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Today did not re-emit'),
+    ))!;
+
+    expect(after.days[1].day.type, 'normal');
+    // Week 1 runs Thursday..Wednesday, so Tuesday and Wednesday are days 6/7
+    // and Thursday is day 1.
+    expect(after.days[0].day.isPractical, isTrue);
+    expect(after.days[5].day.isPractical, isTrue);
+    expect(after.days[6].day.isPractical, isTrue);
+    expect(today.dayNumber, 2);
+    expect(
+      today.tasks.map((PlanTask task) => task.id),
+      after.days[1].tasks.map((PlanTask task) => task.id),
+    );
+    final PracticalDaysSettings settings = await container.read(
+      practicalDaysSettingsProvider.future,
+    );
+    expect(settings.selected, <int>[2, 3, 4]);
+  });
+
+  test('a manual move reaches Plan, Today and the override table', () async {
+    final PlanBrowserData before = (await container.read(
+      planBrowserProvider.future,
+    ))!;
+    final List<PlanTask> dayTwo = before.days[1].tasks;
+    expect(dayTwo.length, greaterThan(1));
+
+    // Day 3 is a study day; moving the last task of day 2 there stays inside
+    // its neighbour window.
+    final PlanTask moved = dayTwo.last;
+    final Future<PlanBrowserData?> changed = waitFor<PlanBrowserData?>(
+      planBrowserProvider,
+      (PlanBrowserData? data) =>
+          data != null &&
+          data.days[1].tasks.every((PlanTask task) => task.id != moved.id),
+    );
+    await pumpEventQueue();
+    final TaskMovePreview result = await container
+        .read(taskScheduleActionsProvider)
+        .commit(taskId: moved.id, dayNumber: 3);
+
+    expect(result.ok, isTrue, reason: 'issue ${result.issue}');
+    final PlanBrowserData after = (await changed.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Plan did not re-emit'),
+    ))!;
+
+    expect(
+      after.days[2].tasks.any((PlanTask task) => task.id == moved.id),
+      isTrue,
+    );
+    expect(after.manualTaskIds, contains(moved.id));
+    expect(
+      after.tasks,
+      hasLength(
+        before.days.fold<int>(
+          0,
+          (int sum, PlanDayData day) => sum + day.tasks.length,
+        ),
+      ),
+    );
+
+    // Today renders the same day-2 list as Plan.
+    final TodayData today = (await container.read(todayDataProvider.future))!;
+    expect(
+      today.tasks.map((PlanTask task) => task.id),
+      after.days[1].tasks.map((PlanTask task) => task.id),
+    );
+
+    final List<ScheduleOverrideRow> rows = await db
+        .select(db.scheduleOverrides)
+        .get();
+    expect(rows, hasLength(1));
+    expect(rows.single.taskId, moved.id);
+    expect(rows.single.dayNumber, 3);
+
+    await container.read(taskScheduleActionsProvider).clear(moved.id);
+    expect(await db.select(db.scheduleOverrides).get(), isEmpty);
+    final PlanBrowserData restored = (await container.read(
+      planBrowserProvider.future,
+    ))!;
+    expect(
+      restored.days[1].tasks.any((PlanTask task) => task.id == moved.id),
+      isTrue,
+    );
+    expect(restored.manualTaskIds, isEmpty);
   });
 }

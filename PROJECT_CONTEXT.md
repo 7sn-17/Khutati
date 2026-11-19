@@ -172,6 +172,15 @@ update dialog and the notification prompt wait for it instead of a timer.
 Weeks → days → tasks browser with calendar strip and search. Reads the same
 `StepProgress` values as Today, so a half-done step shows 50% in both tabs.
 
+Each task line carries a «تغيير موعد المهمة» action that opens
+`showTaskScheduleSheet` (`task_schedule_sheet.dart`): day chips limited to the
+task's week (rest days excluded), a position picker, and a start-time stepper
+(−15 / +15 / «تلقائي»). The sheet previews the result live — new day, clock,
+order, how many other tasks shift, or the exact reason the move is refused
+(rest day, prerequisite, dependant, overlap, past midnight). Saving writes one
+`schedule_overrides` row; a gold `edit_calendar_rounded` badge marks overridden
+tasks, and «إرجاع للجدولة التلقائية» removes the override.
+
 ### 5.4 Focus timer (`lib/features/focus` + Kotlin)
 
 - Two modes: **linked** (a task/step handed over from Today) and **pomodoro**
@@ -258,6 +267,12 @@ to whichever one is missing (`ACTION_APP_NOTIFICATION_SETTINGS` /
 the same rule for `isIgnoringBatteryOptimizations`, and opens
 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, falling back to the battery list
 and then app details on OEM skins that block the sheet.
+
+A compact «الخطة» section holds the «أيام العملي» navigation row
+(`_SettingsNavRow`: 36 px tinted icon, title, one-line subtitle, chevron). It
+pushes `/settings/practical-days`; the weekday selector itself lives there, not
+in Settings. The section is shaped so a future «تعديل الخطة» row can sit beside
+it without restructuring.
 
 ### 5.12 Launch and onboarding (`lib/features/onboarding`)
 
@@ -372,8 +387,12 @@ it.
 
 CI (`Android CI`) runs: pub get → `libsqlite3-dev` → `gen-l10n` → build_runner →
 the four Node checks → `flutter analyze --no-fatal-infos --no-fatal-warnings`
-(errors fail) → `flutter test` → signed release build. As of 0.8.1 that is
-**100 tests**.
+(errors fail) → `flutter test` → signed release build. The suite includes
+`test/domain/schedule_override_test.dart` (engine: 1/2/3 practical days, fourth
+rejected, determinism, overrides, pinned starts, every rejection path) and the
+`manual scheduling` group in `test/data/schedule_repository_test.dart`
+(preview-writes-nothing, commit, rest-day refusal, dependency refusal, override
+persistence, overlap, clear/clear-all, progress preservation, reconciliation).
 
 ---
 
@@ -444,6 +463,12 @@ map fixes, rotating quotes, update system, settings polish, practical-weekday
 redistribution (Settings → Plan/Today/achievements, reset, cloud sync), the focus
 log, and the hardened background timer (state restore, chronometer notification,
 working action buttons).
+
+**Done and awaiting CI:** one-to-three practical days with a dedicated screen and
+a real preview, the sequential redistribution engine, manual task scheduling
+(move / reorder / pinned start) with dependency and overlap validation,
+`schedule_overrides` persistence + sync, the «تعديل يدوي» badge, and restore to
+automatic scheduling.
 
 **Next (already in `bd`, status `in_progress`):**
 

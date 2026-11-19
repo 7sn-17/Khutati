@@ -314,7 +314,7 @@ returns `false` only when every option failed, so the caller can report it.
 
 ## 6. Database schema
 
-SQLite is the source of truth. `schemaVersion = 4` in
+SQLite is the source of truth. `schemaVersion = 5` in
 `lib/data/database/app_database.dart`.
 
 ### 6.1 Template tables (imported once, never mutated)
@@ -341,6 +341,7 @@ belong in the user tables as overrides.
 | `user_step_states` | `UserStepStateRow` | `step_id` | `progress` code 0–3, completed, completed_at, updated_at |
 | `focus_sessions` | `FocusSession` | auto id + unique `client_id` | mode, phase, planned/actual seconds, started/ended |
 | `user_overrides` | `UserOverrideRow` | auto id | target type/id + field + JSON value (edits without migrations) |
+| `schedule_overrides` | `ScheduleOverrideRow` | `task_id` | manual placement: `day_number`, optional `position`/`start_clock`, `updated_at` |
 | `user_additions` | `UserAdditionRow` | auto id | personal items added to a day |
 | `notes` | `NoteRow` | auto id | per-task notes |
 | `review_flags` | `ReviewFlagRow` | `task_id` | "mark for review" |
@@ -359,11 +360,13 @@ belong in the user tables as overrides.
 | v2 | `user_step_states.progress` | legacy rows read as `completed` |
 | v3 | `focus_sessions.mode`, `.task_title` | nullable/defaulted |
 | v4 | `user_step_states.updated_at`, `focus_sessions.client_id`, `sync_queue` + indexes | existing progress codes preserved exactly |
+| v5 | `schedule_overrides` + unique index on `task_id` | empty table means "fully automatic"; existing schedules untouched |
 
 Indexes are created explicitly (not only by Drift) so their names stay stable:
 `idx_days_day_number`, `idx_tasks_day`, `idx_tasks_subject`, `idx_steps_task`,
 `idx_breaks_day`, `idx_sessions_started`, `idx_overrides_target`,
-`idx_focus_client_id` (partial unique), `idx_sync_queue_entity`.
+`idx_focus_client_id` (partial unique), `idx_sync_queue_entity`,
+`idx_schedule_override_task` (unique).
 
 `beforeOpen` enables `PRAGMA foreign_keys = ON`; without it the template/user
 separation is decorative.
@@ -377,8 +380,10 @@ Applied by `supabase/migrations/202611180001_sync_tables.sql`:
 | `user_task_states` | `(user_id, task_id)` | owner-only, `for all` using/with check `auth.uid() = user_id` |
 | `user_step_states` | `(user_id, step_id)` | owner-only |
 | `focus_sessions` | `(user_id, id)` | owner-only |
+| `user_schedule_overrides` | `(user_id, task_id)` | owner-only (`202611190004`) |
 
-`anon` is revoked on all three; `authenticated` gets select/insert/update/delete.
+`anon` is revoked on all of them; `authenticated` gets
+select/insert/update/delete.
 `public.app_versions` (migration `202611190001`) is the opposite: public read,
 writes only via CI with the service role. The earlier `app_updates` table was
 dropped (migration `202611190002`) once the waterfall stopped reading it.
@@ -726,28 +731,62 @@ Rules for new tests: database tests use `AppDatabase.memory()` and close in
 
 ---
 
-## 14. Practical-weekday schedule
+## 14. Practical-weekday schedule and manual placement
 
-The user can change the two practical weekdays in Settings. The template is
-never edited; the effective schedule is derived.
+The user picks **one to three** practical weekdays in
+`/settings/practical-days`. The template is never edited; the effective
+schedule is derived, and manual placements sit on top as a second, independent
+layer.
 
-- **Persistence.** `ScheduleRepository` stores the choice in `app_settings`
-  (`schedule.practical_weekdays_v1`) plus an `updated_at` sibling. Removing the
-  key restores the original plan exactly, which is what the reset action does.
+- **Persistence.** `ScheduleRepository` stores the weekday choice in
+  `app_settings` (`schedule.practical_weekdays_v1`) plus an `updated_at`
+  sibling. Removing the key restores the original plan exactly, which is what
+  the reset action does. Manual placements live in `schedule_overrides`, one
+  row per task; deleting the row restores automatic scheduling for that task.
 - **Engine.** `domain/plan/schedule_engine.dart` is pure Dart. Each week's
   ordered task list is partitioned into contiguous groups (one per study day) by
   a DP that minimises squared deviation from a 2:1 normal/practical workload.
   Rest days never move and never receive tasks; a selected weekday that lands on
   a rest day is forwarded to the nearest free day (the original plan's
-  Friday-rest → Saturday-practical rule). No task is split or re-identified, so
+  Friday-rest → Saturday-practical rule), recomputed **per week** so a partial
+  final week still resolves correctly. No task is split or re-identified, so
   progress keyed by task/step id survives a change.
-- **One snapshot.** `ScheduleSnapshot` is built once per setting value and is
-  read by Plan, Today, progress and achievements. Both controllers also watch
-  the setting stream, so a save rebuilds every view without a restart.
-- **Sync.** A save writes the setting and enqueues `schedule_settings`
-  (`practical_weekdays`) in the same transaction. `CloudSyncService` upserts it
-  to `user_schedule_settings` and applies remote values with the usual
-  "local wins on ties" rule; an empty array means "original".
+- **Capacity is a target, not a limit.** `~8h55m` normal and `~4h30m`
+  practical are the reference loads; the DP may land slightly above or below.
+  It never splits an indivisible task to fill minutes, and changing the number
+  of practical days is allowed to change total capacity — the preview shows the
+  finish-date and per-day load impact instead of hiding it.
+- **Manual overrides.** `ScheduleOverrideInput{dayNumber, position?,
+  startClock?}` is applied by `_applyOverrides` (custom path) or
+  `_patchOriginal` (original path). The original path re-times only the days
+  whose task list or pinned clock changed, so one manual move leaves the other
+  67 printed days exactly as imported. Overrides are removed from their
+  automatic group and re-inserted at the requested position; a pinned start is
+  honoured exactly (no break or free block is inserted before it).
+- **Validation.** Day-granularity sequence is enforced: a task may not move
+  before an earlier task's day or after a later task's day. Ordering *within* a
+  day is a soft user preference. Rest-day targets, unknown tasks, overlapping
+  pinned starts, past-midnight finishes and malformed clocks are rejected with
+  a `TaskMoveIssue` the sheet renders in Arabic.
+- **Previews write nothing.** `preview(calendar, selected)` and
+  `previewMove(...)` return a proposal (`SchedulePreview`, `TaskMovePreview`)
+  with the before/after day types, per-day load deltas, moved-task counts,
+  finish-date impact and any overrides that cannot survive. `save` and
+  `commitMove` re-resolve and write in a single transaction.
+- **Reconciliation.** When a weekday change makes an override unsatisfiable,
+  `_resolve` drops overrides newest-first until the schedule builds and reports
+  them in `SchedulePreview.droppedOverrides`; the confirmation dialog lists
+  them in gold and `save` deletes exactly those rows.
+- **One snapshot.** `ScheduleSnapshot` is built once per (weekdays, overrides)
+  pair and is read by Plan, Today, progress and achievements. Both controllers
+  watch the setting stream, the override table and the sync queue, so a save
+  rebuilds every view without a restart.
+- **Sync.** A weekday save enqueues `schedule_settings`
+  (`practical_weekdays`); each override write enqueues `schedule_override`
+  (full row) or a `{deleted: true}` tombstone. `CloudSyncService` upserts to
+  `user_schedule_settings` / `user_schedule_overrides` and applies remote values
+  with the usual "local wins on ties" rule; an empty weekday array means
+  "original".
 
 ## 15. Focus log
 

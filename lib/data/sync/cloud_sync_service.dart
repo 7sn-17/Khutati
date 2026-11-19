@@ -11,6 +11,7 @@ import '../providers.dart';
 import '../repositories/schedule_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../../domain/plan/practical_weekdays.dart';
+import '../../domain/plan/schedule_engine.dart' show ScheduleOverrideInput;
 
 /// Offline-first uploader for user progress and focus history.
 ///
@@ -132,6 +133,11 @@ class CloudSyncService {
                 .from('user_schedule_settings')
                 .upsert(payload, onConflict: 'user_id');
             break;
+          case 'schedule_override':
+            await client
+                .from('user_schedule_overrides')
+                .upsert(payload, onConflict: 'user_id,task_id');
+            break;
           default:
             // An unknown entity can never succeed; dropping it prevents a
             // permanently stuck queue after a downgrade.
@@ -155,6 +161,44 @@ class CloudSyncService {
     await _pullStepStates(client, user, db);
     await _pullFocusSessions(client, user, db);
     await _pullScheduleSettings(client, user);
+    await _pullScheduleOverrides(client, user);
+  }
+
+  /// Pulls manual task placements. A soft-deleted row clears the local
+  /// override, so removing a move on one device also removes it everywhere.
+  Future<void> _pullScheduleOverrides(SupabaseClient client, User user) async {
+    final List<dynamic> raw = await client
+        .from('user_schedule_overrides')
+        .select()
+        .eq('user_id', user.id);
+    final ScheduleRepository schedule = _ref.read(scheduleRepositoryProvider);
+    for (final dynamic item in raw) {
+      if (item is! Map) continue;
+      final Map<String, dynamic> row = item.cast<String, dynamic>();
+      final String? taskId = row['task_id'] as String?;
+      final DateTime? remoteAt = DateTime.tryParse(
+        (row['updated_at'] as String?) ?? '',
+      );
+      if (taskId == null || remoteAt == null) continue;
+
+      if (row['deleted'] == true) {
+        await schedule.applyRemoteOverride(taskId, null, remoteAt);
+        continue;
+      }
+      final dynamic day = row['day_number'];
+      if (day is! num) continue;
+      final dynamic position = row['position'];
+      final String? startClock = row['start_clock'] as String?;
+      await schedule.applyRemoteOverride(
+        taskId,
+        ScheduleOverrideInput(
+          dayNumber: day.toInt(),
+          position: position is num ? position.toInt() : null,
+          startClock: startClock,
+        ),
+        remoteAt,
+      );
+    }
   }
 
   /// Pulls the cross-device practical-weekday choice. The local setting wins on

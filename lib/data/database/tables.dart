@@ -77,7 +77,8 @@ class Days extends Table {
 
   /// `normal`, `practical` or `rest`.
   TextColumn get type => text()();
-  IntColumn get statedStudyMinutes => integer().withDefault(const Constant(0))();
+  IntColumn get statedStudyMinutes =>
+      integer().withDefault(const Constant(0))();
   TextColumn get startClock => text().nullable()();
   TextColumn get endClock => text().nullable()();
   TextColumn get headerTitle => text().nullable()();
@@ -212,6 +213,32 @@ class UserAdditions extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
+/// A manual placement of one template task.
+///
+/// The task definition never changes; only its generated position does. A row
+/// exists only for tasks the user moved, so an empty table means "fully
+/// automatic" and deleting a row restores the automatic schedule for that task.
+@DataClassName('ScheduleOverrideRow')
+class ScheduleOverrides extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get taskId => text()();
+
+  /// Target plan day (1..68). Never a rest day.
+  IntColumn get dayNumber => integer()();
+
+  /// 1-based position inside the target day; `null` appends.
+  IntColumn get position => integer().nullable()();
+
+  /// Pinned `HH:mm` start; `null` lets the day timeline decide.
+  TextColumn get startClock => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+    <Column>{taskId},
+  ];
+}
+
 @DataClassName('FocusSession')
 class FocusSessions extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -235,8 +262,8 @@ class FocusSessions extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => <Set<Column>>[
-        <Column>{clientId},
-      ];
+    <Column>{clientId},
+  ];
 }
 
 @DataClassName('NoteRow')
@@ -286,6 +313,6 @@ class SyncQueue extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => <Set<Column>>[
-        <Column>{entity, entityId},
-      ];
+    <Column>{entity, entityId},
+  ];
 }

@@ -105,6 +105,7 @@ class GeneratedTaskPlacement {
     required this.startClock,
     required this.endClock,
     required this.stepSpans,
+    this.isManual = false,
   });
 
   final String taskId;
@@ -113,6 +114,28 @@ class GeneratedTaskPlacement {
   final String startClock;
   final String endClock;
   final Map<String, ScheduleSpan> stepSpans;
+
+  /// `true` when the user placed this task (day, position or start time).
+  final bool isManual;
+}
+
+/// A manual placement saved by the user. The task keeps its identity; only its
+/// position in the generated week changes.
+class ScheduleOverrideInput {
+  const ScheduleOverrideInput({
+    required this.dayNumber,
+    this.position,
+    this.startClock,
+  });
+
+  /// Target plan day. Must be an existing study day.
+  final int dayNumber;
+
+  /// 1-based position inside that day. `null` appends.
+  final int? position;
+
+  /// Pinned `HH:mm` start. `null` lets the day timeline decide.
+  final String? startClock;
 }
 
 class ScheduleGeneration {
@@ -163,6 +186,8 @@ abstract final class ScheduleEngine {
     required List<ScheduleDayInput> days,
     required List<ScheduleTaskInput> tasks,
     required Iterable<int> practicalWeekdays,
+    Map<String, ScheduleOverrideInput> overrides =
+        const <String, ScheduleOverrideInput>{},
   }) {
     final List<int> weekdays = PracticalWeekdays.validate(practicalWeekdays);
     final List<ScheduleDayInput> sortedDays = List<ScheduleDayInput>.of(days)
@@ -174,6 +199,9 @@ abstract final class ScheduleEngine {
 
     final Map<int, ScheduleDayInput> dayByNumber = <int, ScheduleDayInput>{
       for (final ScheduleDayInput day in sortedDays) day.dayNumber: day,
+    };
+    final Map<String, ScheduleTaskInput> taskById = <String, ScheduleTaskInput>{
+      for (final ScheduleTaskInput task in tasks) task.id: task,
     };
     final Map<int, List<ScheduleTaskInput>> tasksByWeek =
         <int, List<ScheduleTaskInput>>{};
@@ -198,9 +226,9 @@ abstract final class ScheduleEngine {
       daysByWeek.putIfAbsent(day.week, () => <ScheduleDayInput>[]).add(day);
     }
 
-    final List<GeneratedDay> generatedDays = <GeneratedDay>[];
-    final Map<String, GeneratedTaskPlacement> placements =
-        <String, GeneratedTaskPlacement>{};
+    // dayNumber -> ordered tasks, for every study day in the plan.
+    final Map<int, List<ScheduleTaskInput>> byDay =
+        <int, List<ScheduleTaskInput>>{};
 
     for (final MapEntry<int, List<ScheduleDayInput>> entry
         in daysByWeek.entries) {
@@ -221,33 +249,53 @@ abstract final class ScheduleEngine {
         days: activeDays,
         practical: practical,
       );
-
-      for (final ScheduleDayInput day in weekDays) {
-        if (day.isRest) {
-          generatedDays.add(
-            GeneratedDay(
-              dayNumber: day.dayNumber,
-              week: day.week,
-              type: 'rest',
-              startClock: null,
-              endClock: null,
-              taskIds: const <String>[],
-              breaks: const <ScheduleBreak>[],
-            ),
-          );
-          continue;
-        }
-        final int index = activeDays.indexOf(day);
-        final List<ScheduleTaskInput> dayTasks = grouped[index];
-        final _TimedDay timed = _timeDay(
-          dayNumber: day.dayNumber,
-          week: day.week,
-          tasks: dayTasks,
-          practical: practical.contains(day.dayNumber),
+      for (int index = 0; index < activeDays.length; index++) {
+        byDay[activeDays[index].dayNumber] = List<ScheduleTaskInput>.of(
+          grouped[index],
         );
-        generatedDays.add(timed.day);
-        placements.addAll(timed.placements);
       }
+    }
+
+    _applyOverrides(byDay, overrides, taskById, dayByNumber);
+    _validateSequence(byDay, tasks);
+
+    final List<GeneratedDay> generatedDays = <GeneratedDay>[];
+    final Map<String, GeneratedTaskPlacement> placements =
+        <String, GeneratedTaskPlacement>{};
+
+    for (final ScheduleDayInput day in sortedDays) {
+      if (day.isRest) {
+        generatedDays.add(
+          GeneratedDay(
+            dayNumber: day.dayNumber,
+            week: day.week,
+            type: 'rest',
+            startClock: null,
+            endClock: null,
+            taskIds: const <String>[],
+            breaks: const <ScheduleBreak>[],
+          ),
+        );
+        continue;
+      }
+      final List<ScheduleTaskInput> dayTasks =
+          byDay[day.dayNumber] ?? const <ScheduleTaskInput>[];
+      final TimedDay timed = timeDay(
+        dayNumber: day.dayNumber,
+        week: day.week,
+        tasks: dayTasks,
+        practical: _isPractical(day, weekdays, daysByWeek),
+        pinnedStarts: <String, String>{
+          for (final MapEntry<String, ScheduleOverrideInput> override
+              in overrides.entries)
+            if (override.value.dayNumber == day.dayNumber &&
+                override.value.startClock != null)
+              override.key: override.value.startClock!,
+        },
+        manualIds: overrides.keys.toSet(),
+      );
+      generatedDays.add(timed.day);
+      placements.addAll(timed.placements);
     }
 
     generatedDays.sort(
@@ -260,6 +308,120 @@ abstract final class ScheduleEngine {
     );
     _validateResult(sortedDays, tasks, result);
     return result;
+  }
+
+  /// Whether [day] ended up practical after rest-day forwarding. The resolved
+  /// set is recomputed from the week the day belongs to.
+  static bool _isPractical(
+    ScheduleDayInput day,
+    List<int> weekdays,
+    Map<int, List<ScheduleDayInput>> daysByWeek,
+  ) {
+    final List<ScheduleDayInput> weekDays =
+        daysByWeek[day.week] ?? const <ScheduleDayInput>[];
+    return _resolvePracticalDays(weekDays, weekdays).contains(day.dayNumber);
+  }
+
+  /// Removes overridden tasks from their automatic group and re-inserts them in
+  /// the requested day at the requested position. Positions are clamped, so a
+  /// stale position can never crash a rebuild.
+  static void _applyOverrides(
+    Map<int, List<ScheduleTaskInput>> byDay,
+    Map<String, ScheduleOverrideInput> overrides,
+    Map<String, ScheduleTaskInput> taskById,
+    Map<int, ScheduleDayInput> dayByNumber,
+  ) {
+    if (overrides.isEmpty) return;
+
+    for (final MapEntry<String, ScheduleOverrideInput> entry
+        in overrides.entries) {
+      final ScheduleTaskInput? task = taskById[entry.key];
+      if (task == null) {
+        throw ScheduleException(
+          'override references unknown task ${entry.key}',
+        );
+      }
+      final ScheduleDayInput? target = dayByNumber[entry.value.dayNumber];
+      if (target == null) {
+        throw ScheduleException(
+          'override for ${entry.key} targets missing day '
+          '${entry.value.dayNumber}',
+        );
+      }
+      if (target.isRest) {
+        throw ScheduleException(
+          'override for ${entry.key} targets rest day ${target.dayNumber}',
+        );
+      }
+      for (final List<ScheduleTaskInput> list in byDay.values) {
+        list.removeWhere((ScheduleTaskInput item) => item.id == entry.key);
+      }
+    }
+
+    final Map<int, List<MapEntry<String, ScheduleOverrideInput>>> perDay =
+        <int, List<MapEntry<String, ScheduleOverrideInput>>>{};
+    for (final MapEntry<String, ScheduleOverrideInput> entry
+        in overrides.entries) {
+      perDay
+          .putIfAbsent(
+            entry.value.dayNumber,
+            () => <MapEntry<String, ScheduleOverrideInput>>[],
+          )
+          .add(entry);
+    }
+
+    for (final MapEntry<int, List<MapEntry<String, ScheduleOverrideInput>>>
+        dayEntry
+        in perDay.entries) {
+      final List<ScheduleTaskInput> list = byDay[dayEntry.key]!;
+      dayEntry.value.sort((
+        MapEntry<String, ScheduleOverrideInput> a,
+        MapEntry<String, ScheduleOverrideInput> b,
+      ) {
+        final int positionA = a.value.position ?? 1 << 20;
+        final int positionB = b.value.position ?? 1 << 20;
+        if (positionA != positionB) return positionA.compareTo(positionB);
+        return _compareTasks(taskById[a.key]!, taskById[b.key]!);
+      });
+      for (final MapEntry<String, ScheduleOverrideInput> entry
+          in dayEntry.value) {
+        final int requested = entry.value.position ?? list.length + 1;
+        final int position = requested.clamp(1, list.length + 1);
+        list.insert(position - 1, taskById[entry.key]!);
+      }
+    }
+  }
+
+  /// The curriculum is a single sequence at day granularity: a task may never
+  /// be scheduled on an earlier day than a task that precedes it in the source
+  /// plan. Ordering *inside* a day is a soft preference the user may change.
+  /// Automatic partitioning already guarantees this; a manual move can break
+  /// it, so it is checked explicitly.
+  static void _validateSequence(
+    Map<int, List<ScheduleTaskInput>> byDay,
+    List<ScheduleTaskInput> tasks,
+  ) {
+    final List<ScheduleTaskInput> canonical = List<ScheduleTaskInput>.of(tasks)
+      ..sort(_compareTasks);
+    final Map<String, int> dayOf = <String, int>{};
+    for (final MapEntry<int, List<ScheduleTaskInput>> entry in byDay.entries) {
+      for (final ScheduleTaskInput task in entry.value) {
+        dayOf[task.id] = entry.key;
+      }
+    }
+    if (dayOf.length != canonical.length) {
+      throw const ScheduleException('task count changed while scheduling');
+    }
+    for (int index = 1; index < canonical.length; index++) {
+      final int previous = dayOf[canonical[index - 1].id]!;
+      final int current = dayOf[canonical[index].id]!;
+      if (current < previous) {
+        throw ScheduleException(
+          'sequence violation: ${canonical[index].id} would move to day '
+          '$current before ${canonical[index - 1].id} on day $previous',
+        );
+      }
+    }
   }
 
   /// The selected weekday is moved forward to the next free study day when it
@@ -411,14 +573,20 @@ abstract final class ScheduleEngine {
     return groups;
   }
 
-  static _TimedDay _timeDay({
+  /// Times one day. Public so the repository can re-time a single day of the
+  /// original (template) schedule after a manual move without regenerating the
+  /// whole plan.
+  static TimedDay timeDay({
     required int dayNumber,
     required int week,
     required List<ScheduleTaskInput> tasks,
     required bool practical,
+    int? startMinute,
+    Map<String, String> pinnedStarts = const <String, String>{},
+    Set<String> manualIds = const <String>{},
   }) {
-    int current = practical ? practicalStartMinute : normalStartMinute;
-    final int dayStart = current;
+    int current =
+        startMinute ?? (practical ? practicalStartMinute : normalStartMinute);
     int sinceBreak = 0;
     int scheduledWork = 0;
     bool freeBlockInserted = false;
@@ -432,35 +600,49 @@ abstract final class ScheduleEngine {
 
     for (int index = 0; index < tasks.length; index++) {
       final ScheduleTaskInput task = tasks[index];
+      final String? pinned = pinnedStarts[task.id];
 
-      if (index > 0 && sinceBreak >= _breakAfterMinutes) {
-        breaks.add(
-          _break(
-            id: '$dayNumber-break-${breaks.length + 1}',
-            start: current,
-            minutes: breakMinutes,
-            kind: 'break',
-          ),
-        );
-        current += breakMinutes;
+      if (pinned != null) {
+        // A pinned start is the user's decision: honour it exactly and do not
+        // insert a break or the free block in front of it.
+        final int at = _minutesOf(pinned);
+        if (at < current) {
+          throw ScheduleException(
+            'manual start for ${task.id} overlaps the previous task',
+          );
+        }
+        current = at;
         sinceBreak = 0;
-      }
+      } else {
+        if (index > 0 && sinceBreak >= _breakAfterMinutes) {
+          breaks.add(
+            _break(
+              id: '$dayNumber-break-${breaks.length + 1}',
+              start: current,
+              minutes: breakMinutes,
+              kind: 'break',
+            ),
+          );
+          current += breakMinutes;
+          sinceBreak = 0;
+        }
 
-      if (!practical &&
-          !freeBlockInserted &&
-          index > 0 &&
-          scheduledWork >= dayMinutes / 2) {
-        breaks.add(
-          _break(
-            id: '$dayNumber-free-${breaks.length + 1}',
-            start: current,
-            minutes: freeBlockMinutes,
-            kind: 'free_time',
-          ),
-        );
-        current += freeBlockMinutes;
-        freeBlockInserted = true;
-        sinceBreak = 0;
+        if (!practical &&
+            !freeBlockInserted &&
+            index > 0 &&
+            scheduledWork >= dayMinutes / 2) {
+          breaks.add(
+            _break(
+              id: '$dayNumber-free-${breaks.length + 1}',
+              start: current,
+              minutes: freeBlockMinutes,
+              kind: 'free_time',
+            ),
+          );
+          current += freeBlockMinutes;
+          freeBlockInserted = true;
+          sinceBreak = 0;
+        }
       }
 
       final int taskStart = current;
@@ -485,16 +667,23 @@ abstract final class ScheduleEngine {
         startClock: _clock(taskStart),
         endClock: _clock(current),
         stepSpans: stepSpans,
+        isManual: manualIds.contains(task.id),
       );
       sinceBreak += task.minutes;
       scheduledWork += task.minutes;
     }
 
-    final int dayEnd = tasks.isEmpty ? dayStart : current;
+    final int dayEnd = tasks.isEmpty
+        ? (startMinute ??
+              (practical ? practicalStartMinute : normalStartMinute))
+        : current;
+    final int dayStart = tasks.isEmpty
+        ? dayEnd
+        : _minutesOf(placements[tasks.first.id]!.startClock);
     if (dayEnd >= 24 * 60) {
       throw ScheduleException('day $dayNumber runs past midnight');
     }
-    return _TimedDay(
+    return TimedDay(
       day: GeneratedDay(
         dayNumber: dayNumber,
         week: week,
@@ -628,8 +817,8 @@ abstract final class ScheduleEngine {
   }
 }
 
-class _TimedDay {
-  const _TimedDay({required this.day, required this.placements});
+class TimedDay {
+  const TimedDay({required this.day, required this.placements});
 
   final GeneratedDay day;
   final Map<String, GeneratedTaskPlacement> placements;

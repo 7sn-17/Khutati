@@ -12,7 +12,8 @@ import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
-import '../../../domain/plan/schedule_engine.dart' show ScheduleSpan;
+import '../../../domain/plan/schedule_engine.dart'
+    show ScheduleOverrideInput, ScheduleSpan;
 import '../../../domain/plan/step_progress.dart';
 import '../../today/application/today_controller.dart' show todayClockProvider;
 
@@ -155,6 +156,8 @@ class PlanBrowserData {
     required this.days,
     required this.progressByDay,
     required this.overall,
+    this.manualTaskIds = const <String>{},
+    this.manualStartClocks = const <String, String?>{},
   });
 
   final PlanCalendar calendar;
@@ -163,6 +166,13 @@ class PlanBrowserData {
   final List<PlanDayData> days;
   final Map<int, PlanProgress> progressByDay;
   final PlanProgress overall;
+
+  /// Tasks the user placed by hand. The Plan tab marks them subtly.
+  final Set<String> manualTaskIds;
+
+  /// Pinned start clocks for manual tasks; `null` means the day timeline owns
+  /// the time and only the day/position were chosen by hand.
+  final Map<String, String?> manualStartClocks;
 
   PlanDayData get todayDay => days.firstWhere(
     (PlanDayData day) => day.day.dayNumber == today.dayNumber,
@@ -297,6 +307,13 @@ Stream<void> _watchPlanChanges(AppDatabase db, ScheduleRepository schedule) {
             .skip(1)
             .listen((_) => controller.add(null)),
       );
+      subscriptions.add(
+        db
+            .select(db.scheduleOverrides)
+            .watch()
+            .skip(1)
+            .listen((_) => controller.add(null)),
+      );
     },
     onCancel: () async {
       for (final StreamSubscription<dynamic> subscription in subscriptions) {
@@ -357,6 +374,12 @@ Future<PlanBrowserData> _build(
     days: days,
     progressByDay: progressByDay,
     overall: PlanProgress.combine(progressByDay.values),
+    manualTaskIds: schedule.overrides.keys.toSet(),
+    manualStartClocks: <String, String?>{
+      for (final MapEntry<String, ScheduleOverrideInput> entry
+          in schedule.overrides.entries)
+        entry.key: entry.value.startClock,
+    },
   );
 }
 
