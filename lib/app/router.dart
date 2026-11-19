@@ -16,6 +16,7 @@ import '../features/onboarding/application/onboarding_controller.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/onboarding/presentation/splash_screen.dart';
 import '../features/plan/presentation/plan_screen.dart';
+import '../features/plan/presentation/reschedule_screen.dart';
 import '../features/settings/presentation/practical_days_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/today/presentation/past_tasks_screen.dart';
@@ -156,6 +157,12 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
                     name: 'practicalDays',
                     builder: (BuildContext context, GoRouterState state) =>
                         const PracticalDaysScreen(),
+                  ),
+                  GoRoute(
+                    path: 'reschedule',
+                    name: 'reschedule',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const RescheduleScreen(),
                   ),
                 ],
               ),

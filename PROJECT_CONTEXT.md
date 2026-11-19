@@ -172,14 +172,16 @@ update dialog and the notification prompt wait for it instead of a timer.
 Weeks → days → tasks browser with calendar strip and search. Reads the same
 `StepProgress` values as Today, so a half-done step shows 50% in both tabs.
 
-Each task line carries a «تغيير موعد المهمة» action that opens
-`showTaskScheduleSheet` (`task_schedule_sheet.dart`): day chips limited to the
-task's week (rest days excluded), a position picker, and a start-time stepper
-(−15 / +15 / «تلقائي»). The sheet previews the result live — new day, clock,
-order, how many other tasks shift, or the exact reason the move is refused
-(rest day, prerequisite, dependant, overlap, past midnight). Saving writes one
-`schedule_overrides` row; a gold `edit_calendar_rounded` badge marks overridden
-tasks, and «إرجاع للجدولة التلقائية» removes the override.
+Each task line carries a gold `edit_calendar_rounded` badge when the user
+placed it by hand; the tab itself is read-only. Moving a task happens on the
+dedicated screen `/settings/reschedule` («تعديل ترتيب المهام»), reached from
+Settings → «الخطة». It shows one week as a timeline: days expand inline, a task
+moves with the up/down arrows, by long-press drag onto another row or day
+header, or through an inline panel with day/position steppers. Every edit is
+previewed live — new day, clock, order, how many other tasks shift, and whether
+the plan finishes earlier or later — and the whole draft is saved in one
+transaction, so a refused combination never half-applies. A gold badge marks
+overridden tasks and «إرجاع الكل للجدول التلقائي» removes every override.
 
 ### 5.4 Focus timer (`lib/features/focus` + Kotlin)
 
@@ -268,11 +270,15 @@ the same rule for `isIgnoringBatteryOptimizations`, and opens
 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, falling back to the battery list
 and then app details on OEM skins that block the sheet.
 
-A compact «الخطة» section holds the «أيام العملي» navigation row
-(`_SettingsNavRow`: 36 px tinted icon, title, one-line subtitle, chevron). It
-pushes `/settings/practical-days`; the weekday selector itself lives there, not
-in Settings. The section is shaped so a future «تعديل الخطة» row can sit beside
-it without restructuring.
+A compact «الخطة» section holds two navigation rows
+(`_SettingsNavRow`: 36 px tinted icon, title, one-line subtitle, chevron):
+«أيام العملي» → `/settings/practical-days` and «تعديل ترتيب المهام» →
+`/settings/reschedule`. Neither editor lives in Settings. The practical-days
+screen renders the seven weekdays as a two-column grid of cards (gold fill +
+check when selected, muted when the three-day ceiling is reached) and replaces
+the old before/after table with a result: how many days change, which days gain
+or lose tasks and minutes, and whether the plan finishes earlier or later.
+Confirming toasts «تم تحديث جدول الخطة.» and pops straight back to Settings.
 
 ### 5.12 Launch and onboarding (`lib/features/onboarding`)
 
@@ -394,10 +400,16 @@ release build (`tools/apply_migrations.mjs`, Management API + the
 `SUPABASE_ACCESS_TOKEN` secret, ledger in `public.schema_migrations`). The suite
 includes
 `test/domain/schedule_override_test.dart` (engine: 1/2/3 practical days, fourth
-rejected, determinism, overrides, pinned starts, every rejection path) and the
-`manual scheduling` group in `test/data/schedule_repository_test.dart`
-(preview-writes-nothing, commit, rest-day refusal, dependency refusal, override
-persistence, overlap, clear/clear-all, progress preservation, reconciliation).
+rejected, determinism, overrides, pinned starts, every rejection path),
+`test/domain/schedule_reliability_test.dart` (all 63 weekday selections over four
+weeks: no overlap, no task on a rest day, sequential orders, curriculum order
+preserved, pinned starts honoured), the `manual scheduling` group in
+`test/data/schedule_repository_test.dart` (preview-writes-nothing, commit,
+rest-day refusal, dependency refusal, override persistence, overlap,
+clear/clear-all, progress preservation, reconciliation), and
+`test/data/schedule_impact_test.dart` (a whole draft: impact per day, finish
+line, sequence and rest-day refusal, atomic multi-row save, reload-stable
+positions, stored overrides still applied).
 
 ---
 
@@ -473,7 +485,11 @@ working action buttons).
 a real preview, the sequential redistribution engine, manual task scheduling
 (move / reorder / pinned start) with dependency and overlap validation,
 `schedule_overrides` persistence + sync, the «تعديل يدوي» badge, and restore to
-automatic scheduling.
+automatic scheduling. The 1.0 UX pass adds: the focus-log filter fix (whole pill
+is tappable, `KInkSurface` instead of a bare `GestureDetector`), the two-column
+weekday grid, the results-style impact preview, toast-then-pop on save, and the
+dedicated `/settings/reschedule` screen (drag, arrows, steppers, live impact) that
+replaces the Plan tab's bottom sheet.
 
 **Next (already in `bd`, status `in_progress`):**
 

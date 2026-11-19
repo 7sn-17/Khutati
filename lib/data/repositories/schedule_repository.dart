@@ -159,13 +159,96 @@ class DayLoadChange {
     required this.dayNumber,
     required this.beforeMinutes,
     required this.afterMinutes,
+    this.beforeTasks = 0,
+    this.afterTasks = 0,
   });
 
   final int dayNumber;
   final int beforeMinutes;
   final int afterMinutes;
+  final int beforeTasks;
+  final int afterTasks;
 
   int get deltaMinutes => afterMinutes - beforeMinutes;
+  int get deltaTasks => afterTasks - beforeTasks;
+}
+
+/// One task whose day or start clock moves between two schedules.
+class TaskPlacementChange {
+  const TaskPlacementChange({
+    required this.task,
+    required this.fromDay,
+    required this.toDay,
+    required this.fromStartClock,
+    required this.toStartClock,
+  });
+
+  /// The task in its new position.
+  final ScheduledTask task;
+  final int fromDay;
+  final int toDay;
+  final String? fromStartClock;
+  final String? toStartClock;
+
+  bool get changedDay => fromDay != toDay;
+}
+
+/// The effect of a change on one day, in tasks and in minutes.
+class DayImpact {
+  const DayImpact({
+    required this.dayNumber,
+    required this.beforeTasks,
+    required this.afterTasks,
+    required this.beforeMinutes,
+    required this.afterMinutes,
+  });
+
+  final int dayNumber;
+  final int beforeTasks;
+  final int afterTasks;
+  final int beforeMinutes;
+  final int afterMinutes;
+
+  int get deltaTasks => afterTasks - beforeTasks;
+  int get deltaMinutes => afterMinutes - beforeMinutes;
+}
+
+/// A proposed set of manual placements, diffed against what is saved today.
+///
+/// Nothing is written by producing one: the rescheduling screen renders this
+/// and only [ScheduleRepository.commitOverrides] persists it.
+class ScheduleImpact {
+  const ScheduleImpact({
+    required this.schedule,
+    required this.moves,
+    required this.days,
+    required this.finishDayBefore,
+    required this.finishDayAfter,
+    this.droppedOverrides = const <String>[],
+    this.ok = true,
+    this.issue = TaskMoveIssue.none,
+    this.error,
+  });
+
+  /// The schedule the draft would produce (the current one when [ok] is false).
+  final ScheduleSnapshot schedule;
+  final List<TaskPlacementChange> moves;
+
+  /// Only the days whose task count or planned minutes change.
+  final List<DayImpact> days;
+
+  final int? finishDayBefore;
+  final int? finishDayAfter;
+  final List<String> droppedOverrides;
+  final bool ok;
+  final TaskMoveIssue issue;
+
+  /// Engine message, for logs and tests. Never shown to the user.
+  final String? error;
+
+  int get finishDayDelta => (finishDayAfter ?? 0) - (finishDayBefore ?? 0);
+
+  bool get hasChanges => moves.isNotEmpty || days.isNotEmpty;
 }
 
 class SchedulePreview {
@@ -178,6 +261,8 @@ class SchedulePreview {
     this.droppedOverrides = const <String>[],
     this.previousWeekdays = const <int>[],
     this.nextWeekdays = const <int>[],
+    this.finishDayBefore,
+    this.finishDayAfter,
   });
 
   final ScheduleSnapshot schedule;
@@ -194,6 +279,12 @@ class SchedulePreview {
   final List<String> droppedOverrides;
   final List<int> previousWeekdays;
   final List<int> nextWeekdays;
+
+  /// Last day of the plan that still has a task, before and after.
+  final int? finishDayBefore;
+  final int? finishDayAfter;
+
+  int get finishDayDelta => (finishDayAfter ?? 0) - (finishDayBefore ?? 0);
 
   bool get hasChanges => movedTasks > 0 || changedDays > 0;
 }
@@ -400,31 +491,37 @@ class ScheduleRepository {
           ),
         );
       }
-      final int beforeMinutes = before == null
-          ? 0
-          : current
-                .tasksForDay(day.dayNumber)
-                .fold<int>(
-                  0,
-                  (int sum, ScheduledTask t) => sum + t.plannedMinutes,
-                );
-      final int afterMinutes = next
-          .tasksForDay(day.dayNumber)
-          .fold<int>(0, (int sum, ScheduledTask t) => sum + t.plannedMinutes);
-      if (beforeMinutes != afterMinutes) {
+      final List<ScheduledTask> beforeTasks = before == null
+          ? const <ScheduledTask>[]
+          : current.tasksForDay(day.dayNumber);
+      final List<ScheduledTask> afterTasks = next.tasksForDay(day.dayNumber);
+      final int beforeMinutes = beforeTasks.fold<int>(
+        0,
+        (int sum, ScheduledTask t) => sum + t.plannedMinutes,
+      );
+      final int afterMinutes = afterTasks.fold<int>(
+        0,
+        (int sum, ScheduledTask t) => sum + t.plannedMinutes,
+      );
+      if (beforeMinutes != afterMinutes ||
+          beforeTasks.length != afterTasks.length) {
         loadChanges.add(
           DayLoadChange(
             dayNumber: day.dayNumber,
             beforeMinutes: beforeMinutes,
             afterMinutes: afterMinutes,
+            beforeTasks: beforeTasks.length,
+            afterTasks: afterTasks.length,
           ),
         );
       }
     }
-    loadChanges.sort(
-      (DayLoadChange a, DayLoadChange b) =>
-          b.deltaMinutes.abs().compareTo(a.deltaMinutes.abs()),
-    );
+    loadChanges.sort((DayLoadChange a, DayLoadChange b) {
+      final int byTasks = b.deltaTasks.abs().compareTo(a.deltaTasks.abs());
+      return byTasks != 0
+          ? byTasks
+          : b.deltaMinutes.abs().compareTo(a.deltaMinutes.abs());
+    });
 
     return SchedulePreview(
       schedule: next,
@@ -435,6 +532,8 @@ class ScheduleRepository {
       droppedOverrides: resolved.dropped,
       previousWeekdays: current.practicalWeekdays,
       nextWeekdays: selected,
+      finishDayBefore: _finishDay(current),
+      finishDayAfter: _finishDay(next),
     );
   }
 
@@ -768,6 +867,225 @@ class ScheduleRepository {
           });
     });
     return preview;
+  }
+
+  /// Diffs a whole draft of manual placements against what is saved today.
+  ///
+  /// Unlike [previewMove], this validates the *combination*: three moves that
+  /// are each fine on their own can still invert the curriculum together. The
+  /// screen uses it for the live impact panel; [commitOverrides] uses it as the
+  /// gate before writing anything.
+  Future<ScheduleImpact> previewOverrides(
+    PlanCalendar calendar,
+    Map<String, ScheduleOverrideInput> draft,
+  ) async {
+    final ScheduleSnapshot current = await load(calendar);
+    if (draft.isEmpty) {
+      return ScheduleImpact(
+        schedule: current,
+        moves: const <TaskPlacementChange>[],
+        days: const <DayImpact>[],
+        finishDayBefore: _finishDay(current),
+        finishDayAfter: _finishDay(current),
+      );
+    }
+
+    // The draft is only the *pending* edits; the placements saved earlier must
+    // still apply, otherwise the preview would show every previously moved
+    // task snapping back to its automatic slot.
+    final Map<String, ScheduleOverrideInput> merged =
+        <String, ScheduleOverrideInput>{...await overrides(), ...draft};
+
+    try {
+      final ScheduleSnapshot next = await _build(
+        calendar,
+        _customWeekdays(current.practicalWeekdays),
+        merged,
+      );
+      // The untouched-template path only re-times the days it patched, so it
+      // does not run the engine's own checks. Validate the outcome here for
+      // both paths: a draft is only acceptable if every task still sits on a
+      // study day and the curriculum never runs backwards.
+      _validatePlacements(current, next);
+      final _ScheduleDiff diff = _diff(current, next);
+      return ScheduleImpact(
+        schedule: next,
+        moves: diff.moves,
+        days: diff.days,
+        finishDayBefore: diff.finishBefore,
+        finishDayAfter: diff.finishAfter,
+      );
+    } on ScheduleException catch (error) {
+      return ScheduleImpact(
+        schedule: current,
+        moves: const <TaskPlacementChange>[],
+        days: const <DayImpact>[],
+        finishDayBefore: _finishDay(current),
+        finishDayAfter: _finishDay(current),
+        ok: false,
+        issue: TaskMoveIssue.unavailable,
+        error: error.message,
+      );
+    }
+  }
+
+  /// Writes every placement in [draft] in one transaction.
+  ///
+  /// The whole draft is validated first, so a conflict can never leave half the
+  /// moves saved. Rows are stored with their resolved day and order, exactly
+  /// like [commitMove], so a later weekday change can reason about them.
+  Future<void> commitOverrides(
+    PlanCalendar calendar,
+    Map<String, ScheduleOverrideInput> draft,
+  ) async {
+    if (draft.isEmpty) return;
+    final ScheduleImpact impact = await previewOverrides(calendar, draft);
+    if (!impact.ok) {
+      throw ScheduleException(impact.error ?? 'the draft cannot be applied');
+    }
+
+    final DateTime now = DateTime.now();
+    await _db.transaction(() async {
+      for (final MapEntry<String, ScheduleOverrideInput> entry
+          in draft.entries) {
+        final ScheduledTask? placed = impact.schedule.tasksById[entry.key];
+        if (placed == null) {
+          throw ScheduleException('task ${entry.key} is not scheduled');
+        }
+        await _db
+            .into(_db.scheduleOverrides)
+            .insertOnConflictUpdate(
+              ScheduleOverridesCompanion.insert(
+                taskId: entry.key,
+                dayNumber: placed.dayNumber,
+                position: Value<int?>(placed.order),
+                startClock: Value<String?>(entry.value.startClock),
+                updatedAt: now,
+              ),
+            );
+        await SyncQueueRepository(_db)
+            .enqueue(overrideSyncEntity, entry.key, <String, Object?>{
+              'task_id': entry.key,
+              'day_number': placed.dayNumber,
+              'position': placed.order,
+              'start_clock': entry.value.startClock,
+              'updated_at': now.toUtc().toIso8601String(),
+            });
+      }
+    });
+  }
+
+  static List<int>? _customWeekdays(List<int> weekdays) {
+    return PracticalWeekdays.isOriginal(weekdays) ? null : weekdays;
+  }
+
+  /// Rejects a draft whose result would put a task on a rest day or invert the
+  /// curriculum. The template path applies overrides without regenerating the
+  /// plan, so neither invariant can be taken for granted there.
+  static void _validatePlacements(
+    ScheduleSnapshot current,
+    ScheduleSnapshot next,
+  ) {
+    final Map<String, int> dayOf = <String, int>{};
+    for (final ScheduledTask task in next.tasks) {
+      final ScheduledDay? day = next.day(task.dayNumber);
+      if (day == null || day.isRest) {
+        throw ScheduleException(
+          'task ${task.task.id} would land on a rest day',
+        );
+      }
+      dayOf[task.task.id] = task.dayNumber;
+    }
+
+    // [current] is in curriculum order, which is what the sequence rule is
+    // defined against: a task may never sit on an earlier day than the task
+    // before it.
+    final List<ScheduledTask> canonical = current.orderedTasks;
+    for (int index = 1; index < canonical.length; index++) {
+      final String previous = canonical[index - 1].task.id;
+      final String id = canonical[index].task.id;
+      final int? previousDay = dayOf[previous];
+      final int? day = dayOf[id];
+      if (previousDay == null || day == null) continue;
+      if (day < previousDay) {
+        throw ScheduleException(
+          'sequence violation: $id would move to day $day before $previous '
+          'on day $previousDay',
+        );
+      }
+    }
+  }
+
+  static int? _finishDay(ScheduleSnapshot snapshot) {
+    int? last;
+    for (final ScheduledTask task in snapshot.tasks) {
+      if (last == null || task.dayNumber > last) last = task.dayNumber;
+    }
+    return last;
+  }
+
+  static _ScheduleDiff _diff(ScheduleSnapshot current, ScheduleSnapshot next) {
+    final List<TaskPlacementChange> moves = <TaskPlacementChange>[];
+    for (final ScheduledTask task in next.orderedTasks) {
+      final ScheduledTask? before = current.tasksById[task.task.id];
+      if (before == null) continue;
+      if (before.dayNumber == task.dayNumber &&
+          before.startClock == task.startClock) {
+        continue;
+      }
+      moves.add(
+        TaskPlacementChange(
+          task: task,
+          fromDay: before.dayNumber,
+          toDay: task.dayNumber,
+          fromStartClock: before.startClock,
+          toStartClock: task.startClock,
+        ),
+      );
+    }
+
+    final List<DayImpact> days = <DayImpact>[];
+    for (final ScheduledDay day in next.days) {
+      if (day.isRest) continue;
+      final List<ScheduledTask> beforeTasks = current.tasksForDay(
+        day.dayNumber,
+      );
+      final List<ScheduledTask> afterTasks = next.tasksForDay(day.dayNumber);
+      final int beforeMinutes = beforeTasks.fold<int>(
+        0,
+        (int sum, ScheduledTask t) => sum + t.plannedMinutes,
+      );
+      final int afterMinutes = afterTasks.fold<int>(
+        0,
+        (int sum, ScheduledTask t) => sum + t.plannedMinutes,
+      );
+      if (beforeTasks.length == afterTasks.length &&
+          beforeMinutes == afterMinutes) {
+        continue;
+      }
+      days.add(
+        DayImpact(
+          dayNumber: day.dayNumber,
+          beforeTasks: beforeTasks.length,
+          afterTasks: afterTasks.length,
+          beforeMinutes: beforeMinutes,
+          afterMinutes: afterMinutes,
+        ),
+      );
+    }
+    days.sort((DayImpact a, DayImpact b) {
+      final int bySize = b.deltaTasks.abs().compareTo(a.deltaTasks.abs());
+      return bySize != 0
+          ? bySize
+          : b.deltaMinutes.abs().compareTo(a.deltaMinutes.abs());
+    });
+
+    return _ScheduleDiff(
+      moves: moves,
+      days: days,
+      finishBefore: _finishDay(current),
+      finishAfter: _finishDay(next),
+    );
   }
 
   /// Removes one manual placement and returns to automatic scheduling for it.
@@ -1262,4 +1580,19 @@ class _Resolved {
 
   final ScheduleSnapshot schedule;
   final List<String> dropped;
+}
+
+/// Raw result of diffing two snapshots, before it is wrapped in an impact.
+class _ScheduleDiff {
+  const _ScheduleDiff({
+    required this.moves,
+    required this.days,
+    required this.finishBefore,
+    required this.finishAfter,
+  });
+
+  final List<TaskPlacementChange> moves;
+  final List<DayImpact> days;
+  final int? finishBefore;
+  final int? finishAfter;
 }

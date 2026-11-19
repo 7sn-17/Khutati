@@ -142,52 +142,25 @@ class _PracticalDaysScreenState extends ConsumerState<PracticalDaysScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  const double gap = 8;
-                  final double width = (constraints.maxWidth - gap * 3) / 4;
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: <Widget>[
-                      for (final int weekday in _weekOrder)
-                        _DayChip(
-                          width: width,
-                          label: _name(weekday),
-                          selected: selected.contains(weekday),
-                          disabled:
-                              !selected.contains(weekday) &&
-                              selected.length >= PracticalWeekdays.maxDays,
-                          onTap: () => _toggle(weekday),
-                        ),
-                    ],
-                  );
-                },
+              _DayGrid(
+                weekOrder: _weekOrder,
+                selected: selected,
+                onToggle: _toggle,
+                nameOf: _name,
+                selectedLabel: l10n.pdSelectedLabel,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Row(
                 children: <Widget>[
-                  Text(
-                    l10n.pdSelectedLabel,
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: KTypography.smallSize,
-                      color: _palette.mute,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _CountPill(
-                    count: ordered.length,
-                    full: ordered.length >= PracticalWeekdays.maxDays,
-                  ),
-                  const Spacer(),
-                  Text(
-                    ordered.isEmpty ? l10n.pdMinHint : _label(ordered),
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: KTypography.smallSize,
-                      fontWeight: FontWeight.w500,
-                      color: _palette.tx,
+                  Expanded(
+                    child: Text(
+                      ordered.isEmpty ? l10n.pdMinHint : _label(ordered),
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: KTypography.smallSize,
+                        fontWeight: FontWeight.w500,
+                        color: _palette.tx,
+                      ),
                     ),
                   ),
                 ],
@@ -304,8 +277,11 @@ class _PracticalDaysScreenState extends ConsumerState<PracticalDaysScreen> {
       setState(() => _busy = true);
       await ref.read(practicalDaysActionsProvider).save(selected);
       if (!mounted) return;
-      setState(() => _selection = selected.toSet());
+      // Toast first: it lives in the Navigator's overlay, so it stays visible
+      // over Settings after the pop. Returning to Settings is the completion
+      // signal — the screen has nothing left to do.
       showKToast(context, l10n.settingsPracticalDaysSaved);
+      context.pop();
     } catch (_) {
       if (!mounted) return;
       showKToast(
@@ -506,61 +482,145 @@ class _CurrentCard extends StatelessWidget {
   }
 }
 
-class _DayChip extends StatelessWidget {
-  const _DayChip({
-    required this.width,
+/// Two columns: one card per weekday plus a counter tile, so the selector is
+/// scannable at a glance instead of a seven-row list.
+class _DayGrid extends StatelessWidget {
+  const _DayGrid({
+    required this.weekOrder,
+    required this.selected,
+    required this.onToggle,
+    required this.nameOf,
+    required this.selectedLabel,
+  });
+
+  final List<int> weekOrder;
+  final Set<int> selected;
+  final ValueChanged<int> onToggle;
+  final String Function(int) nameOf;
+  final String selectedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = context.l10n;
+    final bool full = selected.length >= PracticalWeekdays.maxDays;
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      mainAxisSpacing: KMetrics.gridGap,
+      crossAxisSpacing: KMetrics.gridGap,
+      childAspectRatio: 2.2,
+      children: <Widget>[
+        for (final int weekday in weekOrder)
+          _DayCard(
+            label: nameOf(weekday),
+            selected: selected.contains(weekday),
+            disabled: !selected.contains(weekday) && full,
+            selectedLabel: selectedLabel,
+            availableLabel: l10n.pdDayAvailable,
+            onTap: () => onToggle(weekday),
+          ),
+        _CountCard(count: selected.length, full: full, label: selectedLabel),
+      ],
+    );
+  }
+}
+
+class _DayCard extends StatelessWidget {
+  const _DayCard({
     required this.label,
     required this.selected,
     required this.disabled,
+    required this.selectedLabel,
+    required this.availableLabel,
     required this.onTap,
   });
 
-  final double width;
   final String label;
   final bool selected;
   final bool disabled;
+  final String selectedLabel;
+  final String availableLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final Color tint = selected ? palette.gold : palette.mute;
+
     return Semantics(
       button: true,
       selected: selected,
       enabled: !disabled,
-      label: label,
+      label: '$label، ${selected ? selectedLabel : availableLabel}',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: KMotion.navMs),
-        opacity: disabled ? 0.45 : 1,
-        child: PressScale(
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: disabled ? null : onTap,
-              borderRadius: BorderRadius.circular(14),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: KMotion.navMs),
-                curve: Curves.easeOut,
-                width: width,
-                height: KMetrics.tapTarget,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: selected ? palette.tx : palette.card2,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected ? palette.tx : palette.line,
+        opacity: disabled ? 0.42 : 1,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: KMotion.navMs),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: selected
+                ? palette.gold.withValues(alpha: 0.14)
+                : palette.card2,
+            borderRadius: BorderRadius.circular(KMetrics.cardRadius),
+            border: Border.all(
+              color: selected ? palette.gold : palette.line,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: KInkSurface(
+            onTap: disabled ? null : onTap,
+            borderRadius: BorderRadius.circular(KMetrics.cardRadius),
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 10, 10),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: KTypography.displayFamily,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: palette.tx,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        selected ? selectedLabel : availableLabel,
+                        style: TextStyle(
+                          fontFamily: KTypography.bodyFamily,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: tint,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.smallSize,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? palette.bg : palette.tx,
+                AnimatedScale(
+                  duration: const Duration(milliseconds: KMotion.navMs),
+                  curve: Curves.easeOutBack,
+                  scale: selected ? 1 : 0.6,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: KMotion.navMs),
+                    opacity: selected ? 1 : 0,
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      size: 20,
+                      color: palette.gold,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -569,30 +629,54 @@ class _DayChip extends StatelessWidget {
   }
 }
 
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.count, required this.full});
+class _CountCard extends StatelessWidget {
+  const _CountCard({
+    required this.count,
+    required this.full,
+    required this.label,
+  });
 
   final int count;
   final bool full;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
     final Color tint = full ? palette.gold : palette.mute;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: tint.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(KMetrics.pillRadius),
-        border: Border.all(color: tint.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        '$count / ${PracticalWeekdays.maxDays}',
-        style: TextStyle(
-          fontFamily: KTypography.bodyFamily,
-          fontSize: KTypography.tagSize,
-          fontWeight: FontWeight.w600,
-          color: tint,
+    return Semantics(
+      label: '$count / ${PracticalWeekdays.maxDays} $label',
+      child: Container(
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(KMetrics.cardRadius),
+          border: Border.all(color: tint.withValues(alpha: 0.3)),
+        ),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 14, 10),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              '$count / ${PracticalWeekdays.maxDays}',
+              style: TextStyle(
+                fontFamily: KTypography.displayFamily,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: tint,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: palette.mute,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -671,6 +755,9 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
+/// Shows what actually happens, day by day: how many tasks arrive, how many
+/// leave, and how the finish line moves. A before/after table made the user do
+/// the arithmetic; this states the result.
 class _PreviewBody extends StatelessWidget {
   const _PreviewBody({required this.preview});
 
@@ -680,7 +767,9 @@ class _PreviewBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
     final AppLocalizations l10n = context.l10n;
-    final List<DayTypeChange> changes = preview.dayChanges;
+    final KhutatiFormat format = KhutatiFormat(l10n);
+    final List<DayLoadChange> changes = preview.loadChanges;
+    final int finishDelta = preview.finishDayDelta;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -694,17 +783,30 @@ class _PreviewBody extends StatelessWidget {
             color: palette.tx,
           ),
         ),
-        const SizedBox(height: 10),
-        if (changes.isEmpty)
-          Text(
-            l10n.pdPreviewNoTypeChange,
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: KTypography.smallSize,
-              color: palette.mute,
-            ),
-          )
-        else
+        const SizedBox(height: 12),
+        _HeadlineRow(
+          icon: Icons.event_repeat_rounded,
+          text: l10n.pdImpactDaysChanged(changes.length),
+          palette: palette,
+          tint: palette.tx,
+        ),
+        const SizedBox(height: 6),
+        _HeadlineRow(
+          icon: finishDelta > 0
+              ? Icons.schedule_rounded
+              : finishDelta < 0
+              ? Icons.fast_forward_rounded
+              : Icons.flag_rounded,
+          text: finishDelta == 0
+              ? l10n.pdImpactFinishSame
+              : finishDelta > 0
+              ? l10n.pdImpactFinishLater(finishDelta)
+              : l10n.pdImpactFinishEarlier(-finishDelta),
+          palette: palette,
+          tint: finishDelta == 0 ? palette.mute : palette.gold,
+        ),
+        if (changes.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
               color: palette.card2,
@@ -714,14 +816,13 @@ class _PreviewBody extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Column(
               children: <Widget>[
-                _PreviewHeaderRow(palette: palette),
-                for (final DayTypeChange change in changes.take(6))
-                  _PreviewRow(change: change, palette: palette),
-                if (changes.length > 6)
+                for (final DayLoadChange change in changes.take(8))
+                  _ImpactRow(change: change, palette: palette, format: format),
+                if (changes.length > 8)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      l10n.pdPreviewMore(changes.length - 6),
+                      l10n.pdImpactMoreDays(changes.length - 8),
                       style: TextStyle(
                         fontFamily: KTypography.bodyFamily,
                         fontSize: KTypography.tagSize,
@@ -732,28 +833,10 @@ class _PreviewBody extends StatelessWidget {
               ],
             ),
           ),
-        const SizedBox(height: 12),
-        _StatLine(
-          icon: Icons.swap_horiz_rounded,
-          text: l10n.pdPreviewMoved(preview.movedTasks),
-          palette: palette,
-        ),
-        _StatLine(
-          icon: Icons.event_repeat_rounded,
-          text: l10n.pdPreviewChangedDays(preview.changedDays),
-          palette: palette,
-        ),
-        if (preview.loadChanges.isNotEmpty)
-          _StatLine(
-            icon: Icons.trending_up_rounded,
-            text: l10n.pdPreviewLoadDelta(
-              preview.loadChanges.first.deltaMinutes.abs(),
-            ),
-            palette: palette,
-          ),
+        ],
         if (preview.droppedOverrides.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 10),
             child: Text(
               l10n.pdPreviewDropped(preview.droppedOverrides.length),
               style: TextStyle(
@@ -780,108 +863,115 @@ class _PreviewBody extends StatelessWidget {
   }
 }
 
-class _PreviewHeaderRow extends StatelessWidget {
-  const _PreviewHeaderRow({required this.palette});
-
-  final KhutatiPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = context.l10n;
-    final TextStyle style = TextStyle(
-      fontFamily: KTypography.bodyFamily,
-      fontSize: KTypography.tagSize,
-      color: palette.mute,
-    );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: <Widget>[
-          Expanded(child: Text(l10n.pdColumnDay, style: style)),
-          Expanded(child: Text(l10n.pdColumnBefore, style: style)),
-          Expanded(child: Text(l10n.pdColumnAfter, style: style)),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewRow extends StatelessWidget {
-  const _PreviewRow({required this.change, required this.palette});
-
-  final DayTypeChange change;
-  final KhutatiPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = context.l10n;
-    final TextStyle style = TextStyle(
-      fontFamily: KTypography.bodyFamily,
-      fontSize: KTypography.smallSize,
-      color: palette.tx,
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: <Widget>[
-          Expanded(child: Text('${change.dayNumber}', style: style)),
-          Expanded(
-            child: Text(
-              _typeLabel(l10n, change.before),
-              style: style.copyWith(color: palette.mute),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              _typeLabel(l10n, change.after),
-              style: style.copyWith(
-                color: change.after == 'rest' ? palette.mute : palette.gold,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _typeLabel(AppLocalizations l10n, String type) {
-    return switch (type) {
-      'practical' => l10n.pdTypePractical,
-      'rest' => l10n.pdTypeRest,
-      _ => l10n.pdTypeNormal,
-    };
-  }
-}
-
-class _StatLine extends StatelessWidget {
-  const _StatLine({
+class _HeadlineRow extends StatelessWidget {
+  const _HeadlineRow({
     required this.icon,
     required this.text,
     required this.palette,
+    required this.tint,
   });
 
   final IconData icon;
   final String text;
   final KhutatiPalette palette;
+  final Color tint;
 
   @override
   Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 17, color: tint),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: KTypography.smallSize,
+              fontWeight: FontWeight.w600,
+              color: tint,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ImpactRow extends StatelessWidget {
+  const _ImpactRow({
+    required this.change,
+    required this.palette,
+    required this.format,
+  });
+
+  final DayLoadChange change;
+  final KhutatiPalette palette;
+  final KhutatiFormat format;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = context.l10n;
+    final int tasks = change.deltaTasks;
+    final int minutes = change.deltaMinutes;
+
+    final Color tint = tasks > 0
+        ? palette.ok
+        : tasks < 0
+        ? palette.redtx
+        : palette.mute;
+    final IconData icon = tasks > 0
+        ? Icons.add_circle_rounded
+        : tasks < 0
+        ? Icons.remove_circle_rounded
+        : Icons.swap_horiz_rounded;
+    final String label = tasks > 0
+        ? l10n.pdImpactAdded(tasks)
+        : tasks < 0
+        ? l10n.pdImpactRemoved(-tasks)
+        : l10n.pdImpactTimeOnly;
+    final String time = minutes == 0
+        ? ''
+        : '${minutes > 0 ? '+' : '−'}${format.duration(minutes.abs())}';
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: <Widget>[
-          Icon(icon, size: 16, color: palette.mute),
+          Icon(icon, size: 18, color: tint),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontFamily: KTypography.bodyFamily,
-                fontSize: KTypography.smallSize,
-                color: palette.tx,
-              ),
+          Text(
+            l10n.pdImpactDay(change.dayNumber),
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: KTypography.smallSize,
+              fontWeight: FontWeight.w600,
+              color: palette.tx,
             ),
+          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: KTypography.smallSize,
+                  fontWeight: FontWeight.w700,
+                  color: tint,
+                ),
+              ),
+              if (time.isNotEmpty)
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.tagSize,
+                    color: palette.mute,
+                  ),
+                ),
+            ],
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/palette.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/design/widgets/widgets.dart';
+import '../../../l10n/l10n.dart';
 import '../application/focus_log_controller.dart';
 import '../domain/focus_log.dart';
 
@@ -38,7 +39,7 @@ class _FocusLogScreenState extends ConsumerState<FocusLogScreen> {
         leading: const BackButton(),
         titleSpacing: 0,
         title: Text(
-          'سجل التركيز',
+          context.l10n.focusLogTitle,
           style: TextStyle(
             fontFamily: KTypography.displayFamily,
             fontSize: 20,
@@ -53,7 +54,7 @@ class _FocusLogScreenState extends ConsumerState<FocusLogScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'تعذّر تحميل سجل التركيز',
+              context.l10n.focusLogLoadError,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: KTypography.bodyFamily,
@@ -90,7 +91,16 @@ class _FocusLogScreenState extends ConsumerState<FocusLogScreen> {
         palette: palette,
       ),
       const SizedBox(height: 14),
-      _SummaryCard(stats: stats, palette: palette),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        child: _SummaryCard(
+          key: ValueKey<String>('${_range.name}|$_mode'),
+          stats: stats,
+          palette: palette,
+        ),
+      ),
       const SizedBox(height: 18),
       _SectionTitle(title: 'نشاطك في آخر ١٤ يوماً', palette: palette),
       const SizedBox(height: 8),
@@ -211,15 +221,16 @@ class _RangeBar extends StatelessWidget {
   final ValueChanged<FocusLogRange> onChanged;
   final KhutatiPalette palette;
 
-  static const Map<FocusLogRange, String> _labels = <FocusLogRange, String>{
-    FocusLogRange.today: 'اليوم',
-    FocusLogRange.week: 'الأسبوع',
-    FocusLogRange.month: 'الشهر',
-    FocusLogRange.all: 'الكل',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = context.l10n;
+    final Map<FocusLogRange, String> labels = <FocusLogRange, String>{
+      FocusLogRange.today: l10n.focusLogRangeToday,
+      FocusLogRange.week: l10n.focusLogRangeWeek,
+      FocusLogRange.month: l10n.focusLogRangeMonth,
+      FocusLogRange.all: l10n.focusLogRangeAll,
+    };
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -231,26 +242,36 @@ class _RangeBar extends StatelessWidget {
         children: <Widget>[
           for (final FocusLogRange range in FocusLogRange.values)
             Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(range),
+              child: Semantics(
+                button: true,
+                selected: value == range,
+                label: labels[range],
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
                   curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
                   decoration: BoxDecoration(
                     color: value == range ? palette.gold : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    _labels[range]!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 13,
-                      fontWeight: value == range
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: value == range ? Colors.black : palette.tx,
+                  // The surface owns the hit test: an opaque InkWell makes the
+                  // whole pill tappable, including its padding, and paints the
+                  // ripple above the animated fill.
+                  child: KInkSurface(
+                    onTap: () => onChanged(range),
+                    borderRadius: BorderRadius.circular(10),
+                    expand: true,
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    child: Text(
+                      labels[range]!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 13,
+                        fontWeight: value == range
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: value == range ? Colors.black : palette.tx,
+                      ),
                     ),
                   ),
                 ),
@@ -273,30 +294,29 @@ class _ModeFilter extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final KhutatiPalette palette;
 
-  static const List<(String, String)> _items = <(String, String)>[
-    ('all', 'الكل'),
-    ('pomodoro', 'بومودورو'),
-    ('linked', 'مرتبط بمهمة'),
-    ('free', 'مؤقت حر'),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = context.l10n;
+    final List<(String, String)> items = <(String, String)>[
+      ('all', l10n.focusLogModeAll),
+      ('pomodoro', l10n.focusLogModePomodoro),
+      ('linked', l10n.focusLogModeLinked),
+      ('free', l10n.focusLogModeFree),
+    ];
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: <Widget>[
-          for (final (String key, String label) in _items)
+          for (final (String key, String label) in items)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 8),
-              child: GestureDetector(
-                onTap: () => onChanged(key),
+              child: Semantics(
+                button: true,
+                selected: value == key,
+                label: label,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 140),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
                   decoration: BoxDecoration(
                     color: value == key
                         ? palette.gold.withValues(alpha: 0.16)
@@ -304,14 +324,22 @@ class _ModeFilter extends StatelessWidget {
                     border: Border.all(
                       color: value == key ? palette.gold : palette.line,
                     ),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(KMetrics.pillRadius),
                   ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 12,
-                      color: value == key ? palette.gold : palette.tx,
+                  child: KInkSurface(
+                    onTap: () => onChanged(key),
+                    borderRadius: BorderRadius.circular(KMetrics.pillRadius),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 12,
+                        color: value == key ? palette.gold : palette.tx,
+                      ),
                     ),
                   ),
                 ),

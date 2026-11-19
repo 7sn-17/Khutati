@@ -16,7 +16,6 @@ import '../../../l10n/l10n.dart';
 import '../application/plan_browser_controller.dart';
 import '../../achievements/application/achievements_controller.dart';
 import '../../today/application/today_controller.dart';
-import 'task_schedule_sheet.dart';
 
 /// Plan (PRD 5.3) — the whole 68-day journey, browsable by week and day.
 ///
@@ -1398,25 +1397,6 @@ class _TaskLine extends ConsumerWidget {
                 ),
               ),
             ),
-          Tooltip(
-            message: l10n.msTitle,
-            child: InkResponse(
-              radius: 18,
-              onTap: () {
-                ref.read(hapticsProvider).selection();
-                showTaskScheduleSheet(context, task: task);
-              },
-              child: SizedBox(
-                width: 30,
-                height: 30,
-                child: Icon(
-                  Icons.schedule_rounded,
-                  size: 17,
-                  color: manual ? palette.gold : palette.mute,
-                ),
-              ),
-            ),
-          ),
           _taskProgressRing(context, task),
           PopupMenuButton<PlanTaskStatus>(
             tooltip: l10n.planTaskStatusTooltip,

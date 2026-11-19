@@ -96,6 +96,13 @@ class SettingsScreen extends ConsumerWidget {
           subtitle: l10n.settingsPracticalDaysSubtitle,
           onTap: () => context.push('/settings/practical-days'),
         ),
+        const SizedBox(height: KMetrics.cardGap),
+        _SettingsNavRow(
+          icon: Icons.swap_vert_rounded,
+          title: l10n.rsTitle,
+          subtitle: l10n.rsSettingsSubtitle,
+          onTap: () => context.push('/settings/reschedule'),
+        ),
         KSectionHeader(title: l10n.settingsNotifications),
         _SettingsCard(
           child: Column(

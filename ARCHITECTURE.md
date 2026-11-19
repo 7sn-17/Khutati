@@ -788,12 +788,14 @@ layer.
   before an earlier task's day or after a later task's day. Ordering *within* a
   day is a soft user preference. Rest-day targets, unknown tasks, overlapping
   pinned starts, past-midnight finishes and malformed clocks are rejected with
-  a `TaskMoveIssue` the sheet renders in Arabic.
-- **Previews write nothing.** `preview(calendar, selected)` and
-  `previewMove(...)` return a proposal (`SchedulePreview`, `TaskMovePreview`)
-  with the before/after day types, per-day load deltas, moved-task counts,
-  finish-date impact and any overrides that cannot survive. `save` and
-  `commitMove` re-resolve and write in a single transaction.
+  a `TaskMoveIssue` that `previewMove` reports and the screen turns into one
+  Arabic sentence.
+- **Previews write nothing.** `preview(calendar, selected)`,
+  `previewMove(...)` and `previewOverrides(calendar, draft)` return a proposal
+  (`SchedulePreview`, `TaskMovePreview`, `ScheduleImpact`) with the before/after
+  day types, per-day load deltas, moved-task counts, finish-date impact and any
+  overrides that cannot survive. `save`, `commitMove` and `commitOverrides`
+  re-resolve and write in a single transaction.
 - **Reconciliation.** When a weekday change makes an override unsatisfiable,
   `_resolve` drops overrides newest-first until the schedule builds and reports
   them in `SchedulePreview.droppedOverrides`; the confirmation dialog lists
@@ -821,3 +823,44 @@ one minute are ignored everywhere, matching the write-side guard in
 range/mode filters, a summary card, the activity chart, a mode breakdown, and a
 day-grouped list with a detail sheet. The history button on the focus screen
 pushes that route.
+
+## 16. Rescheduling screen
+
+`/settings/reschedule` (`features/plan/presentation/reschedule_screen.dart`) is
+the only place a task can be moved by hand. It replaced the old
+`task_schedule_sheet` bottom sheet, which could not show the destination day or
+the consequence of a move.
+
+- **Route and entry point.** Settings → «الخطة» carries two rows: «أيام العملي»
+  and «تعديل ترتيب المهام». The Plan tab is read-only again; it keeps the gold
+  `edit_calendar_rounded` badge that marks a manually placed task.
+- **Week scope.** v1 shows one week at a time, opening on the current week, with
+  `‹`/`›` to step. Days expand inline (`AnimatedSize`); rest days render as a
+  single inert row.
+- **Three ways to move.** Up/down arrows reorder inside a day; a long-press drag
+  can land on another task row (insert before it) or on a day header (append to
+  that day, which also expands it); tapping a row opens an inline panel with two
+  steppers (day, position) that previews the move live.
+- **Draft model.** `RescheduleDraft` (`features/plan/application`) is immutable,
+  carries the base snapshot, the pending `ScheduleOverrideInput`s and an undo
+  history. Every edit produces a new draft; a rejected edit keeps the previous
+  one, so the screen can never hold a half-applied combination.
+- **Impact, not a table.** `ScheduleRepository.previewOverrides` merges the
+  pending draft over the *stored* overrides (otherwise previously saved moves
+  would appear to snap back), rebuilds once, validates the result and returns
+  `ScheduleImpact`: the new snapshot, the tasks that moved, per-day task/minute
+  deltas sorted by size, and the finish-day delta. The panel shows the first
+  three days plus a «وN أيام أخرى» footer.
+- **Template-path validation.** `_patchOriginal` applies overrides without
+  regenerating the plan, so it cannot rely on the engine's own checks.
+  `_validatePlacements` re-asserts both invariants for either path: no task on a
+  rest day, and no curriculum inversion at day granularity. A draft that fails
+  comes back with `ok: false` and an engine message; the screen shows
+  «لا يمكن تطبيق هذا النقل» and keeps the old draft.
+- **Atomic save.** `commitOverrides` re-runs the preview as its gate, then
+  upserts every row and enqueues one `schedule_override` outbox entry per task
+  inside one transaction. Rows store the *resolved* day and order, so a reload
+  reproduces exactly the preview the user approved. Saving toasts and pops.
+- **Restore.** The app-bar action («إرجاع الكل للجدول التلقائي») confirms in a
+  `KDialog`, deletes every override, reloads and toasts.
+

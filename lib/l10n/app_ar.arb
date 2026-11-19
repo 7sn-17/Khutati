@@ -301,43 +301,6 @@
       }
     }
   },
-  "pdPreviewNoTypeChange": "لن يتغير نوع أي يوم.",
-  "pdPreviewMore": "و{count} يوماً آخر",
-  "@pdPreviewMore": {
-    "description": "Truncated preview table footer",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "pdPreviewMoved": "{count} مهمة ستنتقل أو يتغير وقتها",
-  "@pdPreviewMoved": {
-    "description": "Preview stat: tasks whose day or clock changes",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "pdPreviewChangedDays": "{count} يوماً سيتغير توزيعه",
-  "@pdPreviewChangedDays": {
-    "description": "Preview stat: days whose workload changes",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "pdPreviewLoadDelta": "أكبر فرق في الحمل اليومي: {minutes} دقيقة",
-  "@pdPreviewLoadDelta": {
-    "description": "Preview stat: largest absolute day-load delta",
-    "placeholders": {
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
   "pdPreviewDropped": "سيُلغى تعديل يدوي على {count} مهمة لأنه لم يعد متوافقاً مع التوزيع الجديد.",
   "@pdPreviewDropped": {
     "description": "Warning when a weekday change invalidates manual overrides",
@@ -347,12 +310,72 @@
       }
     }
   },
-  "pdColumnDay": "اليوم",
-  "pdColumnBefore": "قبل",
-  "pdColumnAfter": "بعد",
-  "pdTypePractical": "عملي",
-  "pdTypeRest": "راحة",
-  "pdTypeNormal": "عادي",
+  "pdDayAvailable": "متاح",
+  "pdImpactDaysChanged": "{count, plural, =0{لن يتغير توزيع المهام} =1{يوم واحد سيتغير توزيعه} =2{يومان سيتغير توزيعهما} few{{count} أيام ستتغير} many{{count} يوماً ستتغير} other{{count} يوماً ستتغير}}",
+  "@pdImpactDaysChanged": {
+    "description": "Headline of the practical-day impact preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactAdded": "{count, plural, =1{+مهمة واحدة} =2{+مهمتان} few{+{count} مهام} many{+{count} مهمة} other{+{count} مهمة}}",
+  "@pdImpactAdded": {
+    "description": "Tasks that arrived on a day",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactRemoved": "{count, plural, =1{−مهمة واحدة} =2{−مهمتان} few{−{count} مهام} many{−{count} مهمة} other{−{count} مهمة}}",
+  "@pdImpactRemoved": {
+    "description": "Tasks that left a day",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactTimeOnly": "تغيّر التوقيت فقط",
+  "pdImpactDay": "اليوم {day}",
+  "@pdImpactDay": {
+    "description": "One affected day in the impact list",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactFinishSame": "انتهاء الخطة دون تغيير",
+  "pdImpactFinishLater": "{days, plural, =1{يتأخر انتهاء الخطة يوماً} =2{يتأخر انتهاء الخطة يومين} few{يتأخر انتهاء الخطة {days} أيام} many{يتأخر انتهاء الخطة {days} يوماً} other{يتأخر انتهاء الخطة {days} يوماً}}",
+  "@pdImpactFinishLater": {
+    "description": "The plan finishes later than before",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactFinishEarlier": "{days, plural, =1{يتقدم انتهاء الخطة يوماً} =2{يتقدم انتهاء الخطة يومين} few{يتقدم انتهاء الخطة {days} أيام} many{يتقدم انتهاء الخطة {days} يوماً} other{يتقدم انتهاء الخطة {days} يوماً}}",
+  "@pdImpactFinishEarlier": {
+    "description": "The plan finishes earlier than before",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pdImpactMoreDays": "و{count} أيام أخرى",
+  "@pdImpactMoreDays": {
+    "description": "Truncated impact list footer",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "msTitle": "تغيير موعد المهمة",
   "msManualBadge": "تعديل يدوي",
   "msClose": "إغلاق",
@@ -578,5 +601,137 @@
       }
     }
   },
-  "focusFinishHint": "يمكنك بدء جلسة جديدة في أي وقت"
+  "focusFinishHint": "يمكنك بدء جلسة جديدة في أي وقت",
+  "focusLogTitle": "سجل التركيز",
+  "focusLogLoadError": "تعذّر تحميل سجل التركيز",
+  "focusLogRangeToday": "اليوم",
+  "focusLogRangeWeek": "الأسبوع",
+  "focusLogRangeMonth": "الشهر",
+  "focusLogRangeAll": "الكل",
+  "focusLogModeAll": "الكل",
+  "focusLogModePomodoro": "بومودورو",
+  "focusLogModeLinked": "مرتبط بمهمة",
+  "focusLogModeFree": "مؤقت حر",
+  "rsTitle": "تعديل ترتيب المهام",
+  "rsSettingsSubtitle": "غيّر ترتيب مهامك ووزّعها على أيام الأسبوع كما يناسبك.",
+  "rsWeekOf": "الأسبوع {week} من {total}",
+  "@rsWeekOf": {
+    "description": "Week stepper label on the rescheduling screen",
+    "placeholders": {
+      "week": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "rsWeekRange": "اليوم {from} – {to}",
+  "@rsWeekRange": {
+    "description": "Day range covered by the selected week",
+    "placeholders": {
+      "from": {
+        "type": "int"
+      },
+      "to": {
+        "type": "int"
+      }
+    }
+  },
+  "rsHint": "اضغط يوماً لعرض مهامه، ثم استخدم الأسهم أو اسحب المهمة لتغيير ترتيبها.",
+  "rsTasksAndTime": "{tasks} مهام · {time}",
+  "@rsTasksAndTime": {
+    "description": "Day header summary",
+    "placeholders": {
+      "tasks": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "rsRestDay": "يوم راحة — لا مهام",
+  "rsNoTasks": "لا مهام في هذا اليوم.",
+  "rsMoveTitle": "نقل «{task}»",
+  "@rsMoveTitle": {
+    "description": "Inline move panel heading",
+    "placeholders": {
+      "task": {
+        "type": "String"
+      }
+    }
+  },
+  "rsToDay": "إلى اليوم",
+  "rsPosition": "الترتيب",
+  "rsPositionOf": "{position} من {total}",
+  "@rsPositionOf": {
+    "description": "Position inside a day",
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "rsConfirmMove": "تثبيت النقل",
+  "rsCancelMove": "إلغاء",
+  "rsMoveSameDay": "سيصبح ترتيبها {position} من {total} في اليوم {day}.",
+  "@rsMoveSameDay": {
+    "description": "Preview sentence for a same-day reorder",
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "rsMoveOtherDay": "ستنتقل إلى اليوم {day} بترتيب {position}.",
+  "@rsMoveOtherDay": {
+    "description": "Preview sentence for a cross-day move",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      },
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "rsMoveAffected": "سيتأثر {count} مهمة أخرى.",
+  "@rsMoveAffected": {
+    "description": "How many other tasks shift",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rsMoveInvalid": "لا يمكن تطبيق هذا النقل. جرّب يوماً أو ترتيباً آخر.",
+  "rsImpactTitle": "أثر التعديل",
+  "rsSave": "حفظ التعديلات",
+  "rsSaveCount": "حفظ {count}",
+  "@rsSaveCount": {
+    "description": "Save button with the number of pending changes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rsSaved": "تم حفظ ترتيب المهام.",
+  "rsSaveFailed": "تعذّر حفظ التعديلات. لم يتغير الجدول.",
+  "rsUndo": "تراجع",
+  "rsRestore": "إرجاع الكل للجدول التلقائي",
+  "rsRestored": "عاد الجدول إلى التوزيع التلقائي.",
+  "rsManual": "تعديل يدوي",
+  "rsMoveUp": "تقديم المهمة",
+  "rsMoveDown": "تأخير المهمة"
 }

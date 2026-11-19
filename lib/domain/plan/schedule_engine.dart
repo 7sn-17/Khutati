@@ -262,6 +262,7 @@ abstract final class ScheduleEngine {
     final List<GeneratedDay> generatedDays = <GeneratedDay>[];
     final Map<String, GeneratedTaskPlacement> placements =
         <String, GeneratedTaskPlacement>{};
+    final Set<String> manualIds = overrides.keys.toSet();
 
     for (final ScheduleDayInput day in sortedDays) {
       if (day.isRest) {
@@ -292,7 +293,7 @@ abstract final class ScheduleEngine {
                 override.value.startClock != null)
               override.key: override.value.startClock!,
         },
-        manualIds: overrides.keys.toSet(),
+        manualIds: manualIds,
       );
       generatedDays.add(timed.day);
       placements.addAll(timed.placements);
@@ -333,6 +334,10 @@ abstract final class ScheduleEngine {
   ) {
     if (overrides.isEmpty) return;
 
+    // Validate everything first, then detach the moved tasks in a single pass:
+    // scanning every day once per override is needlessly quadratic on the real
+    // 68-day plan.
+    final Set<String> movedIds = <String>{};
     for (final MapEntry<String, ScheduleOverrideInput> entry
         in overrides.entries) {
       final ScheduleTaskInput? task = taskById[entry.key];
@@ -353,9 +358,10 @@ abstract final class ScheduleEngine {
           'override for ${entry.key} targets rest day ${target.dayNumber}',
         );
       }
-      for (final List<ScheduleTaskInput> list in byDay.values) {
-        list.removeWhere((ScheduleTaskInput item) => item.id == entry.key);
-      }
+      movedIds.add(entry.key);
+    }
+    for (final List<ScheduleTaskInput> list in byDay.values) {
+      list.removeWhere((ScheduleTaskInput item) => movedIds.contains(item.id));
     }
 
     final Map<int, List<MapEntry<String, ScheduleOverrideInput>>> perDay =
