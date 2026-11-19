@@ -7,7 +7,7 @@ import '../../../data/database/app_database.dart';
 import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/plan_progress_repository.dart';
-import '../../../data/repositories/template_repository.dart';
+import '../../../data/repositories/schedule_repository.dart';
 import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
@@ -50,7 +50,7 @@ class PlanDayData {
     required this.subjectAccents,
   });
 
-  final DayRow day;
+  final ScheduledDay day;
   final DateTime date;
   final List<PlanTask> tasks;
   final PlanProgress progress;
@@ -226,7 +226,7 @@ final StreamProvider<PlanBrowserData?>
 planBrowserProvider = StreamProvider<PlanBrowserData?>((Ref ref) {
   final Future<PlanCalendar?> calendar = ref.watch(planCalendarProvider.future);
   final Future<DateTime> now = ref.watch(todayClockProvider.future);
-  final TemplateRepository template = ref.watch(templateRepositoryProvider);
+  final ScheduleRepository schedule = ref.watch(scheduleRepositoryProvider);
   final UserStateRepository userState = ref.watch(userStateRepositoryProvider);
   final PlanProgressRepository progress = ref.watch(
     planProgressRepositoryProvider,
@@ -236,17 +236,17 @@ planBrowserProvider = StreamProvider<PlanBrowserData?>((Ref ref) {
   return _watchPlan(
     calendar: calendar,
     now: now,
-    template: template,
+    schedule: schedule,
     userState: userState,
     progress: progress,
-    stateChanges: _watchUserState(db),
+    stateChanges: _watchPlanChanges(db, schedule),
   );
 });
 
 Stream<PlanBrowserData?> _watchPlan({
   required Future<PlanCalendar?> calendar,
   required Future<DateTime> now,
-  required TemplateRepository template,
+  required ScheduleRepository schedule,
   required UserStateRepository userState,
   required PlanProgressRepository progress,
   required Stream<void> stateChanges,
@@ -258,20 +258,30 @@ Stream<PlanBrowserData?> _watchPlan({
   }
 
   final DateTime current = await now;
-  yield await _build(activeCalendar, current, template, userState, progress);
+  ScheduleSnapshot snapshot = await schedule.load(activeCalendar);
+  yield await _build(activeCalendar, current, snapshot, userState, progress);
 
   await for (final _ in stateChanges) {
-    yield await _build(activeCalendar, current, template, userState, progress);
+    snapshot = await schedule.load(activeCalendar);
+    yield await _build(activeCalendar, current, snapshot, userState, progress);
   }
 }
 
-Stream<void> _watchUserState(AppDatabase db) {
+/// Watches both user progress and the practical-weekday setting. A schedule
+/// change and a step tap must rebuild the same read model.
+Stream<void> _watchPlanChanges(AppDatabase db, ScheduleRepository schedule) {
   final List<StreamSubscription<dynamic>> subscriptions =
       <StreamSubscription<dynamic>>[];
   late final StreamController<void> controller;
 
   controller = StreamController<void>(
     onListen: () {
+      subscriptions.add(
+        schedule
+            .watchPracticalWeekdays()
+            .skip(1)
+            .listen((_) => controller.add(null), onError: controller.addError),
+      );
       subscriptions.add(
         db
             .select(db.userStepStates)
@@ -301,43 +311,35 @@ Stream<void> _watchUserState(AppDatabase db) {
 Future<PlanBrowserData> _build(
   PlanCalendar calendar,
   DateTime now,
-  TemplateRepository template,
+  ScheduleSnapshot schedule,
   UserStateRepository userState,
   PlanProgressRepository progressRepository,
 ) async {
   final ResolvedPlanDay resolved = calendar.resolveToday(now);
-  final List<DayRow> dayRows = await template.allDays();
-  final List<SubjectRow> subjects = await template.allSubjects();
   final Map<String, String> subjectNames = <String, String>{
-    for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
+    for (final SubjectRow subject in schedule.subjects)
+      subject.id: subject.nameAr,
   };
   final Map<String, Color> subjectAccents = <String, Color>{
-    for (final SubjectRow subject in subjects)
+    for (final SubjectRow subject in schedule.subjects)
       subject.id: _hexColor(subject.accentHex),
   };
 
-  final List<TaskWithSteps> templateTasks = await template.allTasksWithSteps();
   final Set<String> completedSteps = await userState.allCompletedStepIds();
   final Map<String, StepProgress> stepProgresses = await userState
       .allStepProgresses();
   final Map<String, String> taskStatuses = await userState.allTaskStatuses();
   final Map<int, PlanProgress> progressByDay = await progressRepository
-      .progressByDay();
-
-  final Map<String, List<TaskWithSteps>> tasksByDay =
-      <String, List<TaskWithSteps>>{};
-  for (final TaskWithSteps item in templateTasks) {
-    tasksByDay.putIfAbsent(item.task.dayId, () => <TaskWithSteps>[]).add(item);
-  }
+      .progressByDay(schedule);
 
   final List<PlanDayData> days = <PlanDayData>[
-    for (final DayRow day in dayRows)
+    for (final ScheduledDay day in schedule.days)
       _dayData(
         day: day,
         calendar: calendar,
         now: now,
         resolved: resolved,
-        items: tasksByDay[day.id] ?? const <TaskWithSteps>[],
+        items: schedule.tasksForDay(day.dayNumber),
         progress: progressByDay[day.dayNumber] ?? PlanProgress.empty,
         completedSteps: completedSteps,
         stepProgresses: stepProgresses,
@@ -358,11 +360,11 @@ Future<PlanBrowserData> _build(
 }
 
 PlanDayData _dayData({
-  required DayRow day,
+  required ScheduledDay day,
   required PlanCalendar calendar,
   required DateTime now,
   required ResolvedPlanDay resolved,
-  required List<TaskWithSteps> items,
+  required List<ScheduledTask> items,
   required PlanProgress progress,
   required Set<String> completedSteps,
   required Map<String, StepProgress> stepProgresses,
@@ -370,9 +372,9 @@ PlanDayData _dayData({
   required Map<String, String> subjectNames,
   required Map<String, Color> subjectAccents,
 }) {
-  final bool isRest = day.type == 'rest';
+  final bool isRest = day.isRest;
   final List<PlanTask> tasks = <PlanTask>[
-    for (final TaskWithSteps item in items)
+    for (final ScheduledTask item in items)
       PlanTask(
         id: item.task.id,
         dayNumber: day.dayNumber,
@@ -381,17 +383,17 @@ PlanDayData _dayData({
         title: item.task.title,
         groupTitle: item.task.groupTitle,
         type: PlanTaskType.parse(item.task.type),
-        suggestedStart: item.task.suggestedStart,
-        suggestedEnd: item.task.suggestedEnd,
+        suggestedStart: item.startClock,
+        suggestedEnd: item.endClock,
         status:
             PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
             PlanTaskStatus.notStarted,
         postponedToDay:
             (PlanTaskStatus.tryParse(taskStatuses[item.task.id]) ??
-                        PlanTaskStatus.notStarted) ==
-                    PlanTaskStatus.postponed
-                ? day.dayNumber + 1
-                : null,
+                    PlanTaskStatus.notStarted) ==
+                PlanTaskStatus.postponed
+            ? day.dayNumber + 1
+            : null,
         steps: <PlanStep>[
           for (final StepRow step in item.steps)
             PlanStep(
@@ -400,8 +402,8 @@ PlanDayData _dayData({
               minutes: step.minutes,
               order: step.sortOrder,
               completed: completedSteps.contains(step.id),
-              suggestedStart: step.suggestedStart,
-              suggestedEnd: step.suggestedEnd,
+              suggestedStart: _spanStart(item, step),
+              suggestedEnd: _spanEnd(item, step),
               progress:
                   stepProgresses[step.id] ??
                   (completedSteps.contains(step.id)
@@ -431,6 +433,18 @@ PlanDayData _dayData({
   );
 }
 
+String? _spanStart(ScheduledTask item, StepRow step) {
+  final ScheduleSpan? span = item.stepSpans[step.id];
+  if (span != null && span.startClock.isNotEmpty) return span.startClock;
+  return step.suggestedStart;
+}
+
+String? _spanEnd(ScheduledTask item, StepRow step) {
+  final ScheduleSpan? span = item.stepSpans[step.id];
+  if (span != null && span.endClock.isNotEmpty) return span.endClock;
+  return step.suggestedEnd;
+}
+
 /// Writes plan task state; the live DB stream rebuilds the Plan tab without a
 /// manual invalidation, so future and past tasks can be updated in place.
 class PlanActions {
@@ -446,10 +460,7 @@ class PlanActions {
 
   /// Sets the step state used by Plan and read by Today, so both tabs agree on
   /// a step's partial/complete state.
-  Future<void> setStepCompleted(
-    String stepId,
-    StepProgress progress,
-  ) async {
+  Future<void> setStepCompleted(String stepId, StepProgress progress) async {
     await _ref
         .read(userStateRepositoryProvider)
         .setStepCompleted(stepId, progress);

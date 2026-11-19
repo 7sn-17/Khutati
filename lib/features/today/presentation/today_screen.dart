@@ -13,8 +13,8 @@ import '../../../features/focus/domain/focus_setup.dart';
 import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/utils/format.dart';
-import '../../../data/database/app_database.dart' show BreakRow;
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/schedule_engine.dart' show ScheduleBreak;
 import '../../../domain/plan/step_progress.dart';
 import '../../../l10n/l10n.dart';
 import '../application/today_controller.dart';
@@ -214,7 +214,7 @@ class _TodayBody extends ConsumerWidget {
         ),
       );
 
-      for (final BreakRow rest in data.breaks) {
+      for (final ScheduleBreak rest in data.breaks) {
         if (rest.startClock != task.suggestedEnd) continue;
         if (!placedBreaks.add(rest.id)) continue;
         children.add(

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 /**
  * Fires at the exact end of a focus or break phase.
@@ -27,10 +28,28 @@ class FocusAlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action != ACTION_ALARM) return
+        val data = intent ?: return
+        if (data.action != ACTION_ALARM) return
 
-        val phase = intent.getStringExtra(FocusTimerService.EXTRA_PHASE) ?: "focus"
-        val wanted = intent.getBooleanExtra(FocusTimerService.EXTRA_NOTIFY, true)
+        val phase = data.getStringExtra(FocusTimerService.EXTRA_PHASE) ?: "focus"
+        val wanted = data.getBooleanExtra(FocusTimerService.EXTRA_NOTIFY, true)
+
+        // The service always gets the expiry, even when alerts are muted or
+        // the app is visible. The toggle controls the *alert*, not the timer:
+        // returning early here left a muted session frozen at 00:00 and its
+        // break never started. An exact alarm grants the short allowlist that
+        // makes a foreground-service start legal from here on Android 8+.
+        try {
+            val service = Intent(context, FocusTimerService::class.java).apply {
+                action = FocusTimerService.ACTION_ALARM_EXPIRE
+            }
+            ContextCompat.startForegroundService(context, service)
+        } catch (_: Exception) {
+            // If the service cannot start, the app reconciles against
+            // targetEndMs on the next resume.
+        }
+
+        // Dart posts its own alert while the UI is alive.
         if (!wanted) return
         if (isAppForeground(context)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -38,17 +57,6 @@ class FocusAlarmReceiver : BroadcastReceiver() {
             PackageManager.PERMISSION_GRANTED
         ) {
             return
-        }
-
-        // Let the service advance the native phase (and arm the break alarm).
-        // If it cannot be started, the app reconciles against targetEndMs on
-        // the next resume, so the notification below is still correct.
-        try {
-            val service = Intent(context, FocusTimerService::class.java).apply {
-                action = FocusTimerService.ACTION_ALARM_EXPIRE
-            }
-            context.startService(service)
-        } catch (_: Exception) {
         }
 
         FocusTimerService.ensureChannels(context)

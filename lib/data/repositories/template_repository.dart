@@ -71,12 +71,20 @@ class TemplateRepository {
     )..where((t) => t.dayNumber.equals(dayNumber))).getSingleOrNull();
   }
 
+  /// Every scheduled break. The schedule repository groups these by day so a
+  /// custom schedule can replace them without mutating the template.
+  Future<List<BreakRow>> allBreaks() {
+    final query = _db.select(_db.breaks);
+    query.orderBy(<OrderingTerm Function($BreaksTable)>[
+      ($BreaksTable t) => OrderingTerm.asc(t.startClock),
+    ]);
+    return query.get();
+  }
+
   /// The scheduled breaks of one day, oldest first. Today reads breaks through
   /// this instead of [dayBundle] so its task list has a single source.
   Future<List<BreakRow>> breaksForDay(String dayId) {
-    return (_db.select(
-      _db.breaks,
-    )..where((t) => t.dayId.equals(dayId))).get();
+    return (_db.select(_db.breaks)..where((t) => t.dayId.equals(dayId))).get();
   }
 
   /// Loads a day, its tasks and their steps in one round trip.

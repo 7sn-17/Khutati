@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/database/app_database.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/plan_progress_repository.dart';
+import '../../../data/repositories/schedule_repository.dart';
 import '../../../data/repositories/template_repository.dart';
 import '../../../data/repositories/user_state_repository.dart';
+import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../features/today/application/today_controller.dart';
 import '../../../features/focus/application/focus_controller.dart';
@@ -114,25 +116,33 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
       ref.watch(focusHistoryProvider).valueOrNull ?? const <FocusSession>[];
 
   final TemplateRepository template = ref.watch(templateRepositoryProvider);
+  final ScheduleRepository scheduleRepository = ref.watch(
+    scheduleRepositoryProvider,
+  );
   final UserStateRepository userState = ref.watch(userStateRepositoryProvider);
   final PlanProgressRepository progress = ref.watch(
     planProgressRepositoryProvider,
   );
 
-  final List<DayRow> allDays = await template.allDays();
-  final List<SubjectRow> subjects = await template.allSubjects();
-  final List<TaskWithSteps> tasks = await template.allTasksWithSteps();
+  final PlanCalendar? calendar = await ref.watch(planCalendarProvider.future);
+  if (calendar == null) return null;
+  final ScheduleSnapshot schedule = await scheduleRepository.load(calendar);
+  final List<ScheduledDay> allDays = schedule.days;
+  final List<SubjectRow> subjects = schedule.subjects;
+  final List<ScheduledTask> tasks = schedule.tasks;
   final PlanRow? plan = await template.activePlan();
 
   final Set<String> completedStepIds = await userState.allCompletedStepIds();
   final Map<String, String> taskStatuses = await userState.allTaskStatuses();
-  final Map<int, PlanProgress> progressByDay = await progress.progressByDay();
+  final Map<int, PlanProgress> progressByDay = await progress.progressByDay(
+    schedule,
+  );
   final Map<String, PlanProgress> progressBySubject = await progress
-      .progressBySubject();
+      .progressBySubject(schedule);
 
   // step id -> kind
   final Map<String, String> stepKind = <String, String>{};
-  for (final TaskWithSteps t in tasks) {
+  for (final ScheduledTask t in tasks) {
     for (final StepRow s in t.steps) {
       stepKind[s.id] = s.kind;
     }
@@ -141,22 +151,12 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
   // total points (all days)
   int totalPoints = 0;
   final Map<int, int> dayPoints = <int, int>{};
-  final Map<String, int> dayByTaskId = <String, int>{};
-  for (final DayRow d in allDays) {
-    dayByTaskId[d.id] = d.dayNumber;
-  }
-  // map task -> day number
-  final Map<String, int> taskDay = <String, int>{};
-  for (final TaskWithSteps t in tasks) {
-    // find day number by task.dayId
-    for (final DayRow d in allDays) {
-      if (d.id == t.task.dayId) {
-        taskDay[t.task.id] = d.dayNumber;
-      }
-    }
-  }
+  // map task -> effective day number
+  final Map<String, int> taskDay = <String, int>{
+    for (final ScheduledTask t in tasks) t.task.id: t.dayNumber,
+  };
 
-  for (final TaskWithSteps t in tasks) {
+  for (final ScheduledTask t in tasks) {
     final bool taskComplete = taskStatuses[t.task.id] == 'completed';
     int taskPts = 0;
     for (final StepRow s in t.steps) {
@@ -180,7 +180,7 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
   final int todayDayNumber = today?.dayNumber ?? 0;
   final int totalDays = allDays.length;
 
-  for (final DayRow d in allDays) {
+  for (final ScheduledDay d in allDays) {
     final int dn = d.dayNumber;
     final PlanProgress pp = progressByDay[dn] ?? PlanProgress.empty;
     dayTasks[dn] = pp.completedTasks;
@@ -191,7 +191,7 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
     // as "راحة" (dashed) whether it is behind us or still ahead. Checking the
     // future branch first used to hide every upcoming rest day as "قادم", which
     // is why they looked unrecorded in the map.
-    if (d.type == 'rest') {
+    if (d.isRest) {
       dayStatus[dn] = 'rest';
     } else if (dn > todayDayNumber || todayDayNumber == 0) {
       dayStatus[dn] = 'future';
@@ -261,7 +261,7 @@ achievementsProvider = FutureProvider<AchievementsData?>((Ref ref) async {
 
   // completed question steps count
   int questionStepsCompleted = 0;
-  for (final TaskWithSteps t in tasks) {
+  for (final ScheduledTask t in tasks) {
     for (final StepRow s in t.steps) {
       if (s.kind != 'questions') continue;
       if (completedStepIds.contains(s.id)) questionStepsCompleted += 1;

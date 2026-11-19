@@ -7,6 +7,7 @@ import '../domain/plan/plan_dataset.dart';
 import 'database/app_database.dart';
 import 'database/database_provider.dart';
 import 'repositories/plan_progress_repository.dart';
+import 'repositories/schedule_repository.dart';
 import 'repositories/template_repository.dart';
 import 'repositories/user_state_repository.dart';
 
@@ -22,12 +23,19 @@ final Provider<UserStateRepository> userStateRepositoryProvider =
       return UserStateRepository(ref.watch(appDatabaseProvider));
     });
 
-final Provider<PlanProgressRepository> planProgressRepositoryProvider =
-    Provider<PlanProgressRepository>((Ref ref) {
-      return PlanProgressRepository(
+/// The single owner of practical-weekday settings and effective schedule
+/// generation. Both tabs and every derived read model use this repository.
+final Provider<ScheduleRepository> scheduleRepositoryProvider =
+    Provider<ScheduleRepository>((Ref ref) {
+      return ScheduleRepository(
         ref.watch(appDatabaseProvider),
         ref.watch(templateRepositoryProvider),
       );
+    });
+
+final Provider<PlanProgressRepository> planProgressRepositoryProvider =
+    Provider<PlanProgressRepository>((Ref ref) {
+      return PlanProgressRepository(ref.watch(appDatabaseProvider));
     });
 
 /// The imported plan row; completes after the bootstrap in `main()`.

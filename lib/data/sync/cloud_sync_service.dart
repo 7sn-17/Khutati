@@ -7,7 +7,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
+import '../providers.dart';
+import '../repositories/schedule_repository.dart';
 import '../repositories/sync_queue_repository.dart';
+import '../../domain/plan/practical_weekdays.dart';
 
 /// Offline-first uploader for user progress and focus history.
 ///
@@ -110,22 +113,24 @@ class CloudSyncService {
       try {
         switch (group.key) {
           case 'task_state':
-            await client.from('user_task_states').upsert(
-              payload,
-              onConflict: 'user_id,task_id',
-            );
+            await client
+                .from('user_task_states')
+                .upsert(payload, onConflict: 'user_id,task_id');
             break;
           case 'step_state':
-            await client.from('user_step_states').upsert(
-              payload,
-              onConflict: 'user_id,step_id',
-            );
+            await client
+                .from('user_step_states')
+                .upsert(payload, onConflict: 'user_id,step_id');
             break;
           case 'focus_session':
-            await client.from('focus_sessions').upsert(
-              payload,
-              onConflict: 'user_id,id',
-            );
+            await client
+                .from('focus_sessions')
+                .upsert(payload, onConflict: 'user_id,id');
+            break;
+          case 'schedule_settings':
+            await client
+                .from('user_schedule_settings')
+                .upsert(payload, onConflict: 'user_id');
             break;
           default:
             // An unknown entity can never succeed; dropping it prevents a
@@ -145,14 +150,50 @@ class CloudSyncService {
     return failed.isEmpty;
   }
 
-  Future<void> _pull(
-    SupabaseClient client,
-    User user,
-    AppDatabase db,
-  ) async {
+  Future<void> _pull(SupabaseClient client, User user, AppDatabase db) async {
     await _pullTaskStates(client, user, db);
     await _pullStepStates(client, user, db);
     await _pullFocusSessions(client, user, db);
+    await _pullScheduleSettings(client, user);
+  }
+
+  /// Pulls the cross-device practical-weekday choice. The local setting wins on
+  /// ties, exactly like progress; an empty remote array means the original
+  /// schedule and therefore clears any local override.
+  Future<void> _pullScheduleSettings(SupabaseClient client, User user) async {
+    final List<dynamic> raw = await client
+        .from('user_schedule_settings')
+        .select()
+        .eq('user_id', user.id)
+        .limit(1);
+    if (raw.isEmpty) return;
+    final dynamic item = raw.first;
+    if (item is! Map) return;
+    final Map<String, dynamic> row = item.cast<String, dynamic>();
+    final DateTime? remoteAt = DateTime.tryParse(
+      (row['updated_at'] as String?) ?? '',
+    );
+    if (remoteAt == null) return;
+
+    final dynamic remoteDays = row['practical_weekdays'];
+    List<int>? weekdays;
+    if (remoteDays is List) {
+      final List<int> values = <int>[
+        for (final dynamic value in remoteDays)
+          if (value is num) value.toInt(),
+      ];
+      if (values.length != remoteDays.length) return;
+      if (values.isNotEmpty) {
+        try {
+          weekdays = PracticalWeekdays.validate(values);
+        } catch (_) {
+          // A malformed remote preference must not corrupt the local plan.
+          return;
+        }
+      }
+    }
+
+    await _ref.read(scheduleRepositoryProvider).applyRemote(weekdays, remoteAt);
   }
 
   Future<void> _pullTaskStates(
@@ -190,7 +231,9 @@ class CloudSyncService {
           .insertOnConflictUpdate(
             UserTaskStatesCompanion.insert(
               taskId: taskId,
-              status: Value<String>((row['status'] as String?) ?? 'not_started'),
+              status: Value<String>(
+                (row['status'] as String?) ?? 'not_started',
+              ),
               completedAt: Value<DateTime?>(
                 DateTime.tryParse((row['completed_at'] as String?) ?? ''),
               ),

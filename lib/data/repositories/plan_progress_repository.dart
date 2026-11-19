@@ -1,83 +1,57 @@
 import '../../domain/plan/plan_progress.dart';
 import '../../domain/plan/step_progress.dart';
 import '../database/app_database.dart';
-import '../database/tables.dart';
-import 'template_repository.dart';
+import 'schedule_repository.dart';
 
-/// Bridges Drift rows to the pure progress engine.
+/// Bridges Drift user state to the pure progress engine.
 ///
-/// The engine never sees Drift; this repository is the only place where template
-/// rows and user state are joined.
+/// The effective task-to-day mapping comes from a [ScheduleSnapshot], never
+/// from `tasks.day_id` directly. That is what makes Plan, Today, Achievements
+/// and overdue counts agree after a practical-day change.
 class PlanProgressRepository {
-  PlanProgressRepository(this._db, this._template);
+  PlanProgressRepository(this._db);
 
   final AppDatabase _db;
-  final TemplateRepository _template;
 
-  /// Progress for one plan day, or [PlanProgress.empty] outside the plan.
-  Future<PlanProgress> dayProgress(int dayNumber) async {
-    final DayRow? day = await _template.dayByNumber(dayNumber);
-    if (day == null) return PlanProgress.empty;
-
-    final _LoadedPlan plan = await _load();
-    return PlanProgress.of(
-      plan.tasks
-          .where(
-            (TaskRow task) =>
-                task.dayId == day.id &&
-                !plan.postponedTaskIds.contains(task.id),
-          )
-          .map(plan.inputFor),
-    );
+  /// Progress for one effective plan day, or [PlanProgress.empty] outside the
+  /// plan.
+  Future<PlanProgress> dayProgress(
+    int dayNumber,
+    ScheduleSnapshot schedule,
+  ) async {
+    final _LoadedPlan plan = await _load(schedule);
+    return PlanProgress.of(schedule.tasksForDay(dayNumber).map(plan.inputFor));
   }
 
   /// Progress across all 68 days — the number Achievements and Today's level
   /// card must agree on.
-  Future<PlanProgress> overallProgress() async {
-    final _LoadedPlan plan = await _load();
-    return PlanProgress.of(
-      plan.tasks
-          .where(
-            (TaskRow task) => !plan.postponedTaskIds.contains(task.id),
-          )
-          .map(plan.inputFor),
-    );
+  Future<PlanProgress> overallProgress(ScheduleSnapshot schedule) async {
+    final _LoadedPlan plan = await _load(schedule);
+    return PlanProgress.of(schedule.tasks.map(plan.inputFor));
   }
 
-  /// Progress for every plan day, keyed by 1-based day number.
+  /// Progress for every effective plan day, keyed by 1-based day number.
   ///
   /// Today needs a streak and overdue totals, which would otherwise mean one
   /// query per day. This loads the plan once and groups it in memory.
-  Future<Map<int, PlanProgress>> progressByDay() async {
-    final List<DayRow> days = await _template.allDays();
-    final _LoadedPlan plan = await _load();
-
-    final Map<String, int> numberByDayId = <String, int>{
-      for (final DayRow day in days) day.id: day.dayNumber,
-    };
-    final Map<int, List<ProgressTaskInput>> grouped =
-        <int, List<ProgressTaskInput>>{};
-
-    for (final TaskRow task in plan.tasks) {
-      if (plan.postponedTaskIds.contains(task.id)) continue;
-      final int? dayNumber = numberByDayId[task.dayId];
-      if (dayNumber == null) continue;
-      grouped
-          .putIfAbsent(dayNumber, () => <ProgressTaskInput>[])
-          .add(plan.inputFor(task));
-    }
-
+  Future<Map<int, PlanProgress>> progressByDay(
+    ScheduleSnapshot schedule,
+  ) async {
+    final _LoadedPlan plan = await _load(schedule);
     return <int, PlanProgress>{
-      for (final DayRow day in days)
+      for (final ScheduledDay day in schedule.days)
         day.dayNumber: PlanProgress.of(
-          grouped[day.dayNumber] ?? const <ProgressTaskInput>[],
+          schedule.tasksForDay(day.dayNumber).map(plan.inputFor),
         ),
     };
   }
 
   /// Work still open on study days before [dayNumber] (PRD 5.3 overdue).
-  Future<({int tasks, int minutes})> overdueBefore(int dayNumber) async {
-    final Map<int, PlanProgress> byDay = await progressByDay();
+  Future<({int tasks, int minutes})> overdueBefore(
+    int dayNumber,
+    ScheduleSnapshot schedule,
+  ) async {
+    final Map<int, PlanProgress> byDay = await progressByDay(schedule);
     int tasks = 0;
     int minutes = 0;
 
@@ -94,15 +68,19 @@ class PlanProgressRepository {
   }
 
   /// Per-subject totals for the Achievements screen (PRD 5.7).
-  Future<Map<String, PlanProgress>> progressBySubject() async {
-    final _LoadedPlan plan = await _load();
-    final Map<String, List<TaskRow>> grouped = <String, List<TaskRow>>{};
-    for (final TaskRow task in plan.tasks) {
-      if (plan.postponedTaskIds.contains(task.id)) continue;
-      grouped.putIfAbsent(task.subjectId, () => <TaskRow>[]).add(task);
+  Future<Map<String, PlanProgress>> progressBySubject(
+    ScheduleSnapshot schedule,
+  ) async {
+    final _LoadedPlan plan = await _load(schedule);
+    final Map<String, List<ScheduledTask>> grouped =
+        <String, List<ScheduledTask>>{};
+    for (final ScheduledTask task in schedule.tasks) {
+      grouped
+          .putIfAbsent(task.task.subjectId, () => <ScheduledTask>[])
+          .add(task);
     }
     return <String, PlanProgress>{
-      for (final MapEntry<String, List<TaskRow>> entry in grouped.entries)
+      for (final MapEntry<String, List<ScheduledTask>> entry in grouped.entries)
         entry.key: PlanProgress.of(entry.value.map(plan.inputFor)),
     };
   }
@@ -126,29 +104,13 @@ class PlanProgressRepository {
     };
   }
 
-  Future<_LoadedPlan> _load() async {
-    final List<TaskRow> taskRows = await _db.select(_db.tasks).get();
-    final List<StepRow> stepRows = await _db.select(_db.steps).get();
-
-    final Map<String, TaskRow> tasks = <String, TaskRow>{
-      for (final TaskRow task in taskRows) task.id: task,
-    };
-    final Map<String, List<StepRow>> steps = <String, List<StepRow>>{};
-    for (final StepRow step in stepRows) {
-      steps.putIfAbsent(step.taskId, () => <StepRow>[]).add(step);
-    }
-
+  Future<_LoadedPlan> _load(ScheduleSnapshot schedule) async {
     final List<UserStepStateRow> stepStates = await _db
         .select(_db.userStepStates)
         .get();
     final List<UserTaskStateRow> taskStates = await _db
         .select(_db.userTaskStates)
         .get();
-
-    final Set<String> postponedTaskIds = <String>{
-      for (final UserTaskStateRow state in taskStates)
-        if (state.status == 'postponed') state.taskId,
-    };
 
     final Map<String, StepProgress> stepProgresses = <String, StepProgress>{};
     for (final UserStepStateRow state in stepStates) {
@@ -161,8 +123,6 @@ class PlanProgressRepository {
     }
 
     return _LoadedPlan(
-      tasks: tasks.values.toList(growable: false),
-      stepsByTask: steps,
       completedStepIds: <String>{
         for (final UserStepStateRow state in stepStates)
           if (state.completed) state.stepId,
@@ -171,7 +131,6 @@ class PlanProgressRepository {
         for (final UserTaskStateRow state in taskStates)
           if (state.status == 'completed') state.taskId,
       },
-      postponedTaskIds: postponedTaskIds,
       stepProgresses: stepProgresses,
     );
   }
@@ -179,34 +138,28 @@ class PlanProgressRepository {
 
 class _LoadedPlan {
   const _LoadedPlan({
-    required this.tasks,
-    required this.stepsByTask,
     required this.completedStepIds,
     required this.completedTaskIds,
-    required this.postponedTaskIds,
     required this.stepProgresses,
   });
 
-  final List<TaskRow> tasks;
-  final Map<String, List<StepRow>> stepsByTask;
   final Set<String> completedStepIds;
   final Set<String> completedTaskIds;
-  final Set<String> postponedTaskIds;
   final Map<String, StepProgress> stepProgresses;
 
-  ProgressTaskInput inputFor(TaskRow task) {
-    final List<StepRow> rows = stepsByTask[task.id] ?? const <StepRow>[];
+  ProgressTaskInput inputFor(ScheduledTask task) {
+    final List<StepRow> rows = task.steps;
     final List<ProgressStepInput> steps = rows.isEmpty
         ? <ProgressStepInput>[
             // Defensive: an imported task always has steps, but a hand-edited
             // database (or a future user task) may not.
             ProgressStepInput(
-              id: '${task.id}-total',
+              id: '${task.task.id}-total',
               kind: ProgressStepKinds.study,
               minutes:
-                  task.attendanceMinutes +
-                  task.studyMinutes +
-                  task.questionMinutes,
+                  task.task.attendanceMinutes +
+                  task.task.studyMinutes +
+                  task.task.questionMinutes,
               completed: false,
             ),
           ]
@@ -217,15 +170,14 @@ class _LoadedPlan {
                 kind: step.kind,
                 minutes: step.minutes,
                 completed: completedStepIds.contains(step.id),
-                progress:
-                    stepProgresses[step.id] ?? StepProgress.notStarted,
+                progress: stepProgresses[step.id] ?? StepProgress.notStarted,
               ),
           ];
 
     return ProgressTaskInput(
-      id: task.id,
+      id: task.task.id,
       steps: steps,
-      completed: completedTaskIds.contains(task.id),
+      completed: completedTaskIds.contains(task.task.id),
     );
   }
 }

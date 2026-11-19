@@ -239,6 +239,19 @@ The Dart isolate can be frozen by Doze. Therefore:
    `FocusAlarmReceiver` fires, advances the native phase (arming the break alarm),
    and posts a `NotificationCompat` heads-up with sound. `MainActivity` writes
    `flutter.app_foreground` on resume/pause so the two never double-alert.
+4. **Every command restores before it acts.** `FocusTimerService.restoreFromPrefs`
+   runs at the top of `onStartCommand` for every action except `START`. Without it
+   a process killed mid-session came back with default fields: a stale alarm
+   invented a five-minute break, and the notification's pause became a no-op.
+5. **The notification is drawn by the system.** The running notification uses
+   `setUsesChronometer(true)` + `setChronometerCountDown(true)` with
+   `when = targetEndMillis`, so nothing wakes up once a second just to repaint a
+   countdown. Only phase changes repost it.
+6. **Muting alerts never stops the timer.** `FocusAlarmReceiver` always hands the
+   expiry to the service (through `ContextCompat.startForegroundService`) and only
+   skips the audible notification. The service calls `startForeground` before
+   touching state, which keeps the Android 8+ foreground-service contract even
+   when the alarm is the thing starting it.
 
 ### 5.3 Notification actions and cold start
 
@@ -252,6 +265,14 @@ The Dart isolate can be frozen by Doze. Therefore:
 
 Tapping the notification body carries **no** action, so merely opening the app can
 never end a session.
+
+The ongoing notification exposes, depending on state: pause/resume, end, and one
+"move on" action — skip to the next step, start the planned break, or skip a
+running break. Pause/resume/end are `PendingIntent.getService` calls handled
+entirely in Kotlin; skip/break open the app and travel as `focus_action`.
+`FocusScreen` consumes a queued action **before** reconciling with the service
+(`_reconcile`), so an "end" that arrived while the app was closed wins over a
+stale in-app deadline and the service is not re-armed by mistake.
 
 ### 5.4 Exact-alarm permission flow
 
@@ -675,6 +696,9 @@ scrolling list items; they are rasterised per item per frame.
 | Step state machine | `test/domain/step_progress_test.dart` | full 8-tap sequence, distinct 1/3 codes, both halves = 0.5 |
 | Sync outbox | `test/data/sync_queue_repository_test.dart` | coalescing, ordering, batch cap, ack-only deletion, attempt counting, re-enqueue reset |
 | Database | `test/data/app_database_test.dart` | schema, progress persistence, sync queue insert |
+| Schedule engine | `test/domain/schedule_engine_test.dart` | partition, rest days, forwarding, times, invalid input |
+| Schedule repository | `test/data/schedule_repository_test.dart` | default mirror, id/week preservation, preview, reset, remote wins, one outbox row |
+| Focus log | `test/domain/focus_log_test.dart` | sub-minute filtering, ranges, streak, grouping, activity strip, best day |
 | Plan engine | `test/plan_engine_test.dart`, `plan_calendar_matrix_test.dart`, `plan_today_resolution_test.dart` | date mapping, midnight, totals |
 | Design parity | `test/design/*` | SVG paths and tokens match the prototype |
 | Formatting | `test/core/format_test.dart` | Arabic digits, durations |
@@ -699,3 +723,41 @@ Rules for new tests: database tests use `AppDatabase.memory()` and close in
   map to specific Arabic messages (`AuthFailure`), never raw exception text.
 - **No silent data loss.** The only destructive path is an explicit reset, and it
   deletes user rows only — template tables are untouched.
+
+---
+
+## 14. Practical-weekday schedule
+
+The user can change the two practical weekdays in Settings. The template is
+never edited; the effective schedule is derived.
+
+- **Persistence.** `ScheduleRepository` stores the choice in `app_settings`
+  (`schedule.practical_weekdays_v1`) plus an `updated_at` sibling. Removing the
+  key restores the original plan exactly, which is what the reset action does.
+- **Engine.** `domain/plan/schedule_engine.dart` is pure Dart. Each week's
+  ordered task list is partitioned into contiguous groups (one per study day) by
+  a DP that minimises squared deviation from a 2:1 normal/practical workload.
+  Rest days never move and never receive tasks; a selected weekday that lands on
+  a rest day is forwarded to the nearest free day (the original plan's
+  Friday-rest → Saturday-practical rule). No task is split or re-identified, so
+  progress keyed by task/step id survives a change.
+- **One snapshot.** `ScheduleSnapshot` is built once per setting value and is
+  read by Plan, Today, progress and achievements. Both controllers also watch
+  the setting stream, so a save rebuilds every view without a restart.
+- **Sync.** A save writes the setting and enqueues `schedule_settings`
+  (`practical_weekdays`) in the same transaction. `CloudSyncService` upserts it
+  to `user_schedule_settings` and applies remote values with the usual
+  "local wins on ties" rule; an empty array means "original".
+
+## 15. Focus log
+
+`features/focus/domain/focus_log.dart` aggregates recorded sessions without
+touching Flutter or SQLite: range filters, per-day grouping, totals, completion
+rate, streak, best day, per-mode split, and a 14-day activity strip. Rows under
+one minute are ignored everywhere, matching the write-side guard in
+`FocusController._recordSession`.
+
+`focusLogProvider` streams the table newest-first; `/focus/log` renders it with
+range/mode filters, a summary card, the activity chart, a mode breakdown, and a
+day-grouped list with a detail sheet. The history button on the focus screen
+pushes that route.

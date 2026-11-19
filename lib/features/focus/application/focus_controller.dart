@@ -336,7 +336,7 @@ class FocusController extends Notifier<FocusSessionState> {
   }
 
   void pause() {
-    if (!state.isRunning) return;
+    if (_busy || !state.isRunning) return;
     _ticker?.cancel();
     _pausedRemaining = state.remainingSeconds;
     state = state.copyWith(stage: FocusStage.paused);
@@ -345,7 +345,7 @@ class FocusController extends Notifier<FocusSessionState> {
   }
 
   Future<void> resume() async {
-    if (!state.isPaused) return;
+    if (_busy || !state.isPaused) return;
     if (state.mode == FocusMode.free) {
       state = state.copyWith(stage: FocusStage.running);
       _startTicker();
@@ -374,15 +374,23 @@ class FocusController extends Notifier<FocusSessionState> {
   /// "End": finish the current step now, record the real elapsed time and mark
   /// the step 100% complete (never a partial 50% write).
   ///
+  /// [elapsedSeconds] comes from the native service when the end was tapped in
+  /// the notification while the Dart ticker was frozen. Without it the record
+  /// would stop at the last repaint, not at the moment the user ended.
+  ///
   /// If the task has a next step, transition straight to it (resetting the
   /// timer) instead of showing the completion screen. Only the last step lands
   /// on the completion screen.
-  Future<void> endStep() async {
+  Future<void> endStep({int? elapsedSeconds}) async {
     if (_busy || !(state.isRunning || state.isPaused)) return;
     _busy = true;
     try {
       _ticker?.cancel();
-      final int recorded = _elapsedSeconds();
+      // Free mode counts up and has no meaningful plan cap, so it keeps its
+      // own clock; a native report only exists for countdown phases.
+      final int recorded = elapsedSeconds == null
+          ? _elapsedSeconds()
+          : elapsedSeconds.clamp(0, state.plannedSeconds);
       final FocusPhase phase = state.phase;
       if (phase == FocusPhase.focus) {
         await _markCurrentStepComplete();
@@ -413,7 +421,7 @@ class FocusController extends Notifier<FocusSessionState> {
         }
       }
 
-      _finish(FocusEndReason.ended, recorded);
+      await _finish(FocusEndReason.ended, recorded);
     } finally {
       _busy = false;
     }
@@ -428,7 +436,7 @@ class FocusController extends Notifier<FocusSessionState> {
       _ticker?.cancel();
       final int recorded = _elapsedSeconds();
       await _recordSession(completed: false, actualSeconds: recorded);
-      _finish(FocusEndReason.skipped, recorded);
+      await _finish(FocusEndReason.skipped, recorded);
     } finally {
       _busy = false;
     }
@@ -488,7 +496,7 @@ class FocusController extends Notifier<FocusSessionState> {
         if (next == null || next.minutes <= 0) {
           // Nothing left to move to: park on the skipped screen instead of
           // leaving a dead 00:00 timer running on the last step.
-          _finish(FocusEndReason.skipped, recorded);
+          await _finish(FocusEndReason.skipped, recorded);
           return;
         }
         final DateTime now = DateTime.now();
@@ -538,7 +546,7 @@ class FocusController extends Notifier<FocusSessionState> {
       }
 
       // Pomodoro with no break, or any other phase: end without completing.
-      _finish(FocusEndReason.skipped, recorded);
+      await _finish(FocusEndReason.skipped, recorded);
     } finally {
       _busy = false;
     }
@@ -626,12 +634,25 @@ class FocusController extends Notifier<FocusSessionState> {
   /// still goes through [consumePendingAction].
   void _onNativeEvent(dynamic raw) {
     if (raw is! Map) return;
+    // A phase transition is already being recorded; a second action arriving
+    // in the middle of it would corrupt the state it is about to publish.
+    if (_busy) return;
     final Object? event = raw['event'];
 
     switch (event) {
       case 'end':
         if (_busy || !(state.isRunning || state.isPaused)) return;
-        unawaited(_applyLiveAction('end', endStep));
+        final int? elapsedMs = (raw['elapsedMs'] as num?)?.toInt();
+        unawaited(
+          _applyLiveAction(
+            'end',
+            () => endStep(
+              elapsedSeconds: elapsedMs == null
+                  ? null
+                  : (elapsedMs / 1000).round(),
+            ),
+          ),
+        );
       case 'pause':
         if (!state.isRunning) return;
         final int ms = (raw['remainingMs'] as num?)?.toInt() ?? 0;
@@ -706,9 +727,11 @@ class FocusController extends Notifier<FocusSessionState> {
   Future<void> _onTimerComplete() async {
     if (state.mode == FocusMode.free) return;
     if (_busy || !state.isRunning) return;
-    await _notifyTimerComplete(state.phase);
+    // Claim the transition *before* awaiting the alert. Two ticks (or a tick
+    // racing a lifecycle reconcile) must never record the same phase twice.
     _busy = true;
     try {
+      await _notifyTimerComplete(state.phase);
       _ticker?.cancel();
       final FocusPhase phase = state.phase;
       final int planned = state.plannedSeconds;
@@ -739,7 +762,6 @@ class FocusController extends Notifier<FocusSessionState> {
           _startTicker();
           await _nativeStart(phase: FocusPhase.focus, seconds: seconds);
           _persist();
-          _busy = false;
           return;
         }
       }
@@ -772,15 +794,17 @@ class FocusController extends Notifier<FocusSessionState> {
         _persist();
         return;
       }
-      _finish(FocusEndReason.completed, planned);
+      await _finish(FocusEndReason.completed, planned);
     } finally {
       _busy = false;
     }
   }
 
-  void _finish(FocusEndReason reason, int recorded) {
+  Future<void> _finish(FocusEndReason reason, int recorded) async {
     _ticker?.cancel();
-    unawaited(_nativeStop());
+    // Await the native stop so a start that follows immediately cannot be
+    // killed by a late stop intent.
+    await _nativeStop();
     state = state.finish(reason: reason, recordedSeconds: recorded);
     _persist();
   }
@@ -824,6 +848,9 @@ class FocusController extends Notifier<FocusSessionState> {
   ///   next one — is unreachable from lifecycle reconciliation. That is the
   ///   fix for "opening the app from the notification ends my task".
   Future<void> syncWithNative() async {
+    // A transition already in flight owns the state; reconciling in the
+    // middle of it would record the same phase twice.
+    if (_busy) return;
     if (!(state.isRunning || state.isPaused)) return;
     final Map<dynamic, dynamic> native = await _nativeGetState();
 
@@ -883,40 +910,33 @@ class FocusController extends Notifier<FocusSessionState> {
     }
 
     final int seconds = (remainingMs / 1000).ceil();
+    final DateTime now = DateTime.now();
+    final int planned = nativePlannedSeconds > 0
+        ? nativePlannedSeconds
+        : state.plannedSeconds;
 
-    // Native is running: resume from the exact remaining time.
+    // Native is running: resume from the exact remaining time. The service may
+    // have moved to the next phase (a break, or the next Pomodoro round) while
+    // the Dart isolate was frozen; adopt it and reset the phase clock, or the
+    // break would later be recorded with the focus phase's start time.
     _pausedRemaining = seconds;
-    if (state.isPaused) {
-      if (nativePhase != state.phase) {
-        await _adoptNativePhase(nativePhase);
-      }
-      state = state.copyWith(
-        stage: FocusStage.running,
-        phase: nativePhase,
-        plannedSeconds: nativePlannedSeconds > 0
-            ? nativePlannedSeconds
-            : state.plannedSeconds,
-        remainingSeconds: seconds,
-        endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
-      );
-      _startTicker();
-      _persist();
-      return;
-    }
-
-    // Both running. The service may have moved to the next phase (a break, or
-    // the next Pomodoro round) while the Dart isolate was frozen; adopt it.
-    if (nativePhase != state.phase) {
+    final bool phaseChanged = nativePhase != state.phase;
+    DateTime? startedAt;
+    if (phaseChanged) {
+      final int elapsed = (planned - seconds).clamp(0, planned);
+      startedAt = now.subtract(Duration(seconds: elapsed));
       await _adoptNativePhase(nativePhase);
     }
     state = state.copyWith(
+      stage: FocusStage.running,
       phase: nativePhase,
-      plannedSeconds: nativePlannedSeconds > 0
-          ? nativePlannedSeconds
-          : state.plannedSeconds,
+      plannedSeconds: planned,
       remainingSeconds: seconds,
-      endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
+      endsAt: now.add(Duration(milliseconds: remainingMs)),
+      startedAt: startedAt,
     );
+    _startTicker();
+    _persist();
   }
 
   /// The service advanced a phase while Dart was frozen. Book the phase that
@@ -955,6 +975,9 @@ class FocusController extends Notifier<FocusSessionState> {
 
   Future<void> _restore() async {
     if (_restored || _restoring) return;
+    // The user may have started a fresh session while this microtask was
+    // waiting; restoring would overwrite it with the old persisted one.
+    if (!state.isIdle) return;
     _restoring = true;
     try {
       final SharedPreferences prefs = ref.read(sharedPreferencesProvider);
@@ -1027,7 +1050,11 @@ class FocusController extends Notifier<FocusSessionState> {
         final FocusPhase nativePhase = FocusPhase.parse(
           native['phase'] as String?,
         );
-        if (nativePhase != saved.phase && saved.phase == FocusPhase.focus) {
+        final int planned =
+            (native['plannedSeconds'] as num?)?.toInt() ?? saved.plannedSeconds;
+        final bool phaseChanged = nativePhase != saved.phase;
+        final DateTime now = DateTime.now();
+        if (phaseChanged && saved.phase == FocusPhase.focus) {
           state = saved;
           await _markCurrentStepComplete();
           await _recordSession(
@@ -1035,17 +1062,22 @@ class FocusController extends Notifier<FocusSessionState> {
             actualSeconds: saved.plannedSeconds,
           );
         }
-        // Still running: resume from the exact remaining time.
+        // Still running: resume from the exact remaining time. A changed
+        // phase gets a fresh start clock so its own record is not stamped
+        // with the previous phase's start.
         final int seconds = (remainingMs / 1000).ceil();
         _pausedRemaining = seconds;
         state = saved.copyWith(
           stage: FocusStage.running,
           phase: nativePhase,
-          plannedSeconds:
-              (native['plannedSeconds'] as num?)?.toInt() ??
-              saved.plannedSeconds,
+          plannedSeconds: planned,
           remainingSeconds: seconds,
-          endsAt: DateTime.now().add(Duration(milliseconds: remainingMs)),
+          endsAt: now.add(Duration(milliseconds: remainingMs)),
+          startedAt: phaseChanged
+              ? now.subtract(
+                  Duration(seconds: (planned - seconds).clamp(0, planned)),
+                )
+              : null,
         );
         _startTicker();
         _persist();
@@ -1078,7 +1110,7 @@ class FocusController extends Notifier<FocusSessionState> {
         completed: true,
         actualSeconds: state.plannedSeconds,
       );
-      _finish(FocusEndReason.completed, state.plannedSeconds);
+      await _finish(FocusEndReason.completed, state.plannedSeconds);
     } finally {
       _busy = false;
     }
@@ -1156,6 +1188,9 @@ class FocusController extends Notifier<FocusSessionState> {
       final int recorded = state.mode == FocusMode.free
           ? actualSeconds
           : actualSeconds.clamp(0, state.plannedSeconds);
+      // A tap-through or accidental start must not pollute the focus log.
+      // Nothing is written locally or queued for sync below one minute.
+      if (recorded < 60) return;
       await db
           .into(db.focusSessions)
           .insert(
@@ -1175,24 +1210,21 @@ class FocusController extends Notifier<FocusSessionState> {
           );
       // Local write first, then the durable outbox. Sync may happen minutes
       // later (or after the next launch) without ever blocking the timer.
-      await SyncQueueRepository(db).enqueue(
-        'focus_session',
-        clientId,
-        <String, Object?>{
-          'id': clientId,
-          'task_id': state.taskId,
-          'task_title': state.taskTitle,
-          'mode': state.mode.name,
-          'step_id': state.currentStep?.id,
-          'phase': state.phase.wire,
-          'planned_seconds': state.plannedSeconds,
-          'actual_seconds': recorded,
-          'started_at': isoOrNull(startedAt),
-          'ended_at': isoOrNull(endedAt),
-          'completed': completed,
-          'updated_at': isoOrNull(endedAt),
-        },
-      );
+      await SyncQueueRepository(db)
+          .enqueue('focus_session', clientId, <String, Object?>{
+            'id': clientId,
+            'task_id': state.taskId,
+            'task_title': state.taskTitle,
+            'mode': state.mode.name,
+            'step_id': state.currentStep?.id,
+            'phase': state.phase.wire,
+            'planned_seconds': state.plannedSeconds,
+            'actual_seconds': recorded,
+            'started_at': isoOrNull(startedAt),
+            'ended_at': isoOrNull(endedAt),
+            'completed': completed,
+            'updated_at': isoOrNull(endedAt),
+          });
     } catch (_) {
       // Analytics must never block the user's session.
     }

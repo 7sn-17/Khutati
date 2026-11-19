@@ -21,7 +21,6 @@ import '../../../core/settings/theme_mode_controller.dart'
 import '../../../core/sound/sound_effects.dart';
 import '../../../l10n/l10n.dart';
 import '../application/focus_controller.dart';
-import '../../../data/database/app_database.dart';
 import '../application/focus_setup_controller.dart';
 import '../../today/application/today_controller.dart';
 import '../../../domain/plan/plan_task.dart';
@@ -54,13 +53,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final FocusController controller = ref.read(
-        focusControllerProvider.notifier,
-      );
-      controller.consumePendingAction();
-      // A warm resume that lands on this screen must reconcile with the
-      // service too, not only resumes that go through the lifecycle observer.
-      controller.syncWithNative();
+      unawaited(_reconcile());
       _tryAutoLoadTask();
       _applySystemUi();
       // Opening the tab is an intent to use the timer, so surface the missing
@@ -68,6 +61,19 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       // never stack a second dialog on top of the startup one.
       unawaited(maybePromptExactAlarms(context));
     });
+  }
+
+  /// Applies a queued notification action before reconciling with the service.
+  ///
+  /// Running both at once let the reconcile and the action record the same
+  /// phase; an "end" that arrived while the app was closed must win before the
+  /// service is re-armed from a stale in-app deadline.
+  Future<void> _reconcile() async {
+    final FocusController controller = ref.read(
+      focusControllerProvider.notifier,
+    );
+    await controller.consumePendingAction();
+    await controller.syncWithNative();
   }
 
   @override
@@ -82,11 +88,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final FocusController controller = ref.read(
-        focusControllerProvider.notifier,
-      );
-      controller.consumePendingAction();
-      controller.syncWithNative();
+      unawaited(_reconcile());
       // Wakes `_ensureExactAlarms` up when the user comes back from the system
       // "Alarms & reminders" screen.
       final Completer<void>? waiter = _resumedFromSettings;
@@ -521,24 +523,7 @@ class _FocusView extends ConsumerWidget {
       onTap: onToggleImmersive,
     );
     final Widget historyButton = _HistoryButton(
-      onTap: () {
-        showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: palette.card,
-          // 200 ms instead of the 250 ms default: the sheet is a read-only
-          // list, so a longer entry animation only reads as latency.
-          sheetAnimationStyle: AnimationStyle(
-            duration: const Duration(milliseconds: 200),
-            reverseDuration: const Duration(milliseconds: 150),
-          ),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (BuildContext ctx) =>
-              RepaintBoundary(child: _FocusHistorySheet(palette: palette)),
-        );
-      },
+      onTap: () => context.push('/focus/log'),
     );
 
     final Widget header = Row(
@@ -1819,453 +1804,6 @@ class _HistoryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Icon(Icons.history_rounded, color: palette.tx),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Focus history (advanced)
-// ---------------------------------------------------------------------------
-
-class _FocusHistorySheet extends ConsumerStatefulWidget {
-  const _FocusHistorySheet({required this.palette});
-  final KhutatiPalette palette;
-
-  @override
-  ConsumerState<_FocusHistorySheet> createState() => _FocusHistorySheetState();
-}
-
-class _FocusHistorySheetState extends ConsumerState<_FocusHistorySheet> {
-  int _range = 0; // 0 day, 1 week, 2 all
-  String _type = 'all'; // all / linked / pomodoro / free
-
-  KhutatiPalette get palette => widget.palette;
-
-  bool _inRange(DateTime d) {
-    final DateTime now = DateTime.now();
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    if (_range == 0) {
-      return DateTime(d.year, d.month, d.day) == today;
-    }
-    if (_range == 1) {
-      final DateTime weekAgo = today.subtract(const Duration(days: 6));
-      return !DateTime(d.year, d.month, d.day).isBefore(weekAgo);
-    }
-    return true;
-  }
-
-  String _modeLabel(String mode) {
-    switch (mode) {
-      case 'linked':
-        return 'مرتبط بمهمة';
-      case 'free':
-        return 'مؤقت حر';
-      default:
-        return 'بومودورو';
-    }
-  }
-
-  Color _modeColor(String mode) {
-    switch (mode) {
-      case 'linked':
-        return const Color(0xFF6AA6FF);
-      case 'free':
-        return const Color(0xFFEAE5DA);
-      default:
-        return const Color(0xFFE8B65A);
-    }
-  }
-
-  IconData _modeIcon(String mode) {
-    switch (mode) {
-      case 'linked':
-        return Icons.task_alt_rounded;
-      case 'free':
-        return Icons.all_inclusive_rounded;
-      default:
-        return Icons.timer_rounded;
-    }
-  }
-
-  String _dateLabel(DateTime date) {
-    final DateTime now = DateTime.now();
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    final DateTime d = DateTime(date.year, date.month, date.day);
-    final int diff = today.difference(d).inDays;
-    if (diff == 0) return 'اليوم';
-    if (diff == 1) return 'أمس';
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _fmtDuration(int seconds) {
-    final int m = seconds ~/ 60;
-    final int s = seconds % 60;
-    if (m == 0) return '$s ثانية';
-    if (s == 0) return '$m دقيقة';
-    return '$m دقيقة $s ثانية';
-  }
-
-  String _fmtHours(int seconds) {
-    final int h = seconds ~/ 3600;
-    final int m = (seconds % 3600) ~/ 60;
-    if (h == 0 && m == 0) return '0 دقيقة';
-    if (h == 0) return '$m دقيقة';
-    if (m == 0) return '$h ساعة';
-    return '$h ساعة و $m دقيقة';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AsyncValue<List<FocusSession>> history = ref.watch(
-      focusHistoryProvider,
-    );
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (BuildContext ctx, ScrollController scroll) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: palette.line,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'سجل التركيز',
-                style: TextStyle(
-                  fontFamily: KTypography.displayFamily,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: palette.tx,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Time range tabs
-              Row(
-                children: <Widget>[
-                  _tab('اليوم', 0),
-                  const SizedBox(width: 8),
-                  _tab('أسبوع', 1),
-                  const SizedBox(width: 8),
-                  _tab('من البداية', 2),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Type filters
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: <Widget>[
-                    _chip('الكل', 'all'),
-                    const SizedBox(width: 8),
-                    _chip('مرتبط بمهمة', 'linked'),
-                    const SizedBox(width: 8),
-                    _chip('بومودورو', 'pomodoro'),
-                    const SizedBox(width: 8),
-                    _chip('مؤقت حر', 'free'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: history.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (Object e, StackTrace st) => Center(
-                    child: Text(
-                      'تعذّر تحميل السجل',
-                      style: TextStyle(color: palette.mute),
-                    ),
-                  ),
-                  data: (List<FocusSession> sessions) {
-                    final List<FocusSession> filtered = sessions.where((
-                      FocusSession s,
-                    ) {
-                      if (!_inRange(s.startedAt)) return false;
-                      if (_type != 'all' && s.mode != _type) return false;
-                      return true;
-                    }).toList();
-                    // summary
-                    int totalSec = 0;
-                    int completed = 0;
-                    for (final FocusSession s in filtered) {
-                      totalSec += s.actualSeconds;
-                      if (s.completed) completed += 1;
-                    }
-                    // group by date
-                    final Map<String, List<FocusSession>> groups =
-                        <String, List<FocusSession>>{};
-                    for (final FocusSession s in filtered) {
-                      final String key = _dateLabel(s.startedAt);
-                      groups.putIfAbsent(key, () => <FocusSession>[]).add(s);
-                    }
-                    final List<String> keys = groups.keys.toList();
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: palette.bg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: palette.line),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: <Widget>[
-                              Column(
-                                children: <Widget>[
-                                  Text(
-                                    _fmtHours(totalSec),
-                                    style: TextStyle(
-                                      fontFamily: KTypography.displayFamily,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: palette.tx,
-                                    ),
-                                  ),
-                                  Text(
-                                    'إجمالي الدراسة',
-                                    style: TextStyle(
-                                      fontFamily: KTypography.bodyFamily,
-                                      fontSize: 12,
-                                      color: palette.mute,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Column(
-                                children: <Widget>[
-                                  Text(
-                                    '$completed',
-                                    style: TextStyle(
-                                      fontFamily: KTypography.displayFamily,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: palette.tx,
-                                    ),
-                                  ),
-                                  Text(
-                                    'جلسات مكتملة',
-                                    style: TextStyle(
-                                      fontFamily: KTypography.bodyFamily,
-                                      fontSize: 12,
-                                      color: palette.mute,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: filtered.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.history_toggle_off_rounded,
-                                        size: 56,
-                                        color: palette.mute,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        'لم تبدأ أي جلسات تركيز بعد. ابدأ الآن!',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontFamily: KTypography.bodyFamily,
-                                          fontSize: 15,
-                                          color: palette.mute,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : ListView.builder(
-                                  controller: scroll,
-                                  itemCount: keys.length,
-                                  itemBuilder: (BuildContext c, int gi) {
-                                    final String key = keys[gi];
-                                    final List<FocusSession> items =
-                                        groups[key]!;
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: <Widget>[
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 8,
-                                          ),
-                                          child: Text(
-                                            key,
-                                            style: TextStyle(
-                                              fontFamily:
-                                                  KTypography.displayFamily,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: palette.gold,
-                                            ),
-                                          ),
-                                        ),
-                                        ...items.map((FocusSession s) {
-                                          final String mode = s.mode;
-                                          final String title =
-                                              (s.taskTitle != null &&
-                                                  s.taskTitle!.isNotEmpty)
-                                              ? s.taskTitle!
-                                              : (s.taskId != null
-                                                    ? 'مهمة'
-                                                    : _modeLabel(mode));
-                                          final String typeLabel = _modeLabel(
-                                            mode,
-                                          );
-                                          final String status = s.completed
-                                              ? 'مكتمل'
-                                              : 'متوقف';
-                                          return Container(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 10,
-                                            ),
-                                            padding: const EdgeInsets.all(14),
-                                            decoration: BoxDecoration(
-                                              color: palette.bg,
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                              border: Border.all(
-                                                color: palette.line,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: <Widget>[
-                                                Container(
-                                                  width: 40,
-                                                  height: 40,
-                                                  decoration: BoxDecoration(
-                                                    color: _modeColor(
-                                                      mode,
-                                                    ).withValues(alpha: 0.15),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    _modeIcon(mode),
-                                                    color: _modeColor(mode),
-                                                    size: 20,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: <Widget>[
-                                                      Text(
-                                                        title,
-                                                        style: TextStyle(
-                                                          fontFamily:
-                                                              KTypography
-                                                                  .bodyFamily,
-                                                          fontSize: 15,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: palette.tx,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        '$typeLabel · ${_fmtDuration(s.actualSeconds)} · $status',
-                                                        style: TextStyle(
-                                                          fontFamily:
-                                                              KTypography
-                                                                  .bodyFamily,
-                                                          fontSize: 12,
-                                                          color: palette.mute,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        }),
-                                      ],
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _tab(String label, int index) {
-    final bool active = _range == index;
-    return GestureDetector(
-      onTap: () => setState(() => _range = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? palette.gold : palette.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: palette.line),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: KTypography.bodyFamily,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: active ? Colors.black : palette.tx,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _chip(String label, String value) {
-    final bool active = _type == value;
-    return GestureDetector(
-      onTap: () => setState(() => _type = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? palette.gold.withValues(alpha: 0.2) : palette.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? palette.gold : palette.line),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: KTypography.bodyFamily,
-            fontSize: 12,
-            color: active ? palette.gold : palette.tx,
-          ),
-        ),
       ),
     );
   }

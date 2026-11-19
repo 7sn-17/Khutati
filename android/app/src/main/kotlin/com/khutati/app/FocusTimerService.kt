@@ -14,9 +14,6 @@ import android.os.IBinder
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 
 /**
  * Foreground countdown for a focus session.
@@ -202,7 +199,6 @@ class FocusTimerService : Service() {
         }
     }
 
-    private var executor: ScheduledExecutorService? = null
     private var targetEndMillis: Long = 0L
     private var pausedRemainingMillis: Long = 0L
     private var isPaused: Boolean = false
@@ -224,39 +220,54 @@ class FocusTimerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+
+        // Every command except a fresh start must recover the persisted
+        // session first. Android may have killed this process while the timer
+        // kept running; without this the fields stayed at their defaults, so a
+        // stale alarm used to invent a five-minute break and a notification
+        // "pause" became a no-op.
+        if (action != ACTION_START) restoreFromPrefs()
+
+        when (action) {
             ACTION_START -> {
-                val duration = intent.getLongExtra(EXTRA_DURATION, 0L)
-                taskId = intent.getStringExtra(EXTRA_TASK)
-                stepId = intent.getStringExtra(EXTRA_STEP)
-                phase = intent.getStringExtra(EXTRA_PHASE) ?: "focus"
-                taskTitle = intent.getStringExtra(EXTRA_TASK_TITLE)
-                hasNextStep = intent.getBooleanExtra(EXTRA_HAS_NEXT_STEP, false)
-                breakEnabled = intent.getBooleanExtra(EXTRA_BREAK_ENABLED, true)
-                breakSeconds = intent.getIntExtra(EXTRA_BREAK_MINUTES, 5) * 60
-                notificationsEnabled = intent.getBooleanExtra(EXTRA_NOTIFY, true)
+                val duration = intent?.getLongExtra(EXTRA_DURATION, 0L) ?: 0L
+                if (duration <= 0L) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                taskId = intent?.getStringExtra(EXTRA_TASK)
+                stepId = intent?.getStringExtra(EXTRA_STEP)
+                phase = intent?.getStringExtra(EXTRA_PHASE) ?: "focus"
+                taskTitle = intent?.getStringExtra(EXTRA_TASK_TITLE)
+                hasNextStep = intent?.getBooleanExtra(EXTRA_HAS_NEXT_STEP, false) ?: false
+                breakEnabled = intent?.getBooleanExtra(EXTRA_BREAK_ENABLED, true) ?: true
+                breakSeconds = (intent?.getIntExtra(EXTRA_BREAK_MINUTES, 5) ?: 5) * 60
+                notificationsEnabled = intent?.getBooleanExtra(EXTRA_NOTIFY, true) ?: true
                 plannedSeconds = (duration / 1000L).toInt()
                 targetEndMillis = System.currentTimeMillis() + duration
                 pausedRemainingMillis = 0L
                 isPaused = false
                 persist()
                 startForeground(NOTIF_ID, buildNotification())
-                scheduleUpdates()
                 scheduleAlarm()
             }
             ACTION_PAUSE -> {
-                if (!isPaused && targetEndMillis > 0) {
+                if (targetEndMillis <= 0L && !isPaused) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                if (!isPaused && targetEndMillis > 0L) {
                     pausedRemainingMillis =
                         (targetEndMillis - System.currentTimeMillis()).coerceAtLeast(0L)
                     isPaused = true
                     targetEndMillis = 0L
                     persist()
-                    executor?.shutdownNow()
-                    executor = null
                     cancelAlarm()
                     updateNotification()
                 }
-                if (intent.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false)) {
+                if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
                     // Push the pause into the live Flutter isolate now; the
                     // persisted native state alone is only read on resume.
                     FocusEvents.emit(
@@ -266,17 +277,21 @@ class FocusTimerService : Service() {
                 }
             }
             ACTION_RESUME -> {
-                val duration = intent.getLongExtra(EXTRA_DURATION, 0L)
+                val duration = intent?.getLongExtra(EXTRA_DURATION, 0L) ?: 0L
                 if (isPaused) {
                     val remaining = if (duration > 0) duration else pausedRemainingMillis
+                    if (remaining <= 0L) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                        return START_NOT_STICKY
+                    }
                     targetEndMillis = System.currentTimeMillis() + remaining
                     pausedRemainingMillis = 0L
                     isPaused = false
                     persist()
                     startForeground(NOTIF_ID, buildNotification())
-                    scheduleUpdates()
                     scheduleAlarm()
-                    if (intent.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false)) {
+                    if (intent?.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) == true) {
                         FocusEvents.emit(
                             "resume",
                             mapOf("remainingMs" to remaining),
@@ -288,16 +303,32 @@ class FocusTimerService : Service() {
             // live engine and persists it for a killed process, and it is the
             // only place that produces an "end" action for Dart.
             ACTION_END -> {
+                val hadSession = targetEndMillis > 0L || isPaused
                 // Deliver the end to a live engine immediately. The persisted
                 // copy is always written as well: Dart removes it as soon as it
                 // applies the live event, so it is only ever consumed when the
                 // process was killed and the event never arrived.
-                FocusEvents.emit("end", mapOf("phase" to phase))
-                queuePendingAction("end")
+                if (hadSession) {
+                    // Carry the real elapsed time: the Dart ticker is frozen
+                    // while the app is in the background, so its own estimate
+                    // can be minutes behind the clock the user actually ran.
+                    val elapsedMs = if (plannedSeconds > 0) {
+                        (plannedSeconds * 1000L - remainingMs())
+                            .coerceIn(0L, plannedSeconds * 1000L)
+                    } else {
+                        0L
+                    }
+                    FocusEvents.emit(
+                        "end",
+                        mapOf("phase" to phase, "elapsedMs" to elapsedMs),
+                    )
+                    queuePendingAction("end")
+                }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 cancelAlarm()
                 clearPersisted(this)
                 stopSelf()
+                if (!hadSession) return START_NOT_STICKY
             }
             // Dart-driven stop (session finished, skipped, or reset). It must
             // NOT queue anything: a natural completion used to write "end" into
@@ -310,56 +341,57 @@ class FocusTimerService : Service() {
                 stopSelf()
             }
             ACTION_ALARM_EXPIRE -> {
-                // Woken by the exact alarm (or by the receiver). Advance the
-                // native phase if the deadline really passed.
-                if (remainingMs() <= 0) {
+                // The receiver starts this as a foreground service, so the
+                // contract requires startForeground() before any work. A stale
+                // alarm with no session is torn down immediately after.
+                startForeground(NOTIF_ID, buildNotification())
+                // Woken by the exact alarm (or by the receiver). A missing
+                // target means the session already ended and the alarm is
+                // stale; never advance a phase from that.
+                if (isPaused || targetEndMillis <= 0L) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                if (remainingMs() <= 0L) {
                     handleExpiry()
                 } else {
                     scheduleAlarm()
                 }
             }
             else -> {
-                // Recovery after process death.
-                val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val paused = prefs.getBoolean(KEY_PAUSED, false)
-                val target = prefs.getLong(KEY_TARGET, 0L)
+                // Recovery after process death (START_STICKY delivers a null
+                // intent). restoreFromPrefs() has already run above.
                 val now = System.currentTimeMillis()
-                phase = prefs.getString(KEY_PHASE, "focus") ?: "focus"
-                taskId = prefs.getString(KEY_TASK, null)
-                stepId = prefs.getString(KEY_STEP, null)
-                taskTitle = prefs.getString(KEY_TASK_TITLE, null)
-                hasNextStep = prefs.getBoolean(KEY_HAS_NEXT_STEP, false)
-                breakEnabled = prefs.getBoolean(KEY_BREAK_ENABLED, true)
-                breakSeconds = prefs.getInt(KEY_BREAK_SECONDS, 300)
-                notificationsEnabled = prefs.getBoolean(KEY_NOTIFY, true)
-                plannedSeconds = prefs.getInt(KEY_PLANNED, 0)
-                if (paused) {
-                    val remaining = prefs.getLong(KEY_PAUSED_REMAINING, 0L)
-                    if (remaining > 0) {
-                        isPaused = true
-                        pausedRemainingMillis = remaining
-                        startForeground(NOTIF_ID, buildNotification())
-                    } else {
-                        stopSelf()
-                    }
-                } else if (target > now) {
-                    targetEndMillis = target
-                    isPaused = false
+                if (isPaused && pausedRemainingMillis > 0L) {
                     startForeground(NOTIF_ID, buildNotification())
-                    scheduleUpdates()
+                } else if (!isPaused && targetEndMillis > now) {
+                    startForeground(NOTIF_ID, buildNotification())
                     scheduleAlarm()
                 } else {
                     stopSelf()
+                    return START_NOT_STICKY
                 }
             }
         }
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        executor?.shutdownNow()
-        executor = null
-        super.onDestroy()
+    /** Loads the session that outlives this process from native prefs. */
+    private fun restoreFromPrefs() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        phase = prefs.getString(KEY_PHASE, phase) ?: phase
+        taskId = prefs.getString(KEY_TASK, taskId)
+        stepId = prefs.getString(KEY_STEP, stepId)
+        taskTitle = prefs.getString(KEY_TASK_TITLE, taskTitle)
+        hasNextStep = prefs.getBoolean(KEY_HAS_NEXT_STEP, hasNextStep)
+        breakEnabled = prefs.getBoolean(KEY_BREAK_ENABLED, breakEnabled)
+        breakSeconds = prefs.getInt(KEY_BREAK_SECONDS, breakSeconds)
+        notificationsEnabled = prefs.getBoolean(KEY_NOTIFY, notificationsEnabled)
+        plannedSeconds = prefs.getInt(KEY_PLANNED, plannedSeconds)
+        isPaused = prefs.getBoolean(KEY_PAUSED, false)
+        pausedRemainingMillis = prefs.getLong(KEY_PAUSED_REMAINING, 0L)
+        targetEndMillis = prefs.getLong(KEY_TARGET, 0L)
     }
 
     private fun queuePendingAction(action: String) {
@@ -461,12 +493,32 @@ class FocusTimerService : Service() {
         )
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(if (phase == "break") "استراحة • $text" else text)
+            .setContentText(
+                when {
+                    isPaused -> "متوقف مؤقتاً • $text"
+                    phase == "break" -> "استراحة"
+                    else -> "تركيز"
+                },
+            )
             .setSmallIcon(R.drawable.ic_focus_monochrome)
             .setContentIntent(contentPi)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
+
+        if (isPaused) {
+            // A frozen clock is the honest display for a paused session.
+            builder.setShowWhen(false).setUsesChronometer(false)
+        } else {
+            // The system draws the countdown itself. Reposting this
+            // notification every second was pure wake-up churn and is what
+            // this replaces.
+            builder
+                .setShowWhen(true)
+                .setWhen(targetEndMillis)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+        }
 
         if (isPaused) {
             builder.addAction(
@@ -486,10 +538,24 @@ class FocusTimerService : Service() {
             "إنهاء",
             endPendingIntent(),
         )
-        val thirdLabel = if (hasNextStep) "تخطي"
-        else if (breakEnabled && phase == "focus") "بدء الراحة" else null
-        val thirdAction = if (hasNextStep) "skip_step"
-        else if (breakEnabled && phase == "focus") "start_break" else null
+        // A running focus phase can offer exactly one "move on" action:
+        // skipping to the next step, or starting the planned break. A break
+        // can always be skipped back to focus.
+        val thirdLabel: String?
+        val thirdAction: String?
+        if (phase == "break") {
+            thirdLabel = "تخطي الاستراحة"
+            thirdAction = "skip_step"
+        } else if (hasNextStep) {
+            thirdLabel = "تخطي"
+            thirdAction = "skip_step"
+        } else if (breakEnabled) {
+            thirdLabel = "بدء الراحة"
+            thirdAction = "start_break"
+        } else {
+            thirdLabel = null
+            thirdAction = null
+        }
         if (thirdLabel != null && thirdAction != null) {
             val pi = PendingIntent.getActivity(
                 this,
@@ -507,67 +573,35 @@ class FocusTimerService : Service() {
         nm.notify(NOTIF_ID, buildNotification())
     }
 
-    private fun scheduleUpdates() {
-        executor?.shutdownNow()
-        executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleAtFixedRate({
-            if (remainingMs() <= 0) {
-                // This ticker only *draws* the countdown. It must never drive
-                // the transition: doing so let it run just before the exact
-                // alarm and call cancelAlarm() on the way out, which is how a
-                // 00:00 alert could disappear entirely. The exact alarm owns
-                // the expiry while we are backgrounded, and Dart owns it while
-                // the app is visible.
-                executor?.shutdownNow()
-                executor = null
-                if (!isAppForeground()) scheduleAlarm()
-            } else {
-                try {
-                    val nm = getSystemService(NotificationManager::class.java)
-                    nm.notify(NOTIF_ID, buildNotification())
-                } catch (_: Exception) {
-                    // The process may be going away; the exact alarm still fires.
-                }
-            }
-        }, 0, 1, TimeUnit.SECONDS)
-    }
-
     private fun isAppForeground(): Boolean =
         getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             .getBoolean("flutter.app_foreground", false)
 
     /**
      * Called only by `ACTION_ALARM_EXPIRE`, i.e. after [FocusAlarmReceiver] has
-     * already posted the audible alert. The display ticker never calls it, and
-     * while the app is visible the Dart machine owns the transition and its own
-     * alert, so the native side stays out of the way to avoid a double sound.
+     * already posted the audible alert. While the app is visible the Dart
+     * machine owns the transition and its own alert, so the native side stays
+     * out of the way to avoid a double sound.
      */
     @Synchronized
     private fun handleExpiry() {
         if (isAppForeground()) return
-        executor?.shutdownNow()
-        executor = null
-        val nm = getSystemService(NotificationManager::class.java)
-        if (phase == "focus") {
-            if (breakEnabled && breakSeconds > 0) {
-                phase = "break"
-                plannedSeconds = breakSeconds
-                targetEndMillis = System.currentTimeMillis() + breakSeconds * 1000L
-                isPaused = false
-                pausedRemainingMillis = 0L
-                persist()
-                try {
-                    nm.notify(NOTIF_ID, buildNotification())
-                } catch (_: Exception) {
-                }
-                scheduleUpdates()
-                scheduleAlarm()
-            } else {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                cancelAlarm()
-                clearPersisted(this)
-                stopSelf()
-            }
+        if (isPaused || targetEndMillis <= 0L) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            cancelAlarm()
+            clearPersisted(this)
+            stopSelf()
+            return
+        }
+        if (phase == "focus" && breakEnabled && breakSeconds > 0) {
+            phase = "break"
+            plannedSeconds = breakSeconds
+            targetEndMillis = System.currentTimeMillis() + breakSeconds * 1000L
+            isPaused = false
+            pausedRemainingMillis = 0L
+            persist()
+            updateNotification()
+            scheduleAlarm()
         } else {
             stopForeground(STOP_FOREGROUND_REMOVE)
             cancelAlarm()

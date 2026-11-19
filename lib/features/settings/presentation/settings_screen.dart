@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/device/alarm_settings.dart';
 import '../../../core/device/battery_optimization.dart';
@@ -20,12 +21,16 @@ import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/notification_prefs.dart';
 import '../../../core/settings/theme_mode_controller.dart';
 import '../../../core/sound/sound_effects.dart';
+import '../../../core/utils/format.dart';
+import '../../../data/repositories/schedule_repository.dart'
+    show SchedulePreview;
 import '../../../l10n/l10n.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/account_section.dart';
 import '../../updates/application/update_controller.dart';
 import '../../updates/domain/app_release.dart';
 import '../../updates/presentation/update_dialog.dart';
+import '../application/practical_days_controller.dart';
 
 /// Settings — the fifth tab (PRD 5.11).
 ///
@@ -88,6 +93,8 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+        KSectionHeader(title: l10n.settingsPracticalDays),
+        const _PracticalDaysSection(),
         KSectionHeader(title: l10n.settingsNotifications),
         _SettingsCard(
           child: Column(
@@ -661,6 +668,364 @@ class _DeveloperActionTile extends ConsumerWidget {
     } catch (_) {
       // A device without the app or a browser simply keeps the sheet open.
     }
+  }
+}
+
+class _PracticalDaysSection extends ConsumerWidget {
+  const _PracticalDaysSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+    final AsyncValue<PracticalDaysSettings> settings = ref.watch(
+      practicalDaysSettingsProvider,
+    );
+
+    return _SettingsCard(
+      child: settings.when(
+        data: (PracticalDaysSettings value) => _PracticalDaysEditor(
+          key: ValueKey<String>(
+            '${value.selected.join('-')}-${value.isCustom}',
+          ),
+          initial: value.selected,
+          isCustom: value.isCustom,
+        ),
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 18),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (Object error, StackTrace stack) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              l10n.settingsPracticalDaysFailed,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.muteSize,
+                color: palette.redtx,
+              ),
+            ),
+            const SizedBox(height: 8),
+            KButton(
+              label: l10n.planRetry,
+              variant: KButtonVariant.secondary,
+              expand: true,
+              onPressed: () => ref.invalidate(practicalDaysSettingsProvider),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PracticalDaysEditor extends ConsumerStatefulWidget {
+  const _PracticalDaysEditor({
+    required this.initial,
+    required this.isCustom,
+    super.key,
+  });
+
+  final List<int> initial;
+  final bool isCustom;
+
+  @override
+  ConsumerState<_PracticalDaysEditor> createState() =>
+      _PracticalDaysEditorState();
+}
+
+class _PracticalDaysEditorState extends ConsumerState<_PracticalDaysEditor> {
+  late final Set<int> _selected = widget.initial.toSet();
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = context.l10n;
+    final KhutatiPalette palette = context.palette;
+    final List<int> ordered = _selected.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                l10n.settingsPracticalDaysCurrent(_daysLabel(widget.initial)),
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: KTypography.muteSize,
+                  fontWeight: FontWeight.w500,
+                  color: palette.tx,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: (widget.isCustom ? palette.gold : palette.ok).withValues(
+                  alpha: 0.14,
+                ),
+                borderRadius: BorderRadius.circular(KMetrics.pillRadius),
+                border: Border.all(
+                  color: (widget.isCustom ? palette.gold : palette.ok)
+                      .withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                widget.isCustom
+                    ? l10n.settingsPracticalDaysCustom
+                    : l10n.settingsPracticalDaysOriginal,
+                style: TextStyle(
+                  fontFamily: KTypography.bodyFamily,
+                  fontSize: KTypography.tagSize,
+                  fontWeight: FontWeight.w600,
+                  color: widget.isCustom ? palette.gold : palette.ok,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          l10n.settingsPracticalDaysHint,
+          style: TextStyle(
+            fontFamily: KTypography.bodyFamily,
+            fontSize: KTypography.smallSize,
+            height: 1.6,
+            color: palette.mute,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (
+              int weekday = DateTime.monday;
+              weekday <= DateTime.sunday;
+              weekday++
+            )
+              _WeekdayChoice(
+                label: _weekdayName(weekday),
+                selected: _selected.contains(weekday),
+                onTap: () => _toggleWeekday(weekday),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (ordered.length != 2)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              l10n.settingsPracticalDaysSelectTwo,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                color: palette.redtx,
+              ),
+            ),
+          ),
+        KButton(
+          label: l10n.settingsPracticalDaysChange,
+          expand: true,
+          loading: _busy,
+          onPressed: _busy || ordered.length != 2 ? null : _preview,
+        ),
+        if (widget.isCustom) ...<Widget>[
+          const SizedBox(height: 8),
+          KButton(
+            label: l10n.settingsPracticalDaysReset,
+            variant: KButtonVariant.secondary,
+            expand: true,
+            onPressed: _busy ? null : _reset,
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _toggleWeekday(int weekday) {
+    ref.read(hapticsProvider).selection();
+    SoundEffects.toggle();
+    setState(() {
+      if (_selected.remove(weekday)) return;
+      if (_selected.length >= 2) {
+        final List<int> sorted = _selected.toList()..sort();
+        _selected.remove(sorted.first);
+      }
+      _selected.add(weekday);
+    });
+  }
+
+  Future<void> _preview() async {
+    final AppLocalizations l10n = context.l10n;
+    final List<int> selected = _selected.toList()..sort();
+    if (selected.length != 2) {
+      showKToast(
+        context,
+        l10n.settingsPracticalDaysSelectTwo,
+        kind: KToastKind.error,
+      );
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final SchedulePreview preview = await ref
+          .read(practicalDaysActionsProvider)
+          .preview(selected);
+      if (!mounted) return;
+      final String days = _daysLabel(selected);
+      final bool? confirmed = await showKDialog<bool>(
+        context: context,
+        builder: (BuildContext ctx) => KDialog(
+          eyebrow: l10n.settingsPracticalDaysPreviewEyebrow,
+          title: l10n.settingsPracticalDaysPreviewTitle,
+          message: l10n.settingsPracticalDaysPreviewMessage(
+            preview.movedTasks,
+            days,
+          ),
+          icon: Icons.calendar_month_rounded,
+          actions: <KDialogAction>[
+            KDialogAction(
+              label: l10n.settingsPracticalDaysConfirm,
+              onPressed: () => Navigator.of(ctx).pop(true),
+            ),
+          ],
+          secondaryActions: <KDialogAction>[
+            KDialogAction(
+              label: l10n.settingsPracticalDaysCancel,
+              variant: KButtonVariant.secondary,
+              onPressed: () => Navigator.of(ctx).pop(false),
+            ),
+          ],
+          onClose: () => Navigator.of(ctx).pop(false),
+        ),
+      );
+      if (confirmed != true) return;
+      await ref.read(practicalDaysActionsProvider).save(selected);
+      if (!mounted) return;
+      showKToast(context, l10n.settingsPracticalDaysSaved);
+    } catch (_) {
+      if (!mounted) return;
+      showKToast(
+        context,
+        l10n.settingsPracticalDaysFailed,
+        kind: KToastKind.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reset() async {
+    final AppLocalizations l10n = context.l10n;
+    final bool? confirmed = await showKDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => KDialog(
+        eyebrow: l10n.settingsPracticalDays,
+        title: l10n.settingsPracticalDaysResetTitle,
+        message: l10n.settingsPracticalDaysResetMessage,
+        icon: Icons.restart_alt_rounded,
+        accent: context.palette.gold,
+        actions: <KDialogAction>[
+          KDialogAction(
+            label: l10n.settingsPracticalDaysResetConfirm,
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+        secondaryActions: <KDialogAction>[
+          KDialogAction(
+            label: l10n.settingsPracticalDaysCancel,
+            variant: KButtonVariant.secondary,
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+        ],
+        onClose: () => Navigator.of(ctx).pop(false),
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(practicalDaysActionsProvider).reset();
+      if (!mounted) return;
+      showKToast(context, l10n.settingsPracticalDaysResetDone);
+    } catch (_) {
+      if (!mounted) return;
+      showKToast(
+        context,
+        l10n.settingsPracticalDaysFailed,
+        kind: KToastKind.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _daysLabel(Iterable<int> weekdays) {
+    final List<int> ordered = weekdays.toList()..sort();
+    return ordered.map(_weekdayName).join(' و');
+  }
+
+  String _weekdayName(int weekday) {
+    final DateTime date = DateTime(2026, 11, 16 + weekday - 1);
+    return KhutatiFormat.westernDigits(DateFormat('EEEE', 'ar').format(date));
+  }
+}
+
+class _WeekdayChoice extends StatelessWidget {
+  const _WeekdayChoice({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: PressScale(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+          child: AnimatedContainer(
+            duration: Duration(milliseconds: KMotion.navMs),
+            curve: Curves.easeOut,
+            constraints: const BoxConstraints(
+              minWidth: 48,
+              minHeight: KMetrics.tapTarget,
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: selected ? palette.tx : palette.card2,
+              borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
+              border: Border.all(color: selected ? palette.tx : palette.line),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: KTypography.bodyFamily,
+                fontSize: KTypography.smallSize,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? palette.bg : palette.tx,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

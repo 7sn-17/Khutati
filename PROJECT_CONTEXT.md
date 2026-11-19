@@ -437,10 +437,13 @@ Conventions in this repo:
 
 ## 10. What is done, what is next
 
-**Done and shipped in 0.8.1:** auth (Google + guest), offline-first sync outbox,
+**Done and shipped through 1.0.0:** auth (Google + guest), offline-first sync outbox,
 4-tap step state machine, focus timer with native alarms, notification toggles,
 premium dialogs, account card, sound effects, post-login transition, achievements
-map fixes, rotating quotes, update system, settings polish.
+map fixes, rotating quotes, update system, settings polish, practical-weekday
+redistribution (Settings → Plan/Today/achievements, reset, cloud sync), the focus
+log, and the hardened background timer (state restore, chronometer notification,
+working action buttons).
 
 **Next (already in `bd`, status `in_progress`):**
 

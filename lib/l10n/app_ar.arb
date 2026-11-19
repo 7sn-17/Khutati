@@ -224,6 +224,45 @@
   "settingsThemeDark": "داكن",
   "settingsThemeLight": "فاتح",
   "settingsHaptics": "الاهتزاز عند اللمس",
+  "settingsPracticalDays": "أيام العملي",
+  "settingsPracticalDaysHint": "اختر يومين أسبوعيين للدوام العملي. سنعيد توزيع مهام كل أسبوع بالترتيب مع الحفاظ على تقدمك.",
+  "settingsPracticalDaysCurrent": "الحالي: {days}",
+  "@settingsPracticalDaysCurrent": {
+    "description": "Current practical weekdays summary",
+    "placeholders": {
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsPracticalDaysOriginal": "الجدول الأصلي",
+  "settingsPracticalDaysCustom": "مخصص",
+  "settingsPracticalDaysChange": "تغيير أيام العملي",
+  "settingsPracticalDaysPreviewEyebrow": "معاينة الجدول الجديد",
+  "settingsPracticalDaysPreviewTitle": "تأكيد تغيير أيام العملي",
+  "settingsPracticalDaysPreviewMessage": "سيتم نقل {tasks} مهمة بين الأيام. أيام العملي الجديدة: {days}.",
+  "@settingsPracticalDaysPreviewMessage": {
+    "description": "Schedule preview summary",
+    "placeholders": {
+      "tasks": {
+        "type": "int"
+      },
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsPracticalDaysConfirm": "تأكيد التغيير",
+  "settingsPracticalDaysCancel": "إلغاء",
+  "settingsPracticalDaysSelectTwo": "اختر يومين مختلفين.",
+  "settingsPracticalDaysSaved": "تم تحديث جدول الخطة.",
+  "settingsPracticalDaysFailed": "تعذّر تحديث الجدول. لم يتم حفظ أي تغيير.",
+  "settingsPracticalDaysNoChange": "لا تغيير في توزيع المهام.",
+  "settingsPracticalDaysReset": "استعادة الجدول الأصلي",
+  "settingsPracticalDaysResetTitle": "استعادة الجدول الأصلي؟",
+  "settingsPracticalDaysResetMessage": "سيتم إرجاع أيام العملي إلى الاثنين والجمعة، وإعادة توزيع المهام الأصلية. تقدمك ومهامك المكتملة لن تتأثر.",
+  "settingsPracticalDaysResetConfirm": "استعادة",
+  "settingsPracticalDaysResetDone": "تمت استعادة الجدول الأصلي.",
   "settingsNotifications": "الإشعارات",
   "settingsNotificationsHint": "تُفعّل في المرحلة 4 مع مؤقت التركيز.",
   "settingsNotifTasks": "تذكير المهام",

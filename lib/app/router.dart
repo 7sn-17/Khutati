@@ -9,6 +9,7 @@ import '../features/achievements/presentation/achievements_screen.dart';
 import '../features/auth/application/guest_mode.dart';
 import '../features/auth/data/supabase_auth.dart';
 import '../features/auth/presentation/login_screen.dart';
+import '../features/focus/presentation/focus_log_screen.dart';
 import '../features/focus/presentation/focus_screen.dart';
 import '../features/gallery/presentation/widget_gallery_screen.dart';
 import '../features/onboarding/application/onboarding_controller.dart';
@@ -120,6 +121,14 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
                 name: 'focus',
                 builder: (BuildContext context, GoRouterState state) =>
                     const FocusScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'log',
+                    name: 'focusLog',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const FocusLogScreen(),
+                  ),
+                ],
               ),
             ],
           ),

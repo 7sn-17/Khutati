@@ -901,13 +901,17 @@ class _DayCard extends StatelessWidget {
     final String month = KhutatiFormat.westernDigits(
       DateFormat('MMM', 'ar').format(date),
     );
+    final String subjectTitle = <String>{
+      for (final PlanSubjectGroup group in day.groups) group.name,
+    }.where((String name) => name.trim().isNotEmpty).join(' + ');
     final String title = (day.day.headerTitle ?? '').trim().isNotEmpty
         ? day.day.headerTitle!.trim()
         : day.isRest
         ? l10n.planRestTitle
-        : day.isPractical
-        ? l10n.planPracticalDay
-        : l10n.planStudyDay;
+        : <String>[
+            day.isPractical ? l10n.planPracticalDay : l10n.planStudyDay,
+            if (subjectTitle.isNotEmpty) subjectTitle,
+          ].join(' · ');
     final int taskCount = day.tasks.length;
     final Color border = day.isToday
         ? palette.gold.withValues(alpha: 0.72)

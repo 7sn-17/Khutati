@@ -8,11 +8,12 @@ import '../../../data/database/app_database.dart';
 import '../../../data/database/database_provider.dart';
 import '../../../data/providers.dart';
 import '../../../data/repositories/plan_progress_repository.dart';
-import '../../../data/repositories/template_repository.dart';
+import '../../../data/repositories/schedule_repository.dart';
 import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/schedule_engine.dart';
 import '../../../domain/plan/step_progress.dart';
 
 /// Read model for Today (PRD 5.2, prototype v0).
@@ -47,9 +48,9 @@ class TodayData {
 
   final int dayNumber;
   final DateTime date;
-  final DayRow day;
+  final ScheduledDay day;
   final List<PlanTask> tasks;
-  final List<BreakRow> breaks;
+  final List<ScheduleBreak> breaks;
   final PlanProgress progress;
 
   /// Open tasks on earlier study days, and their remaining planned minutes.
@@ -100,7 +101,7 @@ final StreamProvider<TodayData?>
 todayDataProvider = StreamProvider<TodayData?>((Ref ref) {
   final Future<PlanCalendar?> calendar = ref.watch(planCalendarProvider.future);
   final Future<DateTime> now = ref.watch(todayClockProvider.future);
-  final TemplateRepository template = ref.watch(templateRepositoryProvider);
+  final ScheduleRepository schedule = ref.watch(scheduleRepositoryProvider);
   final UserStateRepository userState = ref.watch(userStateRepositoryProvider);
   final PlanProgressRepository progress = ref.watch(
     planProgressRepositoryProvider,
@@ -110,17 +111,17 @@ todayDataProvider = StreamProvider<TodayData?>((Ref ref) {
   return _watchToday(
     calendar: calendar,
     now: now,
-    template: template,
+    schedule: schedule,
     userState: userState,
     progress: progress,
-    stateChanges: _watchUserState(db),
+    stateChanges: _watchTodayChanges(db, schedule),
   );
 });
 
 Stream<TodayData?> _watchToday({
   required Future<PlanCalendar?> calendar,
   required Future<DateTime> now,
-  required TemplateRepository template,
+  required ScheduleRepository schedule,
   required UserStateRepository userState,
   required PlanProgressRepository progress,
   required Stream<void> stateChanges,
@@ -132,34 +133,41 @@ Stream<TodayData?> _watchToday({
   }
 
   final DateTime current = await now;
+  ScheduleSnapshot snapshot = await schedule.load(activeCalendar);
   yield await _buildToday(
     activeCalendar,
     current,
-    template,
+    snapshot,
     userState,
     progress,
   );
 
   await for (final _ in stateChanges) {
+    snapshot = await schedule.load(activeCalendar);
     yield await _buildToday(
       activeCalendar,
       current,
-      template,
+      snapshot,
       userState,
       progress,
     );
   }
 }
 
-/// Watches every user table Today reads. Drift emits an initial value for each
-/// query, which is skipped because [_watchToday] has already built that state.
-Stream<void> _watchUserState(AppDatabase db) {
+/// Watches every user table Today reads and the shared schedule setting.
+Stream<void> _watchTodayChanges(AppDatabase db, ScheduleRepository schedule) {
   final List<StreamSubscription<dynamic>> subscriptions =
       <StreamSubscription<dynamic>>[];
   late final StreamController<void> controller;
 
   controller = StreamController<void>(
     onListen: () {
+      subscriptions.add(
+        schedule
+            .watchPracticalWeekdays()
+            .skip(1)
+            .listen((_) => controller.add(null), onError: controller.addError),
+      );
       subscriptions.add(
         db
             .select(db.userStepStates)
@@ -189,44 +197,19 @@ Stream<void> _watchUserState(AppDatabase db) {
 Future<TodayData?> _buildToday(
   PlanCalendar calendar,
   DateTime now,
-  TemplateRepository template,
+  ScheduleSnapshot schedule,
   UserStateRepository userState,
   PlanProgressRepository progressRepository,
 ) async {
   final ResolvedPlanDay resolved = calendar.resolveToday(now);
   final int dayNumber = resolved.dayNumber;
-
-  // One snapshot, exactly like the Plan tab: every day, every task with its
-  // steps, then a pure-Dart filter for the resolved day. No per-day SQL join
-  // is involved, so a stale, duplicated or re-keyed `days.id` can never blank
-  // the schedule and Today and Plan read the same rows by construction.
-  final List<DayRow> allDays = await template.allDays();
-  DayRow? todayDay;
-  final Set<String> dayIds = <String>{};
-  for (final DayRow day in allDays) {
-    if (day.dayNumber != dayNumber) continue;
-    todayDay ??= day;
-    dayIds.add(day.id);
-  }
+  final ScheduledDay? todayDay = schedule.day(dayNumber);
   // Before the plan import there is no row for today; the screen shows the
   // load-error state rather than an empty schedule.
   if (todayDay == null) return null;
 
-  final List<TaskWithSteps> allTasks = await template.allTasksWithSteps();
-  final List<TaskWithSteps> dayTasks =
-      <TaskWithSteps>[
-        for (final TaskWithSteps item in allTasks)
-          if (dayIds.contains(item.task.dayId)) item,
-      ]..sort(
-        (TaskWithSteps a, TaskWithSteps b) =>
-            a.task.sortOrder.compareTo(b.task.sortOrder),
-      );
-
-  final List<BreakRow> breaks = <BreakRow>[];
-  for (final String dayId in dayIds) {
-    breaks.addAll(await template.breaksForDay(dayId));
-  }
-  breaks.sort((BreakRow a, BreakRow b) => a.startClock.compareTo(b.startClock));
+  final List<ScheduledTask> dayTasks = schedule.tasksForDay(dayNumber);
+  final List<ScheduleBreak> breaks = todayDay.breaks;
 
   // Use the global (non-joined) reads, exactly like the Plan tab, so Today
   // and Plan never disagree on progress and an upgraded database cannot make
@@ -235,24 +218,24 @@ Future<TodayData?> _buildToday(
   final Map<String, StepProgress> allStepProgresses = await userState
       .allStepProgresses();
   final Map<String, String> allTaskStatuses = await userState.allTaskStatuses();
-  final List<SubjectRow> subjects = await template.allSubjects();
   final Map<String, String> subjectNames = <String, String>{
-    for (final SubjectRow subject in subjects) subject.id: subject.nameAr,
+    for (final SubjectRow subject in schedule.subjects)
+      subject.id: subject.nameAr,
   };
   final Map<String, Color> subjectAccents = <String, Color>{
-    for (final SubjectRow subject in subjects)
+    for (final SubjectRow subject in schedule.subjects)
       subject.id: _hexColor(subject.accentHex),
   };
 
   final Map<int, PlanProgress> progressByDay = await progressRepository
-      .progressByDay();
+      .progressByDay(schedule);
   final PlanProgress progress = progressByDay[dayNumber] ?? PlanProgress.empty;
 
   final ({int tasks, int minutes}) overdue = await progressRepository
-      .overdueBefore(dayNumber);
+      .overdueBefore(dayNumber, schedule);
 
   final List<PlanTask> tasks = <PlanTask>[
-    for (final TaskWithSteps item in dayTasks)
+    for (final ScheduledTask item in dayTasks)
       PlanTask(
         id: item.task.id,
         dayNumber: dayNumber,
@@ -261,17 +244,17 @@ Future<TodayData?> _buildToday(
         title: item.task.title,
         groupTitle: item.task.groupTitle,
         type: PlanTaskType.parse(item.task.type),
-        suggestedStart: item.task.suggestedStart,
-        suggestedEnd: item.task.suggestedEnd,
+        suggestedStart: item.startClock,
+        suggestedEnd: item.endClock,
         status:
             PlanTaskStatus.tryParse(allTaskStatuses[item.task.id]) ??
             PlanTaskStatus.notStarted,
         postponedToDay:
             (PlanTaskStatus.tryParse(allTaskStatuses[item.task.id]) ??
-                        PlanTaskStatus.notStarted) ==
-                    PlanTaskStatus.postponed
-                ? (dayNumber + 1).clamp(1, allDays.length)
-                : null,
+                    PlanTaskStatus.notStarted) ==
+                PlanTaskStatus.postponed
+            ? (dayNumber + 1).clamp(1, schedule.days.length)
+            : null,
         steps: <PlanStep>[
           for (final StepRow step in item.steps)
             PlanStep(
@@ -280,8 +263,8 @@ Future<TodayData?> _buildToday(
               minutes: step.minutes,
               order: step.sortOrder,
               completed: allCompletedStepIds.contains(step.id),
-              suggestedStart: step.suggestedStart,
-              suggestedEnd: step.suggestedEnd,
+              suggestedStart: _spanStart(item, step),
+              suggestedEnd: _spanEnd(item, step),
               progress:
                   allStepProgresses[step.id] ??
                   (allCompletedStepIds.contains(step.id)
@@ -292,8 +275,8 @@ Future<TodayData?> _buildToday(
       ),
   ];
 
-  final Map<int, DayRow> dayByNumber = <int, DayRow>{
-    for (final DayRow day in allDays) day.dayNumber: day,
+  final Map<int, ScheduledDay> dayByNumber = <int, ScheduledDay>{
+    for (final ScheduledDay day in schedule.days) day.dayNumber: day,
   };
 
   return TodayData(
@@ -320,6 +303,18 @@ Future<TodayData?> _buildToday(
   );
 }
 
+String? _spanStart(ScheduledTask item, StepRow step) {
+  final ScheduleSpan? span = item.stepSpans[step.id];
+  if (span != null && span.startClock.isNotEmpty) return span.startClock;
+  return step.suggestedStart;
+}
+
+String? _spanEnd(ScheduledTask item, StepRow step) {
+  final ScheduleSpan? span = item.stepSpans[step.id];
+  if (span != null && span.endClock.isNotEmpty) return span.endClock;
+  return step.suggestedEnd;
+}
+
 /// Writes step state; the live DB stream rebuilds Today without a manual
 /// invalidation.
 class TodayActions {
@@ -344,16 +339,16 @@ final Provider<TodayActions> todayActionsProvider = Provider<TodayActions>((
 
 int _streak({
   required int dayNumber,
-  required Map<int, DayRow> dayByNumber,
+  required Map<int, ScheduledDay> dayByNumber,
   required Map<int, PlanProgress> progressByDay,
   required PlanProgress today,
 }) {
   int streak = 0;
 
   for (int number = dayNumber - 1; number >= 1; number--) {
-    final DayRow? day = dayByNumber[number];
+    final ScheduledDay? day = dayByNumber[number];
     if (day == null) break;
-    if (day.type == 'rest') {
+    if (day.isRest) {
       // Scheduled rest days never break a streak (PRD 5.7).
       streak += 1;
       continue;
