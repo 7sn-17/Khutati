@@ -1401,26 +1401,38 @@ class _ImpactPanel extends StatelessWidget {
             children: <Widget>[
               Icon(Icons.auto_awesome_rounded, size: 15, color: palette.gold),
               const SizedBox(width: 6),
-              Text(
-                l10n.rsImpactTitle,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: palette.tx,
+              // Both labels are Arabic and the finish sentence grows with the
+              // number of shifted days, so neither may take its natural width:
+              // on a 390dp phone the two together overflowed the header row.
+              Expanded(
+                child: Text(
+                  l10n.rsImpactTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: palette.tx,
+                  ),
                 ),
               ),
-              const Spacer(),
-              Text(
-                finish == 0
-                    ? l10n.pdImpactFinishSame
-                    : finish > 0
-                    ? l10n.pdImpactFinishLater(finish)
-                    : l10n.pdImpactFinishEarlier(-finish),
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: 11,
-                  color: finish == 0 ? palette.mute : palette.gold,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  finish == 0
+                      ? l10n.pdImpactFinishSame
+                      : finish > 0
+                      ? l10n.pdImpactFinishLater(finish)
+                      : l10n.pdImpactFinishEarlier(-finish),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: 11,
+                    color: finish == 0 ? palette.mute : palette.gold,
+                  ),
                 ),
               ),
             ],
@@ -1445,31 +1457,40 @@ class _ImpactPanel extends StatelessWidget {
                         : palette.mute,
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    l10n.pdImpactDay(day.dayNumber),
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 11,
-                      color: palette.tx,
+                  Expanded(
+                    child: Text(
+                      l10n.pdImpactDay(day.dayNumber),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 11,
+                        color: palette.tx,
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    day.deltaTasks == 0
-                        ? l10n.pdImpactTimeOnly
-                        : '${day.deltaTasks > 0 ? '+' : '−'}'
-                              '${day.deltaTasks.abs()} · '
-                              '${day.deltaMinutes > 0 ? '+' : '−'}'
-                              '${format.duration(day.deltaMinutes.abs())}',
-                    style: TextStyle(
-                      fontFamily: KTypography.bodyFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: day.deltaTasks > 0
-                          ? palette.ok
-                          : day.deltaTasks < 0
-                          ? palette.redtx
-                          : palette.mute,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      day.deltaTasks == 0
+                          ? l10n.pdImpactTimeOnly
+                          : '${day.deltaTasks > 0 ? '+' : '−'}'
+                                '${day.deltaTasks.abs()} · '
+                                '${day.deltaMinutes > 0 ? '+' : '−'}'
+                                '${format.duration(day.deltaMinutes.abs())}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        fontFamily: KTypography.bodyFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: day.deltaTasks > 0
+                            ? palette.ok
+                            : day.deltaTasks < 0
+                            ? palette.redtx
+                            : palette.mute,
+                      ),
                     ),
                   ),
                 ],
