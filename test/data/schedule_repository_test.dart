@@ -329,8 +329,16 @@ void main() {
     test('a pinned start survives a reload and is honoured', () async {
       final ScheduleSnapshot before = await snapshot();
       final ScheduledTask task = await movable(before);
-      final int slot = before.tasksForDay(task.dayNumber).length;
-      final String clock = '13:00';
+      final List<ScheduledTask> dayTasks = before.tasksForDay(task.dayNumber);
+      final int slot = dayTasks.length;
+      // Pin after the day's current end so the start cannot overlap the task
+      // that will precede it.
+      final List<String> end = (before.day(task.dayNumber)!.endClock ?? '17:00')
+          .split(':');
+      final int endMinutes = int.parse(end[0]) * 60 + int.parse(end[1]);
+      final String clock =
+          '${(endMinutes + 30) ~/ 60}:'
+          '${((endMinutes + 30) % 60).toString().padLeft(2, '0')}';
       final TaskMovePreview result = await schedule.commitMove(
         calendar,
         taskId: task.task.id,
@@ -338,7 +346,7 @@ void main() {
         position: slot,
         startClock: clock,
       );
-      expect(result.ok, isTrue);
+      expect(result.ok, isTrue, reason: 'issue ${result.issue}');
 
       final ScheduleSnapshot after = await snapshot();
       expect(after.tasksById[task.task.id]!.startClock, clock);

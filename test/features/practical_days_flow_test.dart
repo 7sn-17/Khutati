@@ -424,10 +424,18 @@ void main() {
     expect(rows.single.taskId, moved.id);
     expect(rows.single.dayNumber, 3);
 
+    final Future<PlanBrowserData?> restoredFuture = waitFor<PlanBrowserData?>(
+      planBrowserProvider,
+      (PlanBrowserData? data) =>
+          data != null &&
+          data.days[1].tasks.any((PlanTask task) => task.id == moved.id),
+    );
+    await pumpEventQueue();
     await container.read(taskScheduleActionsProvider).clear(moved.id);
     expect(await db.select(db.scheduleOverrides).get(), isEmpty);
-    final PlanBrowserData restored = (await container.read(
-      planBrowserProvider.future,
+    final PlanBrowserData restored = (await restoredFuture.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw TimeoutException('Plan did not restore'),
     ))!;
     expect(
       restored.days[1].tasks.any((PlanTask task) => task.id == moved.id),

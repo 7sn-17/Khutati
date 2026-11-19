@@ -126,13 +126,16 @@ void main() {
 
     final ScheduleGeneration manual = generate(
       overrides: <String, ScheduleOverrideInput>{
-        moved: const ScheduleOverrideInput(dayNumber: 2, position: 3),
+        moved: ScheduleOverrideInput(
+          dayNumber: 2,
+          position: dayTwo.taskIds.length,
+        ),
       },
     );
     final GeneratedDay after = manual.days.firstWhere(
       (GeneratedDay day) => day.dayNumber == 2,
     );
-    expect(after.taskIds[2], moved);
+    expect(after.taskIds.last, moved);
     expect(after.taskIds.length, dayTwo.taskIds.length);
     expect(manual.placements[moved]!.isManual, isTrue);
     expect(
