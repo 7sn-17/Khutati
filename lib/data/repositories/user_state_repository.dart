@@ -46,12 +46,11 @@ class UserStateRepository {
       if (completed) return;
       final StepRow? step = await (_db.select(
         _db.steps,
-      )..where((Steps t) => t.id.equals(stepId))).getSingleOrNull();
+      )..where((t) => t.id.equals(stepId))).getSingleOrNull();
       if (step == null) return;
-      final UserTaskStateRow? task =
-          await (_db.select(_db.userTaskStates)
-                ..where((UserTaskStates t) => t.taskId.equals(step.taskId)))
-              .getSingleOrNull();
+      final UserTaskStateRow? task = await (_db.select(
+        _db.userTaskStates,
+      )..where((t) => t.taskId.equals(step.taskId))).getSingleOrNull();
       if (task == null || task.status != 'completed') return;
 
       await _db

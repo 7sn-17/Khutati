@@ -270,10 +270,9 @@ void main() {
       StepProgress.notStarted,
     );
 
-    final UserTaskStateRow task =
-        await (db.select(db.userTaskStates)
-              ..where((UserTaskStates t) => t.taskId.equals('d001-chem-01')))
-            .getSingle();
+    final UserTaskStateRow task = await (db.select(
+      db.userTaskStates,
+    )..where((t) => t.taskId.equals('d001-chem-01'))).getSingle();
     expect(task.status, 'in_progress');
     expect(task.completedAt, isNull);
 

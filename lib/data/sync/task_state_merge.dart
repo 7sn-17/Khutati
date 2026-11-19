@@ -1,6 +1,6 @@
 /// A local step edit with the timestamp that decides whether a remote task
 /// completion is still current.
-typedef LocalStepStamp = ({DateTime updatedAt, bool completed});
+typedef LocalStepStamp = ({DateTime? updatedAt, bool completed});
 
 /// Whether a remote task state is older than a local step edit that reopened
 /// the task.
@@ -18,8 +18,10 @@ bool remoteTaskStateIsStale({
 }) {
   if (remoteStatus != 'completed') return false;
   for (final LocalStepStamp step in localSteps) {
+    final DateTime? updatedAt = step.updatedAt;
     if (!step.completed &&
-        step.updatedAt.toUtc().isAfter(remoteUpdatedAt.toUtc())) {
+        updatedAt != null &&
+        updatedAt.toUtc().isAfter(remoteUpdatedAt.toUtc())) {
       return true;
     }
   }
