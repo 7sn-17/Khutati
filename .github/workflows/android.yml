@@ -18,6 +18,8 @@ jobs:
   verify:
     name: Verify (tokens, dataset, analyze, tests)
     runs-on: ubuntu-latest
+    # A hung widget test should fail the gate, not hold a runner for hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +63,10 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Test
-        run: flutter test --reporter expanded
+        # flutter_test defaults to a 10-minute per-test timeout, so one leaked
+        # timer or unsettled animation can stall the whole job. Every test here
+        # finishes in seconds; cap them so a regression fails fast.
+        run: flutter test --reporter expanded --timeout 60s
 
   # Keeps the hosted schema in step with `supabase/migrations`. Runs before the
   # release build so an APK that writes to a new table can never be published

@@ -257,6 +257,9 @@ class _RangeBar extends StatelessWidget {
                   // whole pill tappable, including its padding, and paints the
                   // ripple above the animated fill.
                   child: KInkSurface(
+                    // A stable handle for tests: the same label also appears in
+                    // the breakdown and session tiles.
+                    key: Key('focus-pill-range-${range.name}'),
                     onTap: () => onChanged(range),
                     borderRadius: BorderRadius.circular(10),
                     expand: true,
@@ -327,6 +330,7 @@ class _ModeFilter extends StatelessWidget {
                     borderRadius: BorderRadius.circular(KMetrics.pillRadius),
                   ),
                   child: KInkSurface(
+                    key: Key('focus-pill-mode-$key'),
                     onTap: () => onChanged(key),
                     borderRadius: BorderRadius.circular(KMetrics.pillRadius),
                     padding: const EdgeInsets.symmetric(
