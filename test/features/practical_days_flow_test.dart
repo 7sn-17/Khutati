@@ -12,6 +12,7 @@ import 'package:khutati/data/repositories/user_state_repository.dart';
 import 'package:khutati/domain/plan/plan_calendar.dart';
 import 'package:khutati/domain/plan/plan_task.dart';
 import 'package:khutati/domain/plan/practical_weekdays.dart';
+import 'package:khutati/domain/plan/schedule_engine.dart';
 import 'package:khutati/domain/plan/step_progress.dart';
 import 'package:khutati/features/plan/application/plan_browser_controller.dart';
 import 'package:khutati/features/plan/application/task_schedule_controller.dart';
@@ -384,11 +385,19 @@ void main() {
           data.days[1].tasks.every((PlanTask task) => task.id != moved.id),
     );
     await pumpEventQueue();
-    final TaskMovePreview result = await container
-        .read(taskScheduleActionsProvider)
-        .commit(taskId: moved.id, dayNumber: 3);
-
-    expect(result.ok, isTrue, reason: 'issue ${result.issue}');
+    final ScheduleRepository schedule = container.read(
+      scheduleRepositoryProvider,
+    );
+    final Map<String, ScheduleOverrideInput> draft =
+        <String, ScheduleOverrideInput>{
+          moved.id: const ScheduleOverrideInput(dayNumber: 3),
+        };
+    final ScheduleImpact impact = await schedule.previewOverrides(
+      calendar,
+      draft,
+    );
+    expect(impact.ok, isTrue, reason: impact.error);
+    await schedule.commitOverrides(calendar, draft);
     final PlanBrowserData after = (await changed.timeout(
       const Duration(seconds: 10),
       onTimeout: () => throw TimeoutException('Plan did not re-emit'),

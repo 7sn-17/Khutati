@@ -356,7 +356,7 @@ class _ModeFilter extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.stats, required this.palette});
+  const _SummaryCard({required this.stats, required this.palette, super.key});
 
   final FocusLogStats stats;
   final KhutatiPalette palette;
@@ -566,10 +566,7 @@ class _ActivityChart extends StatelessWidget {
                       child: Container(
                         height:
                             6.0 +
-                            58.0 *
-                                (peak == 0
-                                    ? 0.0
-                                    : day.focusSeconds / peak),
+                            58.0 * (peak == 0 ? 0.0 : day.focusSeconds / peak),
                         decoration: BoxDecoration(
                           color: _isToday(day.day, today)
                               ? palette.gold
