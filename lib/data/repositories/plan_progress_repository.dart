@@ -89,12 +89,12 @@ class PlanProgressRepository {
   Future<Set<String>> completedStepsForTask(String taskId) async {
     final List<UserStepStateRow> states = await (_db.select(
       _db.userStepStates,
-    )..where((UserStepStates t) => t.completed.equals(true))).get();
+    )..where((t) => t.completed.equals(true))).get();
     if (states.isEmpty) return <String>{};
 
     final List<StepRow> steps = await (_db.select(
       _db.steps,
-    )..where((Steps t) => t.taskId.equals(taskId))).get();
+    )..where((t) => t.taskId.equals(taskId))).get();
     final Set<String> stepIds = <String>{
       for (final StepRow step in steps) step.id,
     };

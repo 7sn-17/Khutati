@@ -12,6 +12,7 @@ import '../../../data/repositories/user_state_repository.dart';
 import '../../../domain/plan/plan_calendar.dart';
 import '../../../domain/plan/plan_progress.dart';
 import '../../../domain/plan/plan_task.dart';
+import '../../../domain/plan/schedule_engine.dart' show ScheduleSpan;
 import '../../../domain/plan/step_progress.dart';
 import '../../today/application/today_controller.dart' show todayClockProvider;
 

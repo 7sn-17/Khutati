@@ -2,7 +2,7 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/database/app_database.dart';
-import '../../../data/providers.dart';
+import '../../../data/database/database_provider.dart';
 import '../domain/focus_log.dart';
 
 /// Everything the focus log needs, already normalised and sorted newest first.
