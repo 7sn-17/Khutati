@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
@@ -144,10 +145,7 @@ void main() {
   test('user progress never mutates the template', () async {
     await seedDay();
 
-    await userState.setStepCompleted(
-      'd001-chem-01-01',
-      StepProgress.completed,
-    );
+    await userState.setStepCompleted('d001-chem-01-01', StepProgress.completed);
     await userState.setTaskStatus('d001-chem-01', 'completed');
 
     final DayBundle? bundle = await template.dayBundle(1);
@@ -199,10 +197,7 @@ void main() {
         .listen(emissions.add);
 
     await pumpEventQueue();
-    await userState.setStepCompleted(
-      'd001-chem-01-01',
-      StepProgress.completed,
-    );
+    await userState.setStepCompleted('d001-chem-01-01', StepProgress.completed);
     await pumpEventQueue();
     await subscription.cancel();
 
@@ -250,10 +245,7 @@ void main() {
 
   test('uncompleting a step clears its completion time', () async {
     await seedDay();
-    await userState.setStepCompleted(
-      'd001-chem-01-01',
-      StepProgress.completed,
-    );
+    await userState.setStepCompleted('d001-chem-01-01', StepProgress.completed);
     await userState.setStepCompleted(
       'd001-chem-01-01',
       StepProgress.notStarted,
@@ -264,6 +256,36 @@ void main() {
         .getSingle();
     expect(state.completed, isFalse);
     expect(state.completedAt, isNull);
+  });
+
+  test('uncompleting a step reopens an explicitly completed task', () async {
+    await seedDay();
+    await userState.setTaskStatus('d001-chem-01', 'completed');
+
+    // This is the regression: the task was closed as a whole, then the user
+    // cleared one of its steps. The step write alone used to leave the task
+    // status completed, and Today painted the step back to done.
+    await userState.setStepCompleted(
+      'd001-chem-01-01',
+      StepProgress.notStarted,
+    );
+
+    final UserTaskStateRow task =
+        await (db.select(db.userTaskStates)
+              ..where((UserTaskStates t) => t.taskId.equals('d001-chem-01')))
+            .getSingle();
+    expect(task.status, 'in_progress');
+    expect(task.completedAt, isNull);
+
+    final List<SyncQueueRow> queue = await db.select(db.syncQueue).get();
+    expect(
+      queue.map((SyncQueueRow row) => row.entity),
+      containsAll(<String>['step_state', 'task_state']),
+    );
+    final SyncQueueRow reopened = queue.singleWhere(
+      (SyncQueueRow row) => row.entity == 'task_state',
+    );
+    expect(jsonDecode(reopened.payload), containsPair('status', 'in_progress'));
   });
 
   test('foreign keys are enforced', () async {

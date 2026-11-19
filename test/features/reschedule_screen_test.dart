@@ -106,11 +106,10 @@ void main() {
   Future<ScheduleSnapshot> snapshot() =>
       container.read(scheduleRepositoryProvider).load(calendar);
 
-  /// Opens the first day of week one that has more than one task, so the
-  /// up/down arrows are both meaningful.
-  Future<({ScheduledDay day, List<ScheduledTask> tasks})> expandFirstFullDay(
-    WidgetTester tester,
-  ) async {
+  /// Finds the first day of week one that has more than one task, so the
+  /// up/down arrows are both meaningful, without expanding it.
+  Future<({ScheduledDay day, List<ScheduledTask> tasks, Finder label})>
+  firstFullDay(WidgetTester tester) async {
     final ScheduleSnapshot data = await snapshot();
     final ScheduledDay day = data.days.firstWhere(
       (ScheduledDay item) =>
@@ -124,10 +123,50 @@ void main() {
     final Finder label = find.text(name);
     await tester.ensureVisible(label);
     await tester.pumpAndSettle();
-    await tester.tap(label);
-    await tester.pumpAndSettle();
-    return (day: day, tasks: data.tasksForDay(day.dayNumber));
+    return (day: day, tasks: data.tasksForDay(day.dayNumber), label: label);
   }
+
+  /// Opens the first day of week one that has more than one task.
+  Future<({ScheduledDay day, List<ScheduledTask> tasks})> expandFirstFullDay(
+    WidgetTester tester,
+  ) async {
+    final ({ScheduledDay day, List<ScheduledTask> tasks, Finder label}) data =
+        await firstFullDay(tester);
+    await tester.ensureVisible(data.label);
+    await tester.pumpAndSettle();
+    await tester.tap(data.label);
+    await tester.pumpAndSettle();
+    return (day: data.day, tasks: data.tasks);
+  }
+
+  testWidgets('dragging a day header scrolls without expanding it', (
+    WidgetTester tester,
+  ) async {
+    await open(tester);
+    final ({ScheduledDay day, List<ScheduledTask> tasks, Finder label}) data =
+        await firstFullDay(tester);
+
+    expect(find.text(data.tasks.first.task.title), findsNothing);
+    await tester.drag(data.label, const Offset(0, -250));
+    await tester.pumpAndSettle();
+
+    expect(find.text(data.tasks.first.task.title), findsNothing);
+  });
+
+  testWidgets('tapping a task row does not collapse its day', (
+    WidgetTester tester,
+  ) async {
+    await open(tester);
+    final ({ScheduledDay day, List<ScheduledTask> tasks}) data =
+        await expandFirstFullDay(tester);
+
+    await tester.tap(find.text(data.tasks.first.task.title).first);
+    await tester.pumpAndSettle();
+
+    // The row opens the move panel; the day around it must stay expanded.
+    expect(find.textContaining('نقل «'), findsOneWidget);
+    expect(find.text(data.tasks.first.task.title), findsOneWidget);
+  });
 
   testWidgets('a day expands, and an arrow makes a pending change', (
     WidgetTester tester,

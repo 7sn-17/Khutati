@@ -809,29 +809,26 @@ class _PreviewBody extends StatelessWidget {
         if (changes.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),
           Container(
+            constraints: const BoxConstraints(maxHeight: 320),
             decoration: BoxDecoration(
               color: palette.card2,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: palette.line),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Column(
-              children: <Widget>[
-                for (final DayLoadChange change in changes.take(8))
-                  _ImpactRow(change: change, palette: palette, format: format),
-                if (changes.length > 8)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      l10n.pdImpactMoreDays(changes.length - 8),
-                      style: TextStyle(
-                        fontFamily: KTypography.bodyFamily,
-                        fontSize: KTypography.tagSize,
-                        color: palette.mute,
-                      ),
-                    ),
-                  ),
-              ],
+            // Every changed day stays reviewable. The bounded height keeps
+            // the confirm buttons on screen; the list scrolls instead of
+            // replacing the rest with "N other days".
+            child: ListView.builder(
+              key: const Key('pd-impact-list'),
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: changes.length,
+              itemBuilder: (BuildContext context, int index) => _ImpactRow(
+                change: changes[index],
+                palette: palette,
+                format: format,
+              ),
             ),
           ),
         ],
