@@ -400,12 +400,13 @@ void main() {
     );
     expect(after.manualTaskIds, contains(moved.id));
     expect(
-      after.tasks,
-      hasLength(
-        before.days.fold<int>(
-          0,
-          (int sum, PlanDayData day) => sum + day.tasks.length,
-        ),
+      after.days.fold<int>(
+        0,
+        (int sum, PlanDayData day) => sum + day.tasks.length,
+      ),
+      before.days.fold<int>(
+        0,
+        (int sum, PlanDayData day) => sum + day.tasks.length,
       ),
     );
 

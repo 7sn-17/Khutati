@@ -664,7 +664,7 @@ class ScheduleRepository {
       }
       final ScheduledTask? before = slot > 1 ? targetTasks[slot - 2] : null;
       if (before != null) {
-        final int? end = _parseClock(before.endClock);
+        final int? end = _parseClock(before.endClock ?? '');
         if (end != null && start < end) {
           return TaskMovePreview(
             issue: TaskMoveIssue.overlap,
