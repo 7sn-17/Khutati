@@ -130,7 +130,7 @@ void main() {
       repo.script.add(
         () async => UpdateCheckResult(
           check: UpdateCheck(
-            manifest: manifest('0.9.0', code: 40),
+            manifest: manifest('1.1.0', code: 40),
             source: UpdateSource.github,
           ),
         ),
@@ -143,7 +143,7 @@ void main() {
       expect(state().status, UpdateStatus.failed);
       // The Settings panel keys the "view update" button off the manifest, so
       // a failed refresh must not discard it.
-      expect(state().manifest?.versionName, '0.9.0');
+      expect(state().manifest?.versionName, '1.1.0');
     });
   });
 
@@ -178,7 +178,7 @@ void main() {
       repo.script.add(
         () async => UpdateCheckResult(
           check: UpdateCheck(
-            manifest: manifest('0.9.0', code: 40),
+            manifest: manifest('1.1.0', code: 40),
             source: UpdateSource.github,
           ),
         ),
@@ -187,7 +187,7 @@ void main() {
       await controller().check();
 
       expect(state().status, UpdateStatus.available);
-      expect(state().manifest?.versionName, '0.9.0');
+      expect(state().manifest?.versionName, '1.1.0');
       expect(lastCheck(), isNotNull);
     });
 
@@ -196,7 +196,7 @@ void main() {
       repo.script.add(
         () async => UpdateCheckResult(
           check: UpdateCheck(
-            manifest: manifest('0.9.0', code: 40),
+            manifest: manifest('1.1.0', code: 40),
             source: UpdateSource.github,
           ),
         ),

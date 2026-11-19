@@ -130,8 +130,14 @@ void main() {
   });
 
   test('completion and partial progress survive a schedule change', () async {
-    final String stepId = 'd001-chem-01-01';
-    final String taskId = 'd001-chem-01';
+    // Real ids from the bundled dataset: an item is a task, and its attendance
+    // and study intervals are the steps.
+    final TaskRow task = (await db.select(db.tasks).get()).first;
+    final List<StepRow> taskSteps = await (db.select(
+      db.steps,
+    )..where((t) => t.taskId.equals(task.id))).get();
+    final String taskId = task.id;
+    final String stepId = taskSteps.first.id;
     await userState.setStepCompleted(stepId, StepProgress.partialUp);
     await userState.setTaskStatus(taskId, 'in_progress');
 
