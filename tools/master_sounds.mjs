@@ -29,7 +29,7 @@ const TARGETS = {
   click: -35,
   toggle: -30,
   success: -21,
-  timer: -26,
+  timer: -24,
 };
 
 const FILES = ['click', 'toggle', 'success', 'timer'];

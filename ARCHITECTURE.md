@@ -359,8 +359,8 @@ Applied by `supabase/migrations/202611180001_sync_tables.sql`:
 
 `anon` is revoked on all three; `authenticated` gets select/insert/update/delete.
 `public.app_versions` (migration `202611190001`) is the opposite: public read,
-writes only via CI with the service role. `app_updates` (migration `202611170001`)
-is superseded by it and can be dropped once the new table is seeded.
+writes only via CI with the service role. The earlier `app_updates` table was
+dropped (migration `202611190002`) once the waterfall stopped reading it.
 
 ---
 
@@ -471,12 +471,17 @@ peak instead (`--apply`, idempotent), which no platform path can skip:
 | `tap` | `sounds/click.wav` | −35 dBFS | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
 | `toggle` | `sounds/toggle.wav` | −30 dBFS | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
 | `success` | `sounds/success.wav` | −21 dBFS | A step reaching 100%, a focus session completing |
-| `timer` | `sounds/timer.wav` | −26 dBFS | Focus start/pause and end |
+| `timer` | `sounds/timer.wav` | −24 dBFS | Focus start/pause and end |
 
 The tap asset is synthesised by `tools/synth_click.mjs`: a 210 Hz body that glides
 down to about 172 Hz, one quiet partial, a 1.6 ms attack ramp and a 26 ms decay.
 It is a wooden tick rather than a click — the old file's bright transient was
 what made repeated taps tiring.
+
+The timer cue is `tools/synth_timer.mjs`: one warm 392 Hz note settling to
+370 Hz, a quiet octave, an 8 ms raised-cosine attack and a 20 ms cosine tail,
+260 ms in total. It replaced a filtered-noise whoosh that read as escaping air
+on a phone speaker; a mallet note is a signal, not a texture.
 
 The sound fires inside `InkWell.onTap`, never on press-down, so a scroll that
 starts on a button stays silent. `SoundEffects.enabled` gates every call, which

@@ -171,13 +171,15 @@ Create a project, then run both migrations in the SQL editor (or
 `supabase db push` with the CLI):
 
 ```
-supabase/migrations/202611170001_app_updates.sql   -- legacy update manifest (superseded)
 supabase/migrations/202611180001_sync_tables.sql   -- user_task_states, user_step_states, focus_sessions + RLS
 supabase/migrations/202611190001_app_versions.sql  -- public release history (update waterfall)
 ```
 
 Both are idempotent. After applying, confirm RLS is enabled on all three sync
 tables and the `*_owner` policies exist; `anon` must have no grants on them.
+
+`202611190002_drop_app_updates.sql` only matters for a database that applied the
+old update table before it was superseded; a fresh project never creates it.
 
 ### 6.2 Google sign-in
 

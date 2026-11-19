@@ -49,7 +49,7 @@ enum KSound {
   /// Gentle chime: a step or a focus session is completed.
   success('sounds/success.wav'),
 
-  /// Soft whoosh: starting or stopping a focus session.
+  /// Warm mallet note: starting or stopping a focus session.
   timer('sounds/timer.wav');
 
   const KSound(this.asset);
