@@ -82,13 +82,13 @@ void main() {
     };
   }
 
-  /// The first day-2 task the new pair relocates. The schedule engine may keep
-  /// some Friday tasks on Friday (it becomes a normal day), so the test must
-  /// pick a task the preview actually moves instead of assuming.
+  /// A task the new pair relocates. The partition keeps the number of study
+  /// slots per week, so some tasks stay in their slot; the test picks one the
+  /// preview actually moves instead of assuming a particular day changes.
   ScheduledTask firstMover(SchedulePreview preview, Map<String, int> before) {
     return preview.schedule.tasks.firstWhere(
-      (ScheduledTask task) => before[task.task.id] == 2 && task.dayNumber != 2,
-      orElse: () => throw StateError('no day-2 task moved'),
+      (ScheduledTask task) => before[task.task.id] != task.dayNumber,
+      orElse: () => throw StateError('no task moved'),
     );
   }
 
@@ -113,10 +113,12 @@ void main() {
     expect(preview.movedTasks, greaterThan(0));
     expect(preview.changedDays, greaterThan(0));
 
-    final ScheduledTask mover = firstMover(preview, dayNumbersOf(before));
+    final Map<String, int> beforeDays = dayNumbersOf(before);
+    final ScheduledTask mover = firstMover(preview, beforeDays);
     final String movingTaskId = mover.task.id;
+    final int originDay = beforeDays[movingTaskId]!;
     final int newDay = mover.dayNumber;
-    final PlanTask movingTask = friday.tasks.firstWhere(
+    final PlanTask movingTask = before.days[originDay - 1].tasks.firstWhere(
       (PlanTask task) => task.id == movingTaskId,
     );
     final String firstStepId = movingTask.steps.first.id;
@@ -136,13 +138,16 @@ void main() {
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
-          data.days[1].tasks.every((PlanTask task) => task.id != movingTaskId),
+          data.days[originDay - 1].tasks.every(
+            (PlanTask task) => task.id != movingTaskId,
+          ) &&
+          data.days[newDay - 1].tasks.any(
+            (PlanTask task) => task.id == movingTaskId,
+          ),
     );
     final Future<TodayData?> todayChanged = waitFor<TodayData?>(
       todayDataProvider,
-      (TodayData? data) =>
-          data != null &&
-          data.tasks.every((PlanTask task) => task.id != movingTaskId),
+      (TodayData? data) => data != null && data.day.type == 'normal',
     );
 
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
@@ -216,18 +221,22 @@ void main() {
       DateTime.tuesday,
       DateTime.thursday,
     ]);
-    final String taskId = firstMover(preview, dayNumbersOf(before)).task.id;
-    final PlanTask fridayTask = before.days[1].tasks.firstWhere(
+    final Map<String, int> beforeDays = dayNumbersOf(before);
+    final String taskId = firstMover(preview, beforeDays).task.id;
+    final int originDay = beforeDays[taskId]!;
+    final PlanTask originalTask = before.days[originDay - 1].tasks.firstWhere(
       (PlanTask task) => task.id == taskId,
     );
-    final String stepId = fridayTask.steps.first.id;
+    final String stepId = originalTask.steps.first.id;
     await userState.setStepCompleted(stepId, StepProgress.completed);
 
     final Future<PlanBrowserData?> customised = waitFor<PlanBrowserData?>(
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
-          data.days[1].tasks.every((PlanTask task) => task.id != taskId),
+          data.days[originDay - 1].tasks.every(
+            (PlanTask task) => task.id != taskId,
+          ),
     );
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
     final PlanBrowserData custom = (await customised.timeout(
@@ -238,7 +247,9 @@ void main() {
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
-          data.days[1].tasks.any((PlanTask task) => task.id == taskId),
+          data.days[originDay - 1].tasks.any(
+            (PlanTask task) => task.id == taskId,
+          ),
     );
     await actions.reset();
     final PlanBrowserData original = (await restored.timeout(
@@ -248,8 +259,8 @@ void main() {
     expect(custom.days[1].day.isPractical, isFalse);
     expect(original.days[1].day.isPractical, isTrue);
     expect(
-      original.days[1].tasks.map((PlanTask task) => task.id),
-      before.days[1].tasks.map((PlanTask task) => task.id),
+      original.days[originDay - 1].tasks.map((PlanTask task) => task.id),
+      before.days[originDay - 1].tasks.map((PlanTask task) => task.id),
     );
 
     final PracticalDaysSettings settings = await container.read(
@@ -260,7 +271,7 @@ void main() {
 
     // Reset is a new state, not a wipe: the completed step survives.
     expect(
-      original.days[1].tasks
+      original.days[originDay - 1].tasks
           .firstWhere((PlanTask task) => task.id == taskId)
           .steps
           .firstWhere((PlanStep step) => step.id == stepId)
