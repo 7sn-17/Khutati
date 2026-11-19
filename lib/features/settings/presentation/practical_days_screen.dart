@@ -947,29 +947,35 @@ class _ImpactRow extends StatelessWidget {
               color: palette.tx,
             ),
           ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: KTypography.bodyFamily,
-                  fontSize: KTypography.smallSize,
-                  fontWeight: FontWeight.w700,
-                  color: tint,
-                ),
-              ),
-              if (time.isNotEmpty)
+          const SizedBox(width: 8),
+          // The full list can include the busiest days, whose labels are long.
+          // Let the label take the remaining width and wrap instead of forcing
+          // the row wider than the dialog.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
                 Text(
-                  time,
+                  label,
+                  textAlign: TextAlign.end,
                   style: TextStyle(
                     fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.tagSize,
-                    color: palette.mute,
+                    fontSize: KTypography.smallSize,
+                    fontWeight: FontWeight.w700,
+                    color: tint,
                   ),
                 ),
-            ],
+                if (time.isNotEmpty)
+                  Text(
+                    time,
+                    style: TextStyle(
+                      fontFamily: KTypography.bodyFamily,
+                      fontSize: KTypography.tagSize,
+                      color: palette.mute,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
