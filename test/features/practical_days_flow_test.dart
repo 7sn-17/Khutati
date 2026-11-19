@@ -132,13 +132,13 @@ void main() {
     await userState.setStepCompleted(firstStepId, StepProgress.completed);
 
     // Both tabs are already listening; neither is invalidated by hand.
-    final Future<PlanBrowserData> planChanged = waitFor<PlanBrowserData?>(
+    final Future<PlanBrowserData?> planChanged = waitFor<PlanBrowserData?>(
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
           data.days[1].tasks.every((PlanTask task) => task.id != movingTaskId),
     );
-    final Future<TodayData> todayChanged = waitFor<TodayData?>(
+    final Future<TodayData?> todayChanged = waitFor<TodayData?>(
       todayDataProvider,
       (TodayData? data) =>
           data != null &&
@@ -147,12 +147,12 @@ void main() {
 
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
 
-    final PlanBrowserData afterPlan = await planChanged.timeout(
+    final PlanBrowserData afterPlan = (await planChanged.timeout(
       const Duration(seconds: 10),
-    );
-    final TodayData afterToday = await todayChanged.timeout(
+    ))!;
+    final TodayData afterToday = (await todayChanged.timeout(
       const Duration(seconds: 10),
-    );
+    ))!;
 
     // Friday is now a normal study day in both tabs.
     expect(afterPlan.days[1].day.type, 'normal');
@@ -194,10 +194,10 @@ void main() {
     expect(saved.selected, <int>[DateTime.tuesday, DateTime.thursday]);
     expect(saved.isCustom, isTrue);
 
-    final List<SyncQueueData> queue = await db.select(db.syncQueue).get();
+    final List<SyncQueueRow> queue = await db.select(db.syncQueue).get();
     expect(
       queue.where(
-        (SyncQueueData row) =>
+        (SyncQueueRow row) =>
             row.entity == ScheduleRepository.syncEntity &&
             row.entityId == ScheduleRepository.syncEntityId,
       ),
@@ -223,27 +223,27 @@ void main() {
     final String stepId = fridayTask.steps.first.id;
     await userState.setStepCompleted(stepId, StepProgress.completed);
 
-    final Future<PlanBrowserData> customised = waitFor<PlanBrowserData?>(
+    final Future<PlanBrowserData?> customised = waitFor<PlanBrowserData?>(
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
           data.days[1].tasks.every((PlanTask task) => task.id != taskId),
     );
     await actions.save(<int>[DateTime.tuesday, DateTime.thursday]);
-    final PlanBrowserData custom = await customised.timeout(
+    final PlanBrowserData custom = (await customised.timeout(
       const Duration(seconds: 10),
-    );
+    ))!;
 
-    final Future<PlanBrowserData> restored = waitFor<PlanBrowserData?>(
+    final Future<PlanBrowserData?> restored = waitFor<PlanBrowserData?>(
       planBrowserProvider,
       (PlanBrowserData? data) =>
           data != null &&
           data.days[1].tasks.any((PlanTask task) => task.id == taskId),
     );
     await actions.reset();
-    final PlanBrowserData original = await restored.timeout(
+    final PlanBrowserData original = (await restored.timeout(
       const Duration(seconds: 10),
-    );
+    ))!;
 
     expect(custom.days[1].day.isPractical, isFalse);
     expect(original.days[1].day.isPractical, isTrue);
