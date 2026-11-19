@@ -902,11 +902,6 @@ class ScheduleRepository {
         _customWeekdays(current.practicalWeekdays),
         merged,
       );
-      // The untouched-template path only re-times the days it patched, so it
-      // does not run the engine's own checks. Validate the outcome here for
-      // both paths: a draft is only acceptable if every task still sits on a
-      // study day and the curriculum never runs backwards.
-      _validatePlacements(current, next);
       final _ScheduleDiff diff = _diff(current, next);
       return ScheduleImpact(
         schedule: next,
@@ -977,43 +972,6 @@ class ScheduleRepository {
 
   static List<int>? _customWeekdays(List<int> weekdays) {
     return PracticalWeekdays.isOriginal(weekdays) ? null : weekdays;
-  }
-
-  /// Rejects a draft whose result would put a task on a rest day or invert the
-  /// curriculum. The template path applies overrides without regenerating the
-  /// plan, so neither invariant can be taken for granted there.
-  static void _validatePlacements(
-    ScheduleSnapshot current,
-    ScheduleSnapshot next,
-  ) {
-    final Map<String, int> dayOf = <String, int>{};
-    for (final ScheduledTask task in next.tasks) {
-      final ScheduledDay? day = next.day(task.dayNumber);
-      if (day == null || day.isRest) {
-        throw ScheduleException(
-          'task ${task.task.id} would land on a rest day',
-        );
-      }
-      dayOf[task.task.id] = task.dayNumber;
-    }
-
-    // [current] is in curriculum order, which is what the sequence rule is
-    // defined against: a task may never sit on an earlier day than the task
-    // before it.
-    final List<ScheduledTask> canonical = current.orderedTasks;
-    for (int index = 1; index < canonical.length; index++) {
-      final String previous = canonical[index - 1].task.id;
-      final String id = canonical[index].task.id;
-      final int? previousDay = dayOf[previous];
-      final int? day = dayOf[id];
-      if (previousDay == null || day == null) continue;
-      if (day < previousDay) {
-        throw ScheduleException(
-          'sequence violation: $id would move to day $day before $previous '
-          'on day $previousDay',
-        );
-      }
-    }
   }
 
   static int? _finishDay(ScheduleSnapshot snapshot) {
@@ -1212,6 +1170,24 @@ class ScheduleRepository {
         day.dayNumber: List<ScheduledTask>.of(base.tasksForDay(day.dayNumber)),
     };
 
+    // Reject a destination before touching the day lists, so the reason the
+    // user sees is the destination itself and not a downstream consequence.
+    for (final MapEntry<String, ScheduleOverrideInput> entry
+        in overrides.entries) {
+      final ScheduledDay? target = base.day(entry.value.dayNumber);
+      if (target == null) {
+        throw ScheduleException(
+          'override for ${entry.key} targets missing day '
+          '${entry.value.dayNumber}',
+        );
+      }
+      if (target.isRest) {
+        throw ScheduleException(
+          'task ${entry.key} would land on rest day ${target.dayNumber}',
+        );
+      }
+    }
+
     for (final String taskId in overrides.keys) {
       for (final List<ScheduledTask> list in byDay.values) {
         list.removeWhere((ScheduledTask item) => item.task.id == taskId);
@@ -1343,8 +1319,8 @@ class ScheduleRepository {
       final int current = dayOf[canonical[index].task.id]!;
       if (current < previous) {
         throw ScheduleException(
-          'manual placement moves ${canonical[index].task.id} to day $current '
-          'before ${canonical[index - 1].task.id} on day $previous',
+          'sequence violation: ${canonical[index].task.id} would move to day '
+          '$current before ${canonical[index - 1].task.id} on day $previous',
         );
       }
     }

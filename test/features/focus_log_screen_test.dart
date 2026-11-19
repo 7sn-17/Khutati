@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:khutati/app/theme/khutati_theme.dart';
@@ -68,11 +67,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// The session count lives in the first stat of the summary card.
-  Finder summaryValue(String value) => find.descendant(
-    of: find.byType(KCard).first,
-    matching: find.text(value),
-  );
+  /// The session count lives in the first stat of the summary card. It is read
+  /// by key because a figure like `1` also appears in the streak badge.
+  String summaryValue(WidgetTester tester) {
+    return tester
+        .widget<Text>(find.byKey(const Key('focus-log-sessions')))
+        .data!;
+  }
 
   testWidgets('range chips respond to taps in their padding', (
     WidgetTester tester,
@@ -85,16 +86,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // Default range is a week: today and three days ago.
-    expect(summaryValue('2'), findsOneWidget);
+    expect(summaryValue(tester), '2');
 
     await tapPill(tester, 'الشهر');
-    expect(summaryValue('3'), findsOneWidget);
+    expect(summaryValue(tester), '3');
 
     await tapPill(tester, 'اليوم');
-    expect(summaryValue('1'), findsOneWidget);
+    expect(summaryValue(tester), '1');
 
     await tapPill(tester, 'الكل');
-    expect(summaryValue('3'), findsOneWidget);
+    expect(summaryValue(tester), '3');
   });
 
   testWidgets('mode chips filter the list as well', (
@@ -119,28 +120,32 @@ void main() {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
-    expect(summaryValue('2'), findsOneWidget);
+    expect(summaryValue(tester), '2');
 
     await tapPill(tester, 'بومودورو');
-    expect(summaryValue('1'), findsOneWidget);
+    expect(summaryValue(tester), '1');
 
     await tapPill(tester, 'مؤقت حر');
-    expect(summaryValue('1'), findsOneWidget);
+    expect(summaryValue(tester), '1');
   });
 
   testWidgets('the selected chip is exposed to accessibility', (
     WidgetTester tester,
   ) async {
-    final SemanticsHandle handle = tester.ensureSemantics();
     await seed(const Duration(hours: 1));
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
-    final Finder chip = find.bySemanticsLabel(RegExp('الأسبوع'));
+    // The pill wraps its control in a Semantics node, so a screen reader reads
+    // "selected" without needing the visual fill. InkWell adds its own
+    // Semantics node around the text, so match on the label instead of order.
+    final Finder chip = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is Semantics && widget.properties.label == 'الأسبوع',
+    );
     expect(chip, findsOneWidget);
-    final SemanticsNode node = tester.getSemantics(chip);
-    expect(node.hasFlag(SemanticsFlag.isSelected), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
-    handle.dispose();
+    final Semantics node = tester.widget<Semantics>(chip);
+    expect(node.properties.selected, isTrue);
+    expect(node.properties.button, isTrue);
   });
 }

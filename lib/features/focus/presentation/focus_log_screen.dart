@@ -409,6 +409,7 @@ class _SummaryCard extends StatelessWidget {
                 label: 'جلسات',
                 value: '${stats.sessionCount}',
                 palette: palette,
+                valueKey: const Key('focus-log-sessions'),
               ),
               _SummaryStat(
                 label: 'مكتملة',
@@ -493,11 +494,16 @@ class _SummaryStat extends StatelessWidget {
     required this.label,
     required this.value,
     required this.palette,
+    this.valueKey,
   });
 
   final String label;
   final String value;
   final KhutatiPalette palette;
+
+  /// Lets a test read one specific figure without relying on the text, which
+  /// can legitimately repeat across stats and the streak badge.
+  final Key? valueKey;
 
   @override
   Widget build(BuildContext context) {
@@ -506,6 +512,7 @@ class _SummaryStat extends StatelessWidget {
         children: <Widget>[
           Text(
             value,
+            key: valueKey,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

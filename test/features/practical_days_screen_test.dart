@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:khutati/app/theme/khutati_theme.dart';
+import 'package:khutati/core/settings/theme_mode_controller.dart';
 import 'package:khutati/data/database/app_database.dart';
 import 'package:khutati/data/database/database_provider.dart';
 import 'package:khutati/data/import/plan_importer.dart';
@@ -16,6 +17,7 @@ import 'package:khutati/domain/plan/plan_calendar.dart';
 import 'package:khutati/features/settings/presentation/practical_days_screen.dart';
 import 'package:khutati/features/today/application/today_controller.dart';
 import 'package:khutati/l10n/l10n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Settings → «أيام العملي» after the redesign: a two-column selector, and a
 /// save that confirms, toasts and returns to Settings in one gesture.
@@ -27,12 +29,17 @@ void main() {
 
   setUp(() async {
     await initializeDateFormatting('ar');
+    // Haptics read the persisted preference, so the provider that `main`
+    // normally installs has to exist here too.
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     db = AppDatabase.memory();
     calendar = PlanCalendar(startDate: DateTime(2026, 11, 19), totalDays: 68);
     await PlanImporter(db)
         .ensureImported(File('khutati_plan_data.json').readAsStringSync());
     container = ProviderContainer(
       overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
         appDatabaseProvider.overrideWithValue(db),
         planCalendarProvider.overrideWith((Ref ref) async => calendar),
         todayClockProvider.overrideWith(

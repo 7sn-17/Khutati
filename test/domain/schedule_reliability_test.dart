@@ -24,7 +24,28 @@ List<ScheduleDayInput> _days() {
 /// Twenty tasks per week, spread over the six study days, with a mix of short,
 /// medium and one long indivisible block.
 List<ScheduleTaskInput> _tasks() {
-  const List<int> sourceOffsets = <int>[0, 0, 0, 1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6];
+  const List<int> sourceOffsets = <int>[
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    3,
+    3,
+    3,
+    3,
+    4,
+    4,
+    4,
+    4,
+    5,
+    5,
+    5,
+    6,
+    6,
+    6,
+  ];
   const List<int> minutes = <int>[45, 60, 30, 90, 45, 180, 60, 30, 45, 60];
   final List<ScheduleTaskInput> tasks = <ScheduleTaskInput>[];
   for (int week = 1; week <= 4; week++) {
@@ -94,7 +115,9 @@ void _expectSound(
   final List<String> placed = <String>[
     for (final GeneratedDay day in result.days) ...day.taskIds,
   ];
-  expect(placed.toSet(), <String>{for (final ScheduleTaskInput t in tasks) t.id}, reason: label);
+  expect(placed.toSet(), <String>{
+    for (final ScheduleTaskInput t in tasks) t.id,
+  }, reason: label);
   expect(placed, hasLength(tasks.length), reason: label);
 
   // 2. Rest days stay empty and clockless.
@@ -126,10 +149,18 @@ void _expectSound(
         reason: '$label overlap in day ${day.dayNumber} at $taskId',
       );
       expect(end > start, isTrue, reason: '$label empty task $taskId');
-      expect(placement.order, ++order, reason: '$label order in day ${day.dayNumber}');
+      expect(
+        placement.order,
+        ++order,
+        reason: '$label order in day ${day.dayNumber}',
+      );
       previousEnd = end;
     }
-    expect(previousEnd, dayEnd, reason: '$label day end mismatch ${day.dayNumber}');
+    expect(
+      previousEnd,
+      dayEnd,
+      reason: '$label day end mismatch ${day.dayNumber}',
+    );
     if (day.taskIds.isNotEmpty) {
       expect(
         _minutesOf(result.placements[day.taskIds.first]!.startClock),
@@ -226,8 +257,7 @@ void main() {
     final int duration = tasks
         .firstWhere((ScheduleTaskInput t) => t.id == moved)
         .minutes;
-    final int pinnedStart =
-        _minutesOf(base.placements[moved]!.startClock) + 30;
+    final int pinnedStart = _minutesOf(base.placements[moved]!.startClock) + 30;
     // Only pin when the move still fits inside the day.
     expect(pinnedStart + duration < 24 * 60, isTrue);
     final String clock =
@@ -269,7 +299,10 @@ void main() {
         practicalWeekdays: <int>[DateTime.monday, DateTime.friday],
         overrides: <String, ScheduleOverrideInput>{
           first: const ScheduleOverrideInput(dayNumber: 2, startClock: '09:00'),
-          second: const ScheduleOverrideInput(dayNumber: 2, startClock: '08:30'),
+          second: const ScheduleOverrideInput(
+            dayNumber: 2,
+            startClock: '08:30',
+          ),
         },
       ),
       throwsA(isA<ScheduleException>()),
@@ -298,6 +331,9 @@ void main() {
       overrides: <String, ScheduleOverrideInput>{
         second: ScheduleOverrideInput(
           dayNumber: 2,
+          // Keep it second: an override without a position would append it to
+          // the end of the day, where this start would overlap.
+          position: 2,
           startClock: firstPlacement.endClock,
         ),
       },
