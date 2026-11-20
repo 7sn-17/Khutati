@@ -1035,6 +1035,8 @@ class _DragFeedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1042,13 +1044,15 @@ class _DragFeedback extends StatelessWidget {
         color: palette.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: palette.gold),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: reduceMotion
+            ? const <BoxShadow>[]
+            : <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -74,6 +74,8 @@ class _GoogleSignInButtonState extends ConsumerState<GoogleSignInButton> {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final Color background = widget.backgroundColor ?? palette.tx;
     final Color foreground = widget.foregroundColor ?? palette.bg;
     final Color border = widget.borderColor ?? background;
@@ -95,7 +97,9 @@ class _GoogleSignInButtonState extends ConsumerState<GoogleSignInButton> {
             onTap: _busy ? null : _signIn,
             borderRadius: BorderRadius.circular(999),
             child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 160),
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
               opacity: _busy ? 0.72 : 1,
               child: Container(
                 height: widget.height,
@@ -104,7 +108,7 @@ class _GoogleSignInButtonState extends ConsumerState<GoogleSignInButton> {
                   color: background,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: border),
-                  boxShadow: widget.showShadow
+                  boxShadow: widget.showShadow && !reduceMotion
                       ? const <BoxShadow>[
                           BoxShadow(
                             color: Color(0x40000000),

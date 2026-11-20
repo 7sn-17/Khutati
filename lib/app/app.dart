@@ -8,6 +8,7 @@ import '../core/design/widgets/controls.dart';
 import '../core/design/widgets/dialogs.dart';
 import '../core/device/exact_alarm_prompt.dart';
 import '../core/notifications/focus_notifications.dart';
+import '../core/settings/reduce_motion_controller.dart';
 import '../core/settings/theme_mode_controller.dart';
 import '../data/sync/sync_bootstrap.dart';
 import '../features/onboarding/application/onboarding_controller.dart';
@@ -26,6 +27,7 @@ class KhutatiApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final GoRouter router = ref.watch(routerProvider);
     final ThemeMode themeMode = ref.watch(themeModeProvider);
+    final bool reduceMotion = ref.watch(reduceMotionProvider);
 
     return MaterialApp.router(
       onGenerateTitle: (BuildContext context) => context.l10n.appName,
@@ -35,8 +37,11 @@ class KhutatiApp extends ConsumerWidget {
       darkTheme: KhutatiTheme.dark,
       themeMode: themeMode,
       // Smooth, eased transition between light and dark instead of an instant
-      // snap when the user flips the theme in Settings.
-      themeAnimationDuration: const Duration(milliseconds: 360),
+      // snap when the user flips the theme in Settings. Reduce Motion keeps the
+      // color change but removes the cross-fade.
+      themeAnimationDuration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 360),
       themeAnimationCurve: Curves.easeInOutCubic,
       locale: const Locale('ar'),
       supportedLocales: AppLocalizations.supportedLocales,
@@ -44,12 +49,22 @@ class KhutatiApp extends ConsumerWidget {
       // Force RTL even if the device locale is not Arabic: the product is
       // Arabic-first and the layout must never mirror by accident.
       builder: (BuildContext context, Widget? child) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: SyncBootstrap(
-            child: UpdateBootstrap(
-              child: _NotificationPermissionBootstrap(
-                child: child ?? const SizedBox.shrink(),
+        final MediaQueryData media = MediaQuery.of(context);
+        // A single app-level override makes every existing
+        // MediaQuery.disableAnimationsOf() check (PressScale, the splash,
+        // onboarding, login, route transitions) honour the setting without
+        // threading a new boolean through each screen.
+        return MediaQuery(
+          data: media.copyWith(
+            disableAnimations: media.disableAnimations || reduceMotion,
+          ),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: SyncBootstrap(
+              child: UpdateBootstrap(
+                child: _NotificationPermissionBootstrap(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             ),
           ),

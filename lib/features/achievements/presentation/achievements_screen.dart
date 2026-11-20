@@ -1263,6 +1263,8 @@ class _Medal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return AspectRatio(
       aspectRatio: 100 / 118,
       child: RepaintBoundary(
@@ -1272,6 +1274,7 @@ class _Medal extends StatelessWidget {
             level: level,
             line: context.palette.line,
             mute: context.palette.mute,
+            glow: !reduceMotion,
           ),
         ),
       ),
@@ -1285,12 +1288,14 @@ class _MedalPainter extends CustomPainter {
     required this.level,
     required this.line,
     required this.mute,
+    required this.glow,
   });
 
   final String icon;
   final int level;
   final Color line;
   final Color mute;
+  final bool glow;
 
   static Color _ribbonTop = Color(0xFFD3453A);
   static Color _ribbonBottom = Color(0xFF8C1B13);
@@ -1398,18 +1403,22 @@ class _MedalPainter extends CustomPainter {
     );
 
     if (tier != null) {
-      // Specular sheen across the top of the face.
+      // Specular sheen across the top of the face. The soft edge is optional:
+      // Reduce Motion drops the MaskFilter, which is the expensive part.
+      final Paint sheen = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: 0.45);
+      if (glow) {
+        sheen.maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
+      }
       canvas.drawArc(
         Rect.fromCircle(center: Offset(50, 48), radius: 26),
         math.pi * 1.08,
         math.pi * 0.42,
         false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..strokeCap = StrokeCap.round
-          ..color = Colors.white.withValues(alpha: 0.45)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3),
+        sheen,
       );
     }
 
@@ -1533,7 +1542,8 @@ class _MedalPainter extends CustomPainter {
       oldDelegate.icon != icon ||
       oldDelegate.level != level ||
       oldDelegate.line != line ||
-      oldDelegate.mute != mute;
+      oldDelegate.mute != mute ||
+      oldDelegate.glow != glow;
 }
 
 // ---------------------------------------------------------------------------

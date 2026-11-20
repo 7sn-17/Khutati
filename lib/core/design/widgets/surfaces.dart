@@ -11,6 +11,9 @@ import 'pressable.dart';
 /// shadow to read as separate surfaces. Dark mode stays flat: the navy cards
 /// already separate from the background.
 List<BoxShadow> kCardShadow(BuildContext context) {
+  if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+    return const <BoxShadow>[];
+  }
   if (Theme.of(context).brightness == Brightness.dark) {
     return const <BoxShadow>[];
   }

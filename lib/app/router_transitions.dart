@@ -22,6 +22,7 @@ CustomTransitionPage<void> authEntryPage(GoRouterState state, Widget child) {
       Animation<double> secondaryAnimation,
       Widget child,
     ) {
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
       final Animation<double> curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,
@@ -50,6 +51,7 @@ CustomTransitionPage<void> khutatiPage(GoRouterState state, Widget child) {
       Animation<double> secondaryAnimation,
       Widget child,
     ) {
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
       final Animation<double> curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,

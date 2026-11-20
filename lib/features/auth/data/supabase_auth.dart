@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -42,17 +44,33 @@ class AuthFailure implements Exception {
 /// without a network connection after the first successful sign-in.
 abstract final class SupabaseAuth {
   static bool _initialized = false;
+  static Future<void>? _initializing;
   static Future<void>? _googleSignInReady;
+
+  /// Completes once the first initialization attempt has finished (success or
+  /// failure). The auth stream waits on this, so a listener created by the
+  /// router before the post-frame warm-up does not subscribe to an empty stream
+  /// and miss the restored session forever.
+  static final Completer<void> _ready = Completer<void>();
 
   static bool get isAvailable => _initialized && SupabaseConfig.isConfigured;
 
-  static Future<void> initialize() async {
-    if (!SupabaseConfig.isConfigured || _initialized) return;
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
-    );
-    _initialized = true;
+  static Future<void> initialize() {
+    if (!SupabaseConfig.isConfigured || _initialized) return Future<void>.value();
+    return _initializing ??= _initialize();
+  }
+
+  static Future<void> _initialize() async {
+    try {
+      await Supabase.initialize(
+        url: SupabaseConfig.url,
+        anonKey: SupabaseConfig.anonKey,
+      );
+      _initialized = true;
+    } finally {
+      if (!_ready.isCompleted) _ready.complete();
+      _initializing = null;
+    }
   }
 
   static GoTrueClient get _auth {
@@ -69,8 +87,12 @@ abstract final class SupabaseAuth {
 
   static User? get currentUser => isAvailable ? _auth.currentUser : null;
 
-  static Stream<AuthState> get authStateChanges =>
-      isAvailable ? _auth.onAuthStateChange : const Stream<AuthState>.empty();
+  static Stream<AuthState> get authStateChanges async* {
+    if (!SupabaseConfig.isConfigured) return;
+    await _ready.future;
+    if (!isAvailable) return;
+    yield* _auth.onAuthStateChange;
+  }
 
   /// Starts the native Google account picker and exchanges its ID token for a
   /// Supabase session.

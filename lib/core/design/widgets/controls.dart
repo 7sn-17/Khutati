@@ -47,7 +47,9 @@ class KChip extends StatelessWidget {
     final Color textColor = selected ? KColors.dark.bg : palette.mute;
     final Color titleColor = selected ? KColors.dark.bg : palette.tx;
     final Color accentColor = selected ? KColors.dark.bg : palette.redtx;
-    final List<BoxShadow>? shadow = selected
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final List<BoxShadow>? shadow = selected || reduceMotion
         ? null
         : <BoxShadow>[
             BoxShadow(
@@ -66,7 +68,9 @@ class KChip extends StatelessWidget {
         duration: const Duration(milliseconds: 100),
         releaseDuration: const Duration(milliseconds: 140),
         child: AnimatedContainer(
-          duration: Duration(milliseconds: KMotion.navMs),
+          duration: reduceMotion
+              ? Duration.zero
+              : Duration(milliseconds: KMotion.navMs),
           curve: Curves.easeOut,
           constraints: const BoxConstraints(minHeight: KMetrics.chipMinHeight),
           decoration: BoxDecoration(

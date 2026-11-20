@@ -212,6 +212,8 @@ Future<T?> showKDialog<T>({
   // in light mode, so using it everywhere would wash the light theme out; the
   // ink colour (`tx`) is the correct veil there.
   final bool isDark = Theme.of(context).brightness == Brightness.dark;
+  final bool reduceMotion =
+      MediaQuery.maybeDisableAnimationsOf(context) ?? false;
   final Color scrim = (isDark ? palette.bg : palette.tx).withValues(
     alpha: isDark ? 0.66 : 0.30,
   );
@@ -221,7 +223,9 @@ Future<T?> showKDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: scrim,
-    transitionDuration: const Duration(milliseconds: 200),
+    transitionDuration: reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 200),
     pageBuilder:
         (
           BuildContext context,
@@ -250,6 +254,7 @@ Future<T?> showKDialog<T>({
           Animation<double> secondaryAnimation,
           Widget child,
         ) {
+          if (reduceMotion) return child;
           final CurvedAnimation curved = CurvedAnimation(
             parent: animation,
             // A short, decelerating curve reads as "instant" without a visible pop.
@@ -286,6 +291,8 @@ class _DialogSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     // Deliberately opaque-ish: the card no longer sits behind a blurred
     // backdrop, so its own fill has to carry the contrast. 0.97 keeps the
     // scrim from bleeding through text while still reading as a surface.
@@ -299,13 +306,15 @@ class _DialogSurface extends StatelessWidget {
         border: Border.all(color: palette.gold.withValues(alpha: 0.26)),
         // A tighter shadow than before: the old 40 px radius was rasterised on
         // every scale frame, which is pure cost during the entry animation.
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: palette.bg.withValues(alpha: 0.45),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        boxShadow: reduceMotion
+            ? const <BoxShadow>[]
+            : <BoxShadow>[
+                BoxShadow(
+                  color: palette.bg.withValues(alpha: 0.45),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
+                ),
+              ],
       ),
       child: RepaintBoundary(
         // The boundary sits *inside* the decorated box on purpose: the shadow

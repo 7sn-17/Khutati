@@ -19,6 +19,7 @@ import '../../../core/design/widgets/widgets.dart';
 import '../../../core/motion/haptics.dart';
 import '../../../core/motion/press_scale.dart';
 import '../../../core/settings/notification_prefs.dart';
+import '../../../core/settings/reduce_motion_controller.dart';
 import '../../../core/settings/theme_mode_controller.dart';
 import '../../../core/sound/sound_effects.dart';
 import '../../../l10n/l10n.dart';
@@ -44,6 +45,7 @@ class SettingsScreen extends ConsumerWidget {
     final AppLocalizations l10n = context.l10n;
     final KhutatiPalette palette = context.palette;
     final ThemeMode themeMode = ref.watch(themeModeProvider);
+    final bool reduceMotion = ref.watch(reduceMotionProvider);
     final bool soundEnabled = ref.watch(soundEffectsEnabledProvider);
     final bool signedIn = ref.watch(isSignedInProvider);
     final NotificationPrefs prefs = ref.watch(notificationPrefsProvider);
@@ -85,6 +87,15 @@ class SettingsScreen extends ConsumerWidget {
                 title: 'المؤثرات الصوتية',
                 value: soundEnabled,
                 onChanged: ref.read(soundEffectsEnabledProvider.notifier).set,
+              ),
+              const SizedBox(height: 12),
+              _SettingsSwitchRow(
+                title: l10n.settingsReduceMotion,
+                value: reduceMotion,
+                onChanged: (bool value) {
+                  ref.read(hapticsProvider).selection();
+                  ref.read(reduceMotionProvider.notifier).set(value);
+                },
               ),
             ],
           ),
@@ -822,6 +833,8 @@ class _ThemeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return Expanded(
       child: Semantics(
@@ -832,7 +845,9 @@ class _ThemeOption extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(KMetrics.buttonRadius),
             child: AnimatedContainer(
-              duration: Duration(milliseconds: KMotion.navMs),
+              duration: reduceMotion
+                  ? Duration.zero
+                  : Duration(milliseconds: KMotion.navMs),
               curve: Curves.easeOut,
               constraints: const BoxConstraints(
                 minHeight: KMetrics.buttonMinHeight,

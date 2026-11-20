@@ -53,6 +53,8 @@ class KProgressRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final double scale = size / KArtwork.ringViewSize;
     final Color valueColor = color ?? palette.redtx;
 
@@ -67,7 +69,9 @@ class KProgressRing extends StatelessWidget {
               begin: 0,
               end: progress.clamp(0.0, 1.0).toDouble(),
             ),
-            duration: Duration(milliseconds: KMotion.ecgMs),
+            duration: reduceMotion
+                ? Duration.zero
+                : Duration(milliseconds: KMotion.ecgMs),
             curve: Curves.easeOutCubic,
             builder: (BuildContext context, double value, Widget? child) {
               return CustomPaint(
@@ -77,7 +81,7 @@ class KProgressRing extends StatelessWidget {
                   trackColor: palette.line,
                   valueColor: valueColor,
                   arcDegrees: arcDegrees,
-                  glow: glow,
+                  glow: glow && !reduceMotion,
                   gradientColors: gradientColors,
                   strokeWidth: strokeWidth,
                 ),
@@ -288,10 +292,14 @@ class KEcgLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: progress.clamp(0.0, 1.0).toDouble()),
-      duration: Duration(milliseconds: KMotion.ecgMs),
+      duration: reduceMotion
+          ? Duration.zero
+          : Duration(milliseconds: KMotion.ecgMs),
       curve: Curves.ease,
       builder: (BuildContext context, double value, Widget? child) {
         return Transform.flip(

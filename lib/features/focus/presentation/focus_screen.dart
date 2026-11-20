@@ -254,7 +254,11 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
 
   @override
   Widget build(BuildContext context) {
-    final FocusSessionState session = ref.watch(focusControllerProvider);
+    // Only the terminal-state flag is needed at this level. Watching the whole
+    // session here rebuilt the entire Focus screen every second.
+    final bool isFinished = ref.watch(
+      focusControllerProvider.select((FocusSessionState s) => s.isFinished),
+    );
     _tryAutoLoadTask();
     final KhutatiPalette palette = context.palette;
 
@@ -314,9 +318,9 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
       _tryAutoLoadTask();
     });
 
-    if (session.isFinished) {
+    if (isFinished) {
       return _FinishedView(
-        session: session,
+        session: ref.read(focusControllerProvider),
         onDismiss: () {
           ref.read(focusControllerProvider.notifier).dismissFinished();
         },
@@ -340,7 +344,6 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
               child: OrientationBuilder(
                 builder: (BuildContext context, Orientation orientation) {
                   return _FocusView(
-                    session: session,
                     immersive: _immersive,
                     onToggleImmersive: () => _setImmersive(!_immersive),
                     ensureExactAlarms: _ensureExactAlarms,
@@ -356,16 +359,91 @@ class _FocusScreenState extends ConsumerState<FocusScreen>
   }
 }
 
+/// The slowly-changing part of a focus session.
+///
+/// `remainingSeconds` and `progress` are intentionally absent: those tick every
+/// second and live inside [_LiveFocusRing], so the screen chrome, panels and
+/// controls do not rebuild with the clock.
+class _FocusChrome {
+  const _FocusChrome({
+    required this.isIdle,
+    required this.isRunning,
+    required this.isPaused,
+    required this.isBreak,
+    required this.mode,
+    required this.plannedSeconds,
+    required this.stepIndex,
+    required this.rounds,
+    required this.steps,
+  });
+
+  factory _FocusChrome.from(FocusSessionState session) {
+    return _FocusChrome(
+      isIdle: session.isIdle,
+      isRunning: session.isRunning,
+      isPaused: session.isPaused,
+      isBreak: session.isBreak,
+      mode: session.mode,
+      plannedSeconds: session.plannedSeconds,
+      stepIndex: session.stepIndex,
+      rounds: session.rounds,
+      steps: session.steps,
+    );
+  }
+
+  final bool isIdle;
+  final bool isRunning;
+  final bool isPaused;
+  final bool isBreak;
+  final FocusMode mode;
+  final int plannedSeconds;
+  final int stepIndex;
+  final int rounds;
+  final List<FocusStepRef> steps;
+
+  FocusStepRef? get currentStep => steps.isEmpty
+      ? null
+      : steps[stepIndex.clamp(0, steps.length - 1)];
+
+  FocusStepRef? get nextStep =>
+      steps.isEmpty || stepIndex + 1 >= steps.length ? null : steps[stepIndex + 1];
+
+  @override
+  bool operator ==(Object other) {
+    return other is _FocusChrome &&
+        other.isIdle == isIdle &&
+        other.isRunning == isRunning &&
+        other.isPaused == isPaused &&
+        other.isBreak == isBreak &&
+        other.mode == mode &&
+        other.plannedSeconds == plannedSeconds &&
+        other.stepIndex == stepIndex &&
+        other.rounds == rounds &&
+        other.steps == steps;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    isIdle,
+    isRunning,
+    isPaused,
+    isBreak,
+    mode,
+    plannedSeconds,
+    stepIndex,
+    rounds,
+    steps,
+  );
+}
+
 class _FocusView extends ConsumerWidget {
   const _FocusView({
-    required this.session,
     required this.immersive,
     required this.onToggleImmersive,
     required this.ensureExactAlarms,
     required this.landscape,
   });
 
-  final FocusSessionState session;
   final bool immersive;
   final VoidCallback onToggleImmersive;
   final Future<bool> Function() ensureExactAlarms;
@@ -379,6 +457,9 @@ class _FocusView extends ConsumerWidget {
     final FocusController controller = ref.read(
       focusControllerProvider.notifier,
     );
+    final _FocusChrome chrome = ref.watch(
+      focusControllerProvider.select(_FocusChrome.from),
+    );
     final FocusSetup setup = ref.watch(focusSetupProvider);
     final FocusSetupController setupController = ref.read(
       focusSetupProvider.notifier,
@@ -388,13 +469,13 @@ class _FocusView extends ConsumerWidget {
     // When idle, the displayed mode comes from the setup (segmented control),
     // not from the session (which defaults to pomodoro). This is what makes
     // switching between Task / Pomodoro / Free actually update the UI.
-    final FocusMode effectiveMode = session.isIdle ? setup.mode : session.mode;
+    final FocusMode effectiveMode = chrome.isIdle ? setup.mode : chrome.mode;
     final bool isFree = effectiveMode == FocusMode.free;
     final bool isTask = effectiveMode == FocusMode.linked;
     final bool isPomo = effectiveMode == FocusMode.pomodoro;
-    final bool isBreak = session.isBreak && !session.isIdle;
-    final bool running = session.isRunning;
-    final bool paused = session.isPaused;
+    final bool isBreak = chrome.isBreak && !chrome.isIdle;
+    final bool running = chrome.isRunning;
+    final bool paused = chrome.isPaused;
     final Color phaseColor = isBreak
         ? _ok
         : isTask
@@ -403,7 +484,7 @@ class _FocusView extends ConsumerWidget {
         ? _gold
         : palette.tx;
 
-    final bool isLastTaskStep = isTask && session.nextStep == null;
+    final bool isLastTaskStep = isTask && chrome.nextStep == null;
     final bool hideSkip = isFree || isLastTaskStep;
 
     // Idle preview duration, so the timer shows the total (e.g. 25:00) before
@@ -413,18 +494,13 @@ class _FocusView extends ConsumerWidget {
         : isPomo
         ? setup.focusMinutes * 60
         : (draft?.minutes ?? 25) * 60;
-    final int displayPlannedSeconds = session.isIdle
+    final int displayPlannedSeconds = chrome.isIdle
         ? idlePlannedSeconds
-        : session.plannedSeconds;
-    final int displayRemainingSeconds = session.isIdle
-        ? (isFree ? 0 : idlePlannedSeconds)
-        : session.remainingSeconds;
+        : chrome.plannedSeconds;
 
     final int segments = isFree
         ? 60
         : (displayPlannedSeconds / 60).ceil().clamp(1, 360);
-
-    final String timeText = _clock(displayRemainingSeconds, free: isFree);
 
     final String goLabel = running
         ? l10n.focusPause
@@ -486,9 +562,10 @@ class _FocusView extends ConsumerWidget {
 
     void onEnd() {
       haptics.medium();
+      final FocusSessionState live = ref.read(focusControllerProvider);
       final int elapsed = isFree
-          ? session.remainingSeconds
-          : session.plannedSeconds - session.remainingSeconds;
+          ? live.remainingSeconds
+          : live.plannedSeconds - live.remainingSeconds;
       final int minutes = elapsed ~/ 60;
       if (minutes > 0) {
         showKToast(
@@ -503,7 +580,7 @@ class _FocusView extends ConsumerWidget {
     void onSkip() {
       haptics.selection();
       if (isTask) {
-        final FocusStepRef? next = session.nextStep;
+        final FocusStepRef? next = chrome.nextStep;
         if (next != null) {
           showKToast(
             context,
@@ -585,21 +662,21 @@ class _FocusView extends ConsumerWidget {
           _SegButton(
             label: l10n.focusModeLinked,
             selected: isTask,
-            onTap: session.isIdle
+            onTap: chrome.isIdle
                 ? () => setupController.setMode(FocusMode.linked)
                 : null,
           ),
           _SegButton(
             label: l10n.focusModePomodoro,
             selected: isPomo,
-            onTap: session.isIdle
+            onTap: chrome.isIdle
                 ? () => setupController.setMode(FocusMode.pomodoro)
                 : null,
           ),
           _SegButton(
             label: l10n.focusModeFree,
             selected: isFree,
-            onTap: session.isIdle
+            onTap: chrome.isIdle
                 ? () => setupController.setMode(FocusMode.free)
                 : null,
           ),
@@ -643,15 +720,16 @@ class _FocusView extends ConsumerWidget {
       ),
     );
 
-    final Widget ring = _FocusRing(
-      fraction: session.progress,
+    final Widget ring = _LiveFocusRing(
+      isFree: isFree,
+      isIdle: chrome.isIdle,
+      idlePlannedSeconds: idlePlannedSeconds,
       segments: segments,
       color: phaseColor,
       trackColor: _trackColor,
-      time: timeText,
       label: isBreak ? 'استراحة' : 'تركيز',
-      sub: _subText(session, draft, l10n, effectiveMode),
-      dots: _dots(session, draft, effectiveMode),
+      sub: _subText(chrome, effectiveMode),
+      dots: _dots(chrome, effectiveMode),
       size: immersive
           ? (landscape ? 360.0 : 320.0)
           : (landscape ? 280.0 : 260.0),
@@ -1201,6 +1279,58 @@ class _NumberFieldState extends State<_NumberField> {
 // Ring
 // ---------------------------------------------------------------------------
 
+/// The only part of Focus that listens to the one-second clock.
+class _LiveFocusRing extends ConsumerWidget {
+  const _LiveFocusRing({
+    required this.isFree,
+    required this.isIdle,
+    required this.idlePlannedSeconds,
+    required this.segments,
+    required this.color,
+    required this.trackColor,
+    required this.label,
+    required this.sub,
+    required this.dots,
+    required this.size,
+  });
+
+  final bool isFree;
+  final bool isIdle;
+  final int idlePlannedSeconds;
+  final int segments;
+  final Color color;
+  final Color trackColor;
+  final String label;
+  final String sub;
+  final List<Widget> dots;
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (int remainingSeconds, double progress) = ref.watch(
+      focusControllerProvider.select(
+        (FocusSessionState session) =>
+            (session.remainingSeconds, session.progress),
+      ),
+    );
+    final int displayRemaining = isIdle
+        ? (isFree ? 0 : idlePlannedSeconds)
+        : remainingSeconds;
+
+    return _FocusRing(
+      fraction: progress,
+      segments: segments,
+      color: color,
+      trackColor: trackColor,
+      time: _clock(displayRemaining, free: isFree),
+      label: label,
+      sub: sub,
+      dots: dots,
+      size: size,
+    );
+  }
+}
+
 class _FocusRing extends StatelessWidget {
   const _FocusRing({
     required this.fraction,
@@ -1227,6 +1357,8 @@ class _FocusRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final KhutatiPalette palette = context.palette;
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     // Custom Pomodoro durations (100:00, 120:00 …) need a physically larger
     // circle. LayoutBuilder measures the space actually offered by the Focus
     // layout, so the ring can grow without ever pushing the controls off
@@ -1270,6 +1402,7 @@ class _FocusRing extends StatelessWidget {
                     segments: segments,
                     color: color,
                     trackColor: trackColor,
+                    glow: !reduceMotion,
                   ),
                 ),
                 Column(
@@ -1334,12 +1467,14 @@ class _FocusRingPainter extends CustomPainter {
     required this.segments,
     required this.color,
     required this.trackColor,
+    required this.glow,
   });
 
   final double fraction;
   final int segments;
   final Color color;
   final Color trackColor;
+  final bool glow;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1370,14 +1505,15 @@ class _FocusRingPainter extends CustomPainter {
       canvas.drawArc(rect, a0, dashAngle, false, trackPaint);
     }
 
-    // Glow behind the completed progress.
-    if (limit > 0) {
+    // Soft halo behind the completed progress. This is a wider translucent
+    // stroke rather than a MaskFilter: the blur was re-rasterised with every
+    // one-second tick, which is exactly the cost this screen can avoid.
+    if (glow && limit > 0) {
       final Paint glowPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke + 6 * scale
+        ..strokeWidth = stroke + 10 * scale
         ..strokeCap = StrokeCap.butt
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * scale)
-        ..color = color.withValues(alpha: 0.35);
+        ..color = color.withValues(alpha: 0.16);
       for (int i = 0; i < n; i++) {
         final double segStart = i * stepAngle;
         if (segStart >= limit) break;
@@ -1411,7 +1547,8 @@ class _FocusRingPainter extends CustomPainter {
     return oldDelegate.fraction != fraction ||
         oldDelegate.segments != segments ||
         oldDelegate.color != color ||
-        oldDelegate.trackColor != trackColor;
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.glow != glow;
   }
 }
 
@@ -1704,48 +1841,39 @@ class _AmbientBackdrop extends StatelessWidget {
   }
 }
 
-String _subText(
-  FocusSessionState session,
-  FocusTaskDraft? draft,
-  AppLocalizations l10n,
-  FocusMode mode,
-) {
+String _subText(_FocusChrome chrome, FocusMode mode) {
   if (mode == FocusMode.linked) {
-    if (session.isBreak) return '';
-    final FocusStepRef? step = session.currentStep;
+    if (chrome.isBreak) return '';
+    final FocusStepRef? step = chrome.currentStep;
     if (step == null) return '';
     return '${step.label} · ${step.minutes} دقيقة';
   }
   if (mode == FocusMode.pomodoro) {
-    if (session.isBreak) {
-      return session.rounds >= 3 ? 'استراحة طويلة' : 'استراحة قصيرة';
+    if (chrome.isBreak) {
+      return chrome.rounds >= 3 ? 'استراحة طويلة' : 'استراحة قصيرة';
     }
-    return 'الجلسة ${(session.rounds % 4) + 1} من 4';
+    return 'الجلسة ${(chrome.rounds % 4) + 1} من 4';
   }
-  return session.isRunning ? 'يعمل' : 'مفتوح';
+  return chrome.isRunning ? 'يعمل' : 'مفتوح';
 }
 
-List<Widget> _dots(
-  FocusSessionState session,
-  FocusTaskDraft? draft,
-  FocusMode mode,
-) {
+List<Widget> _dots(_FocusChrome chrome, FocusMode mode) {
   if (mode == FocusMode.linked) {
-    final int total = session.steps.length;
+    final int total = chrome.steps.length;
     if (total == 0) return <Widget>[];
     return List<Widget>.generate(total, (int i) {
       Color c = _trackColor;
-      if (i < session.stepIndex) c = _ok;
-      if (i == session.stepIndex) c = const Color(0xFF6AA6FF);
+      if (i < chrome.stepIndex) c = _ok;
+      if (i == chrome.stepIndex) c = const Color(0xFF6AA6FF);
       return _Dot(color: c);
     });
   }
   if (mode == FocusMode.pomodoro) {
-    final int cycle = (session.rounds % 4) + 1;
+    final int cycle = (chrome.rounds % 4) + 1;
     return List<Widget>.generate(4, (int i) {
       Color c = _trackColor;
       if (i + 1 < cycle) c = _ok;
-      if (i + 1 == cycle) c = session.isBreak ? _ok : _gold;
+      if (i + 1 == cycle) c = chrome.isBreak ? _ok : _gold;
       return _Dot(color: c);
     });
   }

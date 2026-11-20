@@ -45,6 +45,7 @@ class _LoginScreenState extends State<LoginScreen>
     final bool dark = Theme.of(context).brightness == Brightness.dark;
     final _LoginColors colors = dark ? _LoginColors.dark : _LoginColors.light;
     final MediaQueryData media = MediaQuery.of(context);
+    final bool reduceMotion = media.disableAnimations;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -73,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen>
               child: Container(
                 width: width,
                 height: constraints.maxHeight,
-                decoration: framed
+                decoration: framed && !reduceMotion
                     ? const BoxDecoration(
                         boxShadow: <BoxShadow>[
                           BoxShadow(color: Color(0x33000000), blurRadius: 60),
@@ -226,6 +227,39 @@ class _GuestChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final Widget surface = Material(
+      color: colors.bg.withValues(alpha: reduceMotion ? 0.94 : 0.60),
+      child: InkWell(
+        onTap: () async {
+          // Guest mode is a first-class entry point: persist the choice
+          // and open Today immediately. No warning toast and no Google
+          // account is required for the local-first experience.
+          await ref.read(guestModeProvider.notifier).enter();
+          if (context.mounted) context.go('/today');
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: colors.line),
+          ),
+          child: Text(
+            'المتابعة كزائر',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: colors.tx,
+            ),
+          ),
+        ),
+      ),
+    );
+
     return PressScale(
       scale: 0.95,
       duration: const Duration(milliseconds: 100),
@@ -233,42 +267,15 @@ class _GuestChip extends ConsumerWidget {
       pressCurve: Curves.easeOutCubic,
       releaseCurve: Curves.easeOutBack,
       onPressed: () => ref.read(hapticsProvider).light(),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(999),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Material(
-            color: colors.bg.withValues(alpha: 0.60),
-            child: InkWell(
-              onTap: () async {
-                // Guest mode is a first-class entry point: persist the choice
-                // and open Today immediately. No warning toast and no Google
-                // account is required for the local-first experience.
-                await ref.read(guestModeProvider.notifier).enter();
-                if (context.mounted) context.go('/today');
-              },
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 44),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: colors.line),
-                ),
-                child: Text(
-                  'المتابعة كزائر',
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: colors.tx,
-                  ),
-                ),
+      child: reduceMotion
+          ? ClipRRect(borderRadius: BorderRadius.circular(999), child: surface)
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: surface,
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

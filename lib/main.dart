@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -19,31 +21,10 @@ Future<void> main() async {
   // print real dates).
   await initializeDateFormatting('ar');
 
-  // Read the stored settings before the first frame so there is no flash and
-  // so the notification channels are created with the user's real choices.
+  // Only what the first frame truly needs runs before `runApp`: the persisted
+  // settings and the local database. Auth, notification channels and audio are
+  // warmed in parallel once the splash is already on screen.
   final SharedPreferences prefs = await SharedPreferences.getInstance();
-
-  // One owner for the notification plugin. Channels whose toggle is OFF are
-  // deleted before the first frame, so an OFF switch is never cosmetic.
-  await FocusNotifications.init(
-    tasks: prefs.getBool(NotificationPrefsController.tasksKey) ?? true,
-    daily: prefs.getBool(NotificationPrefsController.dailyKey) ?? true,
-    review: prefs.getBool(NotificationPrefsController.reviewKey) ?? true,
-    timer: prefs.getBool(NotificationPrefsController.timerKey) ?? true,
-  );
-
-  await SoundEffects.init(
-    enabled: prefs.getBool(SoundEffects.storageKey) ?? true,
-  );
-
-  // Restore the persisted Supabase session before routing decides between
-  // Login and Today. With no credentials (local contributor build) the app
-  // still renders; the login button reports that sign-in is not configured.
-  try {
-    await SupabaseAuth.initialize();
-  } catch (error) {
-    debugPrint('Supabase initialization failed: $error');
-  }
 
   // The template import is idempotent: the first launch writes the 68 days,
   // every later launch only compares the dataset hash.
@@ -58,4 +39,39 @@ Future<void> main() async {
       child: const KhutatiApp(),
     ),
   );
+
+  // The existing 2.5s splash gives these time to finish. A failure in one must
+  // not prevent the others from starting, and none may hold the first frame.
+  WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+    unawaited(_warmUp(prefs));
+  });
+}
+
+Future<void> _warmUp(SharedPreferences prefs) async {
+  await Future.wait<void>(<Future<void>>[
+    _guard(
+      'notifications',
+      FocusNotifications.init(
+        tasks: prefs.getBool(NotificationPrefsController.tasksKey) ?? true,
+        daily: prefs.getBool(NotificationPrefsController.dailyKey) ?? true,
+        review: prefs.getBool(NotificationPrefsController.reviewKey) ?? true,
+        timer: prefs.getBool(NotificationPrefsController.timerKey) ?? true,
+      ),
+    ),
+    _guard(
+      'sound',
+      SoundEffects.init(
+        enabled: prefs.getBool(SoundEffects.storageKey) ?? true,
+      ),
+    ),
+    _guard('Supabase', SupabaseAuth.initialize()),
+  ]);
+}
+
+Future<void> _guard(String label, Future<void> task) async {
+  try {
+    await task;
+  } catch (error) {
+    debugPrint('$label initialization failed: $error');
+  }
 }

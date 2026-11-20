@@ -49,8 +49,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _start();
       return;
     }
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     _controller.nextPage(
-      duration: const Duration(milliseconds: 420),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
     );
   }
@@ -114,7 +116,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 // red flag in the first illustration.
                 left: 16,
                 child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 300),
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 300),
                   opacity: last ? 0 : 1,
                   child: IgnorePointer(
                     ignoring: last,
@@ -137,7 +141,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       index: _index,
                       onSelected: (int i) => _controller.animateToPage(
                         i,
-                        duration: const Duration(milliseconds: 420),
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 420),
                         curve: Curves.easeOutCubic,
                       ),
                     ),
@@ -395,7 +401,10 @@ class _Dots extends StatelessWidget {
                   vertical: 10,
                 ),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 320),
+                  duration:
+                      MediaQuery.maybeDisableAnimationsOf(context) ?? false
+                      ? Duration.zero
+                      : const Duration(milliseconds: 320),
                   curve: Curves.easeOutCubic,
                   width: i == index ? 28 : 8,
                   height: 8,
@@ -453,17 +462,24 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: KOnboarding.red.withValues(alpha: 0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-          const BoxShadow(color: KOnboarding.shade, offset: Offset(0, 2)),
-        ],
+        boxShadow: reduceMotion
+            ? const <BoxShadow>[]
+            : <BoxShadow>[
+                BoxShadow(
+                  color: KOnboarding.red.withValues(alpha: 0.25),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+                const BoxShadow(
+                  color: KOnboarding.shade,
+                  offset: Offset(0, 2),
+                ),
+              ],
       ),
       child: KPressable(
         onTap: onPressed,

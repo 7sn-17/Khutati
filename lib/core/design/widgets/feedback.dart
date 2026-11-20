@@ -59,6 +59,8 @@ class _KToastOverlayState extends State<_KToastOverlay>
         CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
       );
 
+  bool _reduceMotion = false;
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +70,17 @@ class _KToastOverlayState extends State<_KToastOverlay>
       await _controller.reverse();
       widget.onDismissed();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (_reduceMotion) {
+      _controller.duration = Duration.zero;
+      _controller.reverseDuration = Duration.zero;
+      _controller.value = 1;
+    }
   }
 
   @override
@@ -107,13 +120,15 @@ class _KToastOverlayState extends State<_KToastOverlay>
                     color: palette.card,
                     borderRadius: BorderRadius.circular(KMetrics.cardRadius),
                     border: Border.all(color: accent.withValues(alpha: 0.55)),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: palette.bg.withValues(alpha: 0.28),
-                        blurRadius: 22,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    boxShadow: _reduceMotion
+                        ? const <BoxShadow>[]
+                        : <BoxShadow>[
+                            BoxShadow(
+                              color: palette.bg.withValues(alpha: 0.28),
+                              blurRadius: 22,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                   ),
                   child: Row(
                     children: <Widget>[
@@ -177,6 +192,7 @@ class _KConfettiState extends State<KConfetti> with SingleTickerProviderStateMix
   );
 
   late final List<_ConfettiPiece> _pieces = _buildPieces();
+  bool _reduceMotion = false;
 
   @override
   void initState() {
@@ -185,9 +201,18 @@ class _KConfettiState extends State<KConfetti> with SingleTickerProviderStateMix
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (_reduceMotion) _controller.stop();
+  }
+
+  @override
   void didUpdateWidget(covariant KConfetti oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.play && !oldWidget.play) _controller.forward(from: 0);
+    if (widget.play && !oldWidget.play && !_reduceMotion) {
+      _controller.forward(from: 0);
+    }
   }
 
   @override
@@ -198,6 +223,7 @@ class _KConfettiState extends State<KConfetti> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    if (_reduceMotion) return const SizedBox.shrink();
     return IgnorePointer(
       child: RepaintBoundary(
         child: AnimatedBuilder(

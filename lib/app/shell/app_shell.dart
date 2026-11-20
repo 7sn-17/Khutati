@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,13 +8,14 @@ import '../../features/focus/application/focus_controller.dart'
 import '../../core/design/palette.dart';
 import '../../core/design/tokens.dart';
 import '../../core/design/widgets/pressable.dart';
+import '../../core/design/widgets/surfaces.dart';
 import '../../core/motion/haptics.dart';
 import '../../core/motion/press_scale.dart';
 import '../../core/sound/sound_effects.dart';
 import '../../core/typography/khutati_fonts.dart';
 import '../../l10n/l10n.dart';
 
-/// The app shell: five primary sections in a floating, blurred navigation bar.
+/// The app shell: five primary sections in a floating, frosted navigation bar.
 ///
 /// Geometry, colour and the four prototype glyphs come from the HTML. The
 /// settings glyph is a Material outline icon because the prototype predates the
@@ -31,6 +30,8 @@ class AppShell extends ConsumerWidget {
     final KhutatiPalette palette = context.palette;
     final AppLocalizations l10n = context.l10n;
     final bool immersive = ref.watch(focusImmersiveProvider);
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     final List<_NavItem> items = <_NavItem>[
       _NavItem(label: l10n.navToday, svgBody: KhutatiIcons.todayBody),
@@ -69,100 +70,91 @@ class AppShell extends ConsumerWidget {
                         bottom: KMetrics.navBottom,
                       ),
                       child: RepaintBoundary(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            KMetrics.navRadius,
+                        child: Container(
+                          padding: const EdgeInsets.all(KMetrics.navPadding),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            // Opaque enough to keep labels legible over
+                            // scrolling content, but still visibly a floating
+                            // surface. No backdrop filter: the blur was
+                            // re-sampled on every scroll frame.
+                            color: palette.card.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(
+                              KMetrics.navRadius,
+                            ),
+                            border: Border.all(color: palette.line),
+                            boxShadow: kCardShadow(context),
                           ),
-                          child: BackdropFilter(
-                            // The body scrolls behind this bar (`extendBody`),
-                            // so the filter re-runs on every scroll frame.
-                            // 18 was expensive for no visible gain at this size.
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Container(
-                              padding: const EdgeInsets.all(
-                                KMetrics.navPadding,
-                              ),
-                              decoration: BoxDecoration(
-                                color: palette.card.withValues(alpha: 0.84),
-                                borderRadius: BorderRadius.circular(
-                                  KMetrics.navRadius,
-                                ),
-                                border: Border.all(color: palette.line),
-                              ),
-                              child: LayoutBuilder(
-                                builder:
-                                    (
-                                      BuildContext context,
-                                      BoxConstraints constraints,
-                                    ) {
-                                      final int count = items.length;
-                                      final double slotWidth =
-                                          constraints.maxWidth / count;
-                                      final int index =
-                                          navigationShell.currentIndex;
-                                      return Stack(
-                                        children: <Widget>[
-                                          // Springy sliding selection pill behind the tabs. Uses the
-                                          // directional variant so the highlight follows the tapped tab
-                                          // exactly under RTL (Arabic) layouts.
-                                          AnimatedPositionedDirectional(
-                                            duration: const Duration(
-                                              milliseconds: 220,
-                                            ),
-                                            curve: Curves.easeOutBack,
-                                            start: index * slotWidth,
-                                            top: 0,
-                                            bottom: 0,
-                                            width: slotWidth,
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(2),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: palette.tx,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        KMetrics.navItemRadius,
-                                                      ),
-                                                ),
+                          child: LayoutBuilder(
+                            builder:
+                                (
+                                  BuildContext context,
+                                  BoxConstraints constraints,
+                                ) {
+                                  final int count = items.length;
+                                  final double slotWidth =
+                                      constraints.maxWidth / count;
+                                  final int index = navigationShell.currentIndex;
+                                  return Stack(
+                                    children: <Widget>[
+                                      // Sliding selection pill behind the tabs. Uses the
+                                      // directional variant so the highlight follows the tapped tab
+                                      // exactly under RTL (Arabic) layouts.
+                                      AnimatedPositionedDirectional(
+                                        duration: reduceMotion
+                                            ? Duration.zero
+                                            : const Duration(milliseconds: 220),
+                                        curve: Curves.easeOutBack,
+                                        start: index * slotWidth,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: slotWidth,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(2),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: palette.tx,
+                                              borderRadius: BorderRadius.circular(
+                                                KMetrics.navItemRadius,
                                               ),
                                             ),
                                           ),
-                                          Row(
-                                            children: <Widget>[
-                                              for (
-                                                int i = 0;
-                                                i < items.length;
-                                                i++
-                                              )
-                                                Expanded(
-                                                  child: _NavButton(
-                                                    item: items[i],
-                                                    selected:
+                                        ),
+                                      ),
+                                      Row(
+                                        children: <Widget>[
+                                          for (
+                                            int i = 0;
+                                            i < items.length;
+                                            i++
+                                          )
+                                            Expanded(
+                                              child: _NavButton(
+                                                item: items[i],
+                                                selected:
+                                                    navigationShell
+                                                        .currentIndex ==
+                                                    i,
+                                                palette: palette,
+                                                onTap: () {
+                                                  ref
+                                                      .read(hapticsProvider)
+                                                      .selection();
+                                                  navigationShell.goBranch(
+                                                    i,
+                                                    initialLocation:
+                                                        i ==
                                                         navigationShell
-                                                            .currentIndex ==
-                                                        i,
-                                                    palette: palette,
-                                                    onTap: () {
-                                                      ref
-                                                          .read(hapticsProvider)
-                                                          .selection();
-                                                      navigationShell.goBranch(
-                                                        i,
-                                                        initialLocation:
-                                                            i ==
-                                                            navigationShell
-                                                                .currentIndex,
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                                                            .currentIndex,
+                                                  );
+                                                },
+                                              ),
+                                            ),
                                         ],
-                                      );
-                                    },
-                              ),
-                            ),
+                                      ),
+                                    ],
+                                  );
+                                },
                           ),
                         ),
                       ),
@@ -205,7 +197,11 @@ class _NavButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color foreground = selected ? palette.bg : palette.mute;
-    final Duration duration = Duration(milliseconds: KMotion.navMs);
+    final bool reduceMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final Duration duration = reduceMotion
+        ? Duration.zero
+        : Duration(milliseconds: KMotion.navMs);
 
     final Widget glyph = item.svgBody != null
         ? KNavIcon(
@@ -227,9 +223,9 @@ class _NavButton extends StatelessWidget {
         scale: 0.96,
         duration: const Duration(milliseconds: 100),
         releaseDuration: const Duration(milliseconds: 140),
-        // The bar's fill lives on a Container above the BackdropFilter, so an
-        // InkWell that looks up to the Scaffold's Material would paint its
-        // splash *underneath* the blur. The local Material keeps it on top.
+        // The bar's fill lives on a Container inside the shell, so an InkWell
+        // that looks up to the Scaffold's Material would paint its splash
+        // underneath the bar. The local Material keeps it on top.
         child: KInkSurface(
           onTap: onTap,
           borderRadius: BorderRadius.circular(KMetrics.navItemRadius),
