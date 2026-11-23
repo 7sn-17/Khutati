@@ -26,8 +26,8 @@ const root = resolve(import.meta.dirname, '..');
  * once per completed step.
  */
 const TARGETS = {
-  click: -24,
-  toggle: -24,
+  click: -35,
+  toggle: -30,
   success: -21,
   timer: -26,
 };

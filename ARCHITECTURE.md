@@ -450,10 +450,15 @@ peak instead (`--apply`, idempotent), which no platform path can skip:
 
 | `KSound` | Asset | Peak | Used by |
 |---|---|---|---|
-| `tap` | `sounds/click.wav` | −24 dBFS | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
-| `toggle` | `sounds/toggle.wav` | −24 dBFS | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
+| `tap` | `sounds/click.wav` | −35 dBFS | `KButton`, `KCard(onTap:)`, nav items, generic pressables |
+| `toggle` | `sounds/toggle.wav` | −30 dBFS | `KChip` (the 4-tap cycle), settings switches, week selector, focus mode segments |
 | `success` | `sounds/success.wav` | −21 dBFS | A step reaching 100%, a focus session completing |
 | `timer` | `sounds/timer.wav` | −26 dBFS | Focus start/pause and end |
+
+The tap asset is synthesised by `tools/synth_click.mjs`: a 210 Hz body that glides
+down to about 172 Hz, one quiet partial, a 1.6 ms attack ramp and a 26 ms decay.
+It is a wooden tick rather than a click — the old file's bright transient was
+what made repeated taps tiring.
 
 The sound fires inside `InkWell.onTap`, never on press-down, so a scroll that
 starts on a button stays silent. `SoundEffects.enabled` gates every call, which

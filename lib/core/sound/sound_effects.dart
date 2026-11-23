@@ -60,8 +60,9 @@ enum KSound {
 /// Small, bundled sounds played through one pre-loaded player each.
 ///
 /// All four are prepared once at startup so a tap never waits on decoding. The
-/// mix is mastered into the assets (−24 dBFS for taps, −21 for the chime,
-/// −26 for the timer) rather than set at runtime; see [KSound].
+/// mix is mastered into the assets (−35 dBFS for the tap, −30 for the toggle,
+/// −21 for the chime, −26 for the timer) rather than set at runtime; see
+/// [KSound].
 abstract final class SoundEffects {
   static const String storageKey = 'sound_effects_enabled';
 

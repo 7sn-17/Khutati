@@ -135,27 +135,7 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 6),
               const _AlarmStatusRow(),
               const SizedBox(height: 6),
-              _SettingsActionRow(
-                title: 'تحسين استخدام البطارية',
-                icon: Icons.battery_saver_rounded,
-                trailing: Icon(
-                  Icons.chevron_left_rounded,
-                  size: 20,
-                  color: palette.mute,
-                ),
-                onTap: () async {
-                  final bool opened =
-                      await BatteryOptimization.requestUnrestricted();
-                  if (!opened) {
-                    if (!context.mounted) return;
-                    showKToast(
-                      context,
-                      'تعذّر فتح إعدادات البطارية.',
-                      kind: KToastKind.error,
-                    );
-                  }
-                },
-              ),
+              const _BatteryStatusRow(),
             ],
           ),
         ),
@@ -804,19 +784,107 @@ class _SettingsSwitchRow extends StatelessWidget {
   }
 }
 
-/// One row for the two grants a reminder needs, with the live state.
+/// The shared look for a permission row: icon, title, live state, chevron.
 ///
-/// The state is read on mount and re-read every time the app resumes, because
-/// both permissions are granted in system settings and neither reaches Dart on
-/// its own. Tapping sends the user straight to whichever grant is missing.
-class _AlarmStatusRow extends ConsumerStatefulWidget {
+/// The alarm row and the battery row both use it, so the two are identical by
+/// construction — same height, same colours, same tap target.
+class _PermissionRow extends StatelessWidget {
+  const _PermissionRow({
+    required this.icon,
+    required this.title,
+    required this.granted,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+
+  /// `true` = allowed, `false` = denied. Ignored while [loading].
+  final bool granted;
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final KhutatiPalette palette = context.palette;
+
+    final Widget status;
+    if (loading) {
+      status = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 2, color: palette.mute),
+      );
+    } else {
+      final Color color = granted ? palette.ok : palette.red;
+      status = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            granted ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+            size: 16,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            granted ? 'مفعل' : 'غير مفعل',
+            style: TextStyle(
+              fontFamily: KTypography.bodyFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: color,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Semantics(
+      button: true,
+      child: KInkSurface(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: KMetrics.tapTarget),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 20, color: palette.mute),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: KTypography.bodyFamily,
+                    fontSize: KTypography.quoteSize,
+                    color: palette.tx,
+                  ),
+                ),
+              ),
+              status,
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_left_rounded, size: 20, color: palette.mute),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The two grants a reminder needs, with their live state.
+///
+/// Read on mount and re-read on every resume, because both are granted in
+/// system settings and neither reaches Dart on its own. Tapping sends the user
+/// straight to whichever grant is missing.
+class _AlarmStatusRow extends StatefulWidget {
   const _AlarmStatusRow();
 
   @override
-  ConsumerState<_AlarmStatusRow> createState() => _AlarmStatusRowState();
+  State<_AlarmStatusRow> createState() => _AlarmStatusRowState();
 }
 
-class _AlarmStatusRowState extends ConsumerState<_AlarmStatusRow>
+class _AlarmStatusRowState extends State<_AlarmStatusRow>
     with WidgetsBindingObserver {
   AlarmPermissions? _permissions;
   bool _busy = false;
@@ -860,81 +928,82 @@ class _AlarmStatusRowState extends ConsumerState<_AlarmStatusRow>
 
   @override
   Widget build(BuildContext context) {
-    final KhutatiPalette palette = context.palette;
-    final AlarmPermissions? permissions = _permissions;
-    final bool granted = permissions?.allGranted ?? false;
+    return _PermissionRow(
+      icon: Icons.alarm_rounded,
+      title: 'المنبهات والمذكرات',
+      granted: _permissions?.allGranted ?? false,
+      loading: _permissions == null,
+      onTap: _open,
+    );
+  }
+}
 
-    final Widget status;
-    if (permissions == null) {
-      status = SizedBox(
-        width: 14,
-        height: 14,
-        child: CircularProgressIndicator(strokeWidth: 2, color: palette.mute),
-      );
-    } else if (granted) {
-      status = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(Icons.check_circle_rounded, size: 16, color: palette.ok),
-          const SizedBox(width: 5),
-          Text(
-            'مفعل',
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: palette.ok,
-            ),
-          ),
-        ],
-      );
-    } else {
-      status = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(Icons.error_outline_rounded, size: 16, color: palette.red),
-          const SizedBox(width: 5),
-          Text(
-            'غير مفعل',
-            style: TextStyle(
-              fontFamily: KTypography.bodyFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: palette.red,
-            ),
-          ),
-        ],
+/// Battery-optimisation exemption, in the same shape as the alarm row.
+///
+/// The exemption is what keeps the focus service alive through Doze, so the row
+/// reads it live and deep-links to the system sheet. Some OEM skins block
+/// `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; the native side then falls
+/// back to the battery list and finally to app details, and only reports
+/// failure when every option was refused.
+class _BatteryStatusRow extends StatefulWidget {
+  const _BatteryStatusRow();
+
+  @override
+  State<_BatteryStatusRow> createState() => _BatteryStatusRowState();
+}
+
+class _BatteryStatusRowState extends State<_BatteryStatusRow>
+    with WidgetsBindingObserver {
+  bool? _unrestricted;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refresh());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    final bool next = await BatteryOptimization.isUnrestricted();
+    if (!mounted) return;
+    setState(() => _unrestricted = next);
+  }
+
+  Future<void> _open() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final bool opened = await BatteryOptimization.requestUnrestricted();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!opened) {
+      showKToast(
+        context,
+        'تعذّر فتح إعدادات البطارية.',
+        kind: KToastKind.error,
       );
     }
+  }
 
-    return Semantics(
-      button: true,
-      child: KInkSurface(
-        onTap: _open,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: KMetrics.tapTarget),
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.alarm_rounded, size: 20, color: palette.mute),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'المنبهات والمذكرات',
-                  style: TextStyle(
-                    fontFamily: KTypography.bodyFamily,
-                    fontSize: KTypography.quoteSize,
-                    color: palette.tx,
-                  ),
-                ),
-              ),
-              status,
-              const SizedBox(width: 6),
-              Icon(Icons.chevron_left_rounded, size: 20, color: palette.mute),
-            ],
-          ),
-        ),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    return _PermissionRow(
+      icon: Icons.battery_saver_rounded,
+      title: 'تحسين استخدام البطارية',
+      granted: _unrestricted ?? false,
+      loading: _unrestricted == null,
+      onTap: _open,
     );
   }
 }

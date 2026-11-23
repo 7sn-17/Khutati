@@ -248,7 +248,10 @@ with a `KButton`, not an unlabeled icon. The «المنبهات والمذكرا
 live state of both grants — green check when notifications **and** exact alarms
 are allowed, «غير مفعل» otherwise — re-reads them on every resume, and deep-links
 to whichever one is missing (`ACTION_APP_NOTIFICATION_SETTINGS` /
-`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`).
+`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`). The battery row is the same widget with
+the same rule for `isIgnoringBatteryOptimizations`, and opens
+`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, falling back to the battery list
+and then app details on OEM skins that block the sheet.
 
 ### 5.12 Launch and onboarding (`lib/features/onboarding`)
 
